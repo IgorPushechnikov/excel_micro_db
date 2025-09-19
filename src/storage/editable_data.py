@@ -25,6 +25,7 @@ def sanitize_editable_table_name(name: str) -> str:
         str: Санитизированное имя.
     """
     # Пока используем ту же функцию. Можно адаптировать при необходимости.
+    # Импортируем здесь, чтобы избежать циклического импорта
     from src.storage.base import sanitize_table_name
     sanitized = sanitize_table_name(name)
     return f"editable_data_{sanitized}"
@@ -122,6 +123,7 @@ def update_editable_cell(
         editable_table_name = sanitize_editable_table_name(sheet_name)
         
         # Санитизируем имя столбца
+        # ИМПОРТ ВНУТРИ ФУНКЦИИ
         from src.storage.base import sanitize_column_name
         sanitized_col_name = sanitize_column_name(column_name)
         # Защита от конфликта с зарезервированным словом 'id'
