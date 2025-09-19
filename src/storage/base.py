@@ -206,15 +206,20 @@ class ProjectDBStorage:
         return raw_data.load_sheet_raw_data(self.connection, sheet_name)
 
     # --- МЕТОДЫ ДЛЯ РАБОТЫ С РЕДАКТИРУЕМЫМИ ДАННЫМИ ---
-    # def load_sheet_editable_data(self, ...): # Заглушка или реализация, если будет
-    #     pass
 
-    def update_editable_cell(self, sheet_id: int, cell_address: str, new_value: Any) -> bool:
+    def load_sheet_editable_data(self, sheet_name: str) -> Dict[str, Any]:
+        """Загружает редактируемые данные листа."""
+        if not self.connection:
+            logger.error("Нет активного соединения для загрузки редактируемых данных.")
+            return {"column_names": [], "rows": []}
+        return editable_data.load_sheet_editable_data(self.connection, sheet_name)
+
+    def update_editable_cell(self, sheet_name: str, row_index: int, column_name: str, new_value: Any) -> bool:
         """Обновляет значение редактируемой ячейки."""
         if not self.connection:
             logger.error("Нет активного соединения для обновления редактируемой ячейки.")
             return False
-        return editable_data.update_editable_cell(self.connection, sheet_id, cell_address, new_value)
+        return editable_data.update_editable_cell(self.connection, sheet_name, row_index, column_name, new_value)
 
     # --- МЕТОДЫ ДЛЯ РАБОТЫ С ИСТОРИЕЙ ---
     def save_edit_history_record(
