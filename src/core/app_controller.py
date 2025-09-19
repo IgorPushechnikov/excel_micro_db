@@ -211,7 +211,11 @@ class AppController:
 
             # --- НАЧАЛО ИЗМЕНЕНИЙ ---
             # Получаем имя проекта для сохранения результатов
-            project_name = self.current_project.get("project_name", self.project_path.name)
+            # ИСПРАВЛЕНО: Проверка на None
+            if self.current_project:
+                project_name = self.current_project.get("project_name", self.project_path.name if self.project_path else "UnknownProject")
+            else:
+                project_name = self.project_path.name if self.project_path else "UnknownProject"
             logger.info("Начало сохранения результатов анализа в хранилище")
 
             # Определяем путь к файлу БД
@@ -310,15 +314,19 @@ class AppController:
             # --- ИНТЕГРАЦИЯ EXPORTER ---
             # Импортируем функцию экспорта прямо здесь, чтобы избежать циклических импортов
             # на уровне модуля, если exporter когда-нибудь будет импортировать AppController.
-            from src.exporter.excel_exporter import export_project_to_excel
+            # ИСПРАВЛЕНО: Импорт из правильного модуля и правильной функции
+            # from src.exporter.excel_exporter import export_project_to_excel # <-- СТАРОЕ
+            from src.exporter.direct_db_exporter import export_project_from_db # <-- НОВОЕ
 
             # Вызываем функцию экспорта, передавая путь к проекту и путь к выходному файлу
             # Определяем путь к БД проекта
             db_path = self.project_path / "project_data.db"
-            success = export_project_to_excel(
+            # ИСПРАВЛЕНО: Вызов правильной функции с правильными аргументами
+            # success = export_project_to_excel(...) # <-- СТАРОЕ
+            success = export_project_from_db( # <-- НОВОЕ
                 db_path=str(db_path),
-                project_path=str(self.project_path),
                 output_path=output_path
+                # project_path убран, так как не нужен
             )
 
             if success:
@@ -420,15 +428,20 @@ class AppController:
                 logger.debug(f"AppController: Найден sheet_id={sheet_id} для листа '{sheet_name}'.")
 
                 # --- ИЗМЕНЕНИЯ НАЧИНАЮТСЯ ЗДЕСЬ ---
+                
+                # Импортируем вспомогательные функции
+                from src.storage.base import sanitize_table_name, sanitize_column_name
 
                 # 2. Получить старое значение для истории
                 # Мы можем получить его напрямую из таблицы редактируемых данных
-                editable_table_name = f"editable_data_{storage.sanitize_table_name(sheet_name)}"
+                # ИСПРАВЛЕНО: Вызов функции как функции, а не метода объекта
+                editable_table_name = f"editable_data_{sanitize_table_name(sheet_name)}"
 
                 # Санитизируем имя столбца
-                sanitized_col_name = storage.sanitize_column_name(column_name)
+                # ИСПРАВЛЕНО: Вызов функции как функции, а не метода объекта
+                sanitized_col_name = sanitize_column_name(column_name)
                 if sanitized_col_name.lower() == 'id':
-                    sanitized_col_name = f"data_{sanitized_col_name}"
+                     sanitized_col_name = f"data_{sanitized_col_name}"
 
                 # row_index в Python (0-based) -> id в БД (1-based)
                 db_row_id = row_index + 1
@@ -447,58 +460,57 @@ class AppController:
                     # ИСПРАВЛЕНО: сигнатура вызова, используем правильные аргументы
                     # Старая сигнатура: save_edit_history_record(self, sheet_id: int, operation_type: str, row_index: int, column_name: str, old_value: Any, new_value: Any)
                     # Новая сигнатура из history.py: save_edit_history_record(connection, project_id, sheet_id, cell_address, action_type, old_value, new_value, user, details)
-
+                    
                     # Нужно получить project_id
                     # Предположим, что project_id хранится в self.current_project или можно получить из БД
                     # Получим project_id из таблицы sheets
                     cursor.execute("SELECT project_id FROM sheets WHERE id = ?", (sheet_id,))
                     project_row = cursor.fetchone()
                     if not project_row:
-                        logger.error(f"Не удалось получить project_id для sheet_id={sheet_id}.")
-                        # Решение: можно считать это критической ошибкой или попытаться получить иначе
-                        # Пока считаем критической
-                        return False
+                         logger.error(f"Не удалось получить project_id для sheet_id={sheet_id}.")
+                         # Решение: можно считать это критической ошибкой или попытаться получить иначе
+                         # Пока считаем критической
+                         return False 
                     project_id = project_row[0]
-
+                    
                     # Формируем адрес ячейки, например "A1"
                     # Для этого нужно знать, как сопоставляются column_name и буквы столбцов.
                     # Это может быть сложной логикой. Пока передадим column_name как есть или row_index, column_name.
                     # history.py поддерживает cell_address как опциональный аргумент, так что можно передать None
                     # или сформировать строку вида "R{row_index}C{column_name}" или "{column_name}{row_index+1}"
                     # Для простоты передадим None, а детали положим в `details`
-                    cell_address = None  # Или сформировать, если нужно
-
+                    cell_address = None # Или сформировать, если нужно
+                    
                     history_details = {
                         "row_index": row_index,
                         "column_name": column_name
                     }
 
                     history_success = storage.save_edit_history_record(
-                        project_id=project_id,  # <-- Добавлено
+                        project_id=project_id,         # <-- Добавлено
                         sheet_id=sheet_id,
-                        cell_address=cell_address,  # <-- Может быть None
-                        action_type="edit_cell",  # <-- Исправлен тип действия
+                        cell_address=cell_address,    # <-- Может быть None
+                        action_type="edit_cell",      # <-- Исправлен тип действия
                         old_value=old_value,
                         new_value=new_value,
-                        user=None,  # <-- Пока нет пользователей
-                        details=history_details  # <-- Передаем детали
+                        user=None,                    # <-- Пока нет пользователей
+                        details=history_details       # <-- Передаем детали
                     )
 
                     if history_success:
                         logger.info(f"Ячейка [{sheet_name}][{row_index}, {column_name}] обновлена и запись истории сохранена.")
                         return True
                     else:
-                        logger.error(
-                            f"Ячейка обновлена, но ошибка при сохранении записи истории для [{sheet_name}][{row_index}, {column_name}].")
+                        logger.error(f"Ячейка обновлена, но ошибка при сохранении записи истории для [{sheet_name}][{row_index}, {column_name}].")
                         # Решение: считать операцию неудачной, если не удалось записать историю?
                         # Или всё же считать успехом обновление данных?
                         # Пока считаем частичный успех как общий успех, но логируем ошибку.
                         # ЛУЧШЕ: если история критична, то возвращаем False.
                         # Для MVP, скорее всего, лучше вернуть True, но залогировать ошибку.
-                        # Уточним: если save_edit_history_record возвращает False, это значит,
+                        # Уточним: если save_edit_history_record возвращает False, это значит, 
                         # что запись в БД не удалась. Это серьезная проблема.
                         # Возвращаем False.
-                        return False
+                        return False 
                 else:
                     logger.error(f"Не удалось обновить ячейку [{sheet_name}][{row_index}, {column_name}] в БД.")
                     return False
