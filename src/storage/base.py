@@ -29,13 +29,19 @@ logger = get_logger(__name__)
 # === ИСПРАВЛЕНО: Класс DateTimeEncoder ===
 class DateTimeEncoder(json.JSONEncoder):
     """Пользовательский JSONEncoder для сериализации datetime объектов."""
-    def default(self, obj):
+
+    # ИСПРАВЛЕНО: Имя параметра должно быть 'o' для совместимости
+    def default(self, o): # <-- ИЗМЕНЕНО С 'obj' НА 'o'
         # Проверяем, является ли объект экземпляром класса datetime
-        if isinstance(obj, datetime): # <-- ИСПРАВЛЕНО
+        # ИСПРАВЛЕНО: Имя параметра
+        if isinstance(o, datetime): # <-- ИЗМЕНЕНО С 'obj' НА 'o'
             # Форматируем дату и время в строку в формате ISO 8601
-            return obj.isoformat()
+            # return obj.isoformat() # <-- СТАРОЕ
+            return o.isoformat() # <-- НОВОЕ
         # Для всех остальных типов вызываем метод родителя
-        return super().default(obj)
+        # ИСПРАВЛЕНО: Имя параметра
+        return super().default(o) # <-- ИЗМЕНЕНО С 'obj' НА 'o'
+
 # =========================================
 
 def sanitize_table_name(name: str) -> str:
