@@ -1,0 +1,68 @@
+# documentation_template.yaml
+---
+# === ОСНОВНАЯ ИНФОРМАЦИЯ О ПРОЕКТЕ ===
+project_name: ""
+source_file: ""
+generated_at: ""
+generated_by: "Excel Micro DB Analyzer"
+
+# === СВОДКА ПО ПРОЕКТУ ===
+summary:
+  total_sheets: 0
+  total_data_rows: 0
+  total_formulas: 0
+  total_cross_sheet_refs: 0
+  total_charts: 0
+  data_quality_score: 0
+  most_common_data_type: ""
+
+# === СПИСОК ЛИСТОВ ===
+sheets:
+  - name: ""
+    description: ""
+    rows_count: 0
+    cols_count: 0
+
+    # === СТРУКТУРА ЛИСТА (ЗАГОЛОВКИ СТОЛБЦОВ) ===
+    structure:
+      - column_name: ""
+        column_index: 0
+        data_type: ""
+        sample_values: []
+        unique_count: 0
+        null_count: 0
+        description: ""
+
+    # === ФОРМУЛЫ НА ЛИСТЕ ===
+    formulas:
+      - cell_address: ""
+        formula_text: ""
+        references: []  # Локальные ссылки в формате ['A1', 'B2:B10']
+        result_type: ""
+        description: ""
+
+    # === МЕЖЛИСТОВЫЕ ССЫЛКИ ===
+    cross_sheet_references:
+      - target_sheet: ""
+        target_cell: ""
+        formula_cell: ""
+
+    # === ДИАГРАММЫ НА ЛИСТЕ ===
+    charts:
+      - name: ""
+        type: ""
+        top_left_cell: ""
+        bottom_right_cell: ""
+        description: ""
+        
+        # === ИСТОЧНИКИ ДАННЫХ ДЛЯ ДИАГРАММЫ ===
+        data_sources:
+          - source_sheet: ""     # Имя листа-источника
+            range: ""            # Полный диапазон в формате 'Sheet1!$A$1:$A$10'
+            series_part: ""      # Роль в серии ('values', 'categories', 'x_values' и т.д.)
+            # Относительные ссылки для внутренней структуры:
+            column: ""           # Буква столбца, например 'A'
+            start_row: 0         # Начальный номер строки
+            end_row: 0           # Конечный номер строки
+            start_cell: ""       # Начальная ячейка, например 'A1'
+            end_cell: ""         # Конечная ячейка, например 'A10'

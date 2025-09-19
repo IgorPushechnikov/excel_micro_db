@@ -1,0 +1,102 @@
+2025-09-14 21:58:20 - __main__ - INFO - Запуск графического интерфейса Excel Micro DB
+2025-09-14 21:58:20 - __main__ - DEBUG - Создание экземпляра MainWindow
+2025-09-14 21:58:20 - src.constructor.widgets.sheet_editor - DEBUG - SheetEditor: AppController установлен/обновлён.
+2025-09-14 21:58:20 - src.constructor.main_window - DEBUG - Создание AppController
+2025-09-14 21:58:20 - src.core.app_controller - DEBUG - Инициализация AppController
+2025-09-14 21:58:20 - src.core.app_controller - DEBUG - AppController инициализирован
+2025-09-14 21:58:20 - src.core.app_controller - INFO - Начало инициализации приложения
+2025-09-14 21:58:20 - src.core.project_manager - DEBUG - Инициализация ProjectManager
+2025-09-14 21:58:20 - src.core.app_controller - INFO - Инициализация приложения завершена успешно
+2025-09-14 21:58:20 - src.constructor.main_window - INFO - AppController инициализирован и готов к работе
+2025-09-14 21:58:20 - src.constructor.widgets.sheet_editor - DEBUG - SheetEditor: AppController установлен/обновлён.
+2025-09-14 21:58:20 - src.constructor.widgets.project_explorer - DEBUG - Очистка обозревателя проекта
+2025-09-14 21:58:20 - src.constructor.widgets.sheet_editor - DEBUG - SheetEditor: AppController установлен/обновлён.
+2025-09-14 21:58:20 - src.constructor.main_window - INFO - MainWindow инициализировано
+2025-09-14 21:58:20 - __main__ - INFO - Главное окно отображено
+2025-09-14 21:58:20 - __main__ - DEBUG - Запуск цикла событий QApplication
+2025-09-14 21:58:26 - src.constructor.main_window - INFO - Начало открытия проекта
+2025-09-14 21:58:31 - src.core.app_controller - INFO - Загрузка проекта из: D:/Projects/excel_micro_db/test_workspace
+2025-09-14 21:58:31 - src.core.project_manager - INFO - Загрузка проекта из: D:\Projects\excel_micro_db\test_workspace
+2025-09-14 21:58:31 - src.core.project_manager - DEBUG - Метаданные проекта загружены из: D:\Projects\excel_micro_db\test_workspace\.excel_micro_db_project
+2025-09-14 21:58:31 - src.core.project_manager - DEBUG - Метаданные проекта сохранены в: D:\Projects\excel_micro_db\test_workspace\.excel_micro_db_project
+2025-09-14 21:58:31 - src.core.project_manager - INFO - Проект 'test_workspace' загружен успешно
+2025-09-14 21:58:31 - src.core.app_controller - INFO - Проект загружен успешно
+2025-09-14 21:58:34 - src.constructor.widgets.project_explorer - DEBUG - Загрузка проекта в ProjectExplorer
+2025-09-14 21:58:34 - src.constructor.widgets.project_explorer - DEBUG - Подключение к БД проекта: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:34 - src.constructor.widgets.project_explorer - DEBUG - Из БД получено 4 листов
+2025-09-14 21:58:34 - src.constructor.widgets.project_explorer - INFO - Структура проекта 'test_workspace' загружена в обозреватель
+2025-09-14 21:58:34 - src.constructor.widgets.sheet_editor - DEBUG - SheetEditor: AppController установлен/обновлён.
+2025-09-14 21:58:39 - src.constructor.widgets.project_explorer - DEBUG - Выбран лист: Sales_Data
+2025-09-14 21:58:39 - src.constructor.main_window - DEBUG - MainWindow получил сигнал о выборе листа: Sales_Data
+2025-09-14 21:58:39 - src.constructor.widgets.sheet_editor - INFO - Загрузка листа 'Sales_Data' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:39 - src.constructor.widgets.sheet_editor - DEBUG - Стеки Undo/Redo очищены.
+2025-09-14 21:58:39 - src.core.app_controller - DEBUG - AppController: Получение редактируемых данных для листа 'Sales_Data' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:39 - src.storage.database - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:39 - src.storage.database - DEBUG - Соединение с БД D:\Projects\excel_micro_db\test_workspace\project_data.db установлено.
+2025-09-14 21:58:39 - src.storage.database - INFO - Схема базы данных инициализирована успешно.
+2025-09-14 21:58:39 - src.storage.database - DEBUG - Соединение с БД закрыто.
+2025-09-14 21:58:39 - src.core.app_controller - ERROR - Ошибка при получении редактируемых данных для листа 'Sales_Data': 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+Traceback (most recent call last):
+  File "D:\Projects\excel_micro_db\src\core\app_controller.py", line 319, in get_sheet_editable_data
+    editable_data = storage.load_sheet_editable_data(sheet_name)
+AttributeError: 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+2025-09-14 21:58:39 - src.constructor.widgets.sheet_editor - WARNING - Редактируемые данные для листа 'Sales_Data' не найдены или пусты.
+2025-09-14 21:58:39 - src.constructor.widgets.project_explorer - DEBUG - Выбран лист: Mixed_Data
+2025-09-14 21:58:39 - src.constructor.main_window - DEBUG - MainWindow получил сигнал о выборе листа: Mixed_Data
+2025-09-14 21:58:39 - src.constructor.widgets.sheet_editor - INFO - Загрузка листа 'Mixed_Data' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:39 - src.constructor.widgets.sheet_editor - DEBUG - Стеки Undo/Redo очищены.
+2025-09-14 21:58:39 - src.core.app_controller - DEBUG - AppController: Получение редактируемых данных для листа 'Mixed_Data' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:39 - src.storage.database - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:39 - src.storage.database - DEBUG - Соединение с БД D:\Projects\excel_micro_db\test_workspace\project_data.db установлено.
+2025-09-14 21:58:39 - src.storage.database - INFO - Схема базы данных инициализирована успешно.
+2025-09-14 21:58:39 - src.storage.database - DEBUG - Соединение с БД закрыто.
+2025-09-14 21:58:39 - src.core.app_controller - ERROR - Ошибка при получении редактируемых данных для листа 'Mixed_Data': 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+Traceback (most recent call last):
+  File "D:\Projects\excel_micro_db\src\core\app_controller.py", line 319, in get_sheet_editable_data
+    editable_data = storage.load_sheet_editable_data(sheet_name)
+AttributeError: 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+2025-09-14 21:58:39 - src.constructor.widgets.sheet_editor - WARNING - Редактируемые данные для листа 'Mixed_Data' не найдены или пусты.
+2025-09-14 21:58:40 - src.constructor.widgets.project_explorer - DEBUG - Выбран лист: Summary
+2025-09-14 21:58:40 - src.constructor.main_window - DEBUG - MainWindow получил сигнал о выборе листа: Summary
+2025-09-14 21:58:40 - src.constructor.widgets.sheet_editor - INFO - Загрузка листа 'Summary' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:40 - src.constructor.widgets.sheet_editor - DEBUG - Стеки Undo/Redo очищены.
+2025-09-14 21:58:40 - src.core.app_controller - DEBUG - AppController: Получение редактируемых данных для листа 'Summary' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:40 - src.storage.database - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:40 - src.storage.database - DEBUG - Соединение с БД D:\Projects\excel_micro_db\test_workspace\project_data.db установлено.
+2025-09-14 21:58:40 - src.storage.database - INFO - Схема базы данных инициализирована успешно.
+2025-09-14 21:58:40 - src.storage.database - DEBUG - Соединение с БД закрыто.
+2025-09-14 21:58:40 - src.core.app_controller - ERROR - Ошибка при получении редактируемых данных для листа 'Summary': 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+Traceback (most recent call last):
+  File "D:\Projects\excel_micro_db\src\core\app_controller.py", line 319, in get_sheet_editable_data
+    editable_data = storage.load_sheet_editable_data(sheet_name)
+AttributeError: 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+2025-09-14 21:58:40 - src.constructor.widgets.sheet_editor - WARNING - Редактируемые данные для листа 'Summary' не найдены или пусты.
+2025-09-14 21:58:40 - src.constructor.widgets.project_explorer - DEBUG - Выбран лист: Edge_Cases
+2025-09-14 21:58:40 - src.constructor.main_window - DEBUG - MainWindow получил сигнал о выборе листа: Edge_Cases
+2025-09-14 21:58:40 - src.constructor.widgets.sheet_editor - INFO - Загрузка листа 'Edge_Cases' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:40 - src.constructor.widgets.sheet_editor - DEBUG - Стеки Undo/Redo очищены.
+2025-09-14 21:58:40 - src.core.app_controller - DEBUG - AppController: Получение редактируемых данных для листа 'Edge_Cases' из БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:40 - src.storage.database - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\test_workspace\project_data.db
+2025-09-14 21:58:40 - src.storage.database - DEBUG - Соединение с БД D:\Projects\excel_micro_db\test_workspace\project_data.db установлено.
+2025-09-14 21:58:40 - src.storage.database - INFO - Схема базы данных инициализирована успешно.
+2025-09-14 21:58:40 - src.storage.database - DEBUG - Соединение с БД закрыто.
+2025-09-14 21:58:40 - src.core.app_controller - ERROR - Ошибка при получении редактируемых данных для листа 'Edge_Cases': 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+Traceback (most recent call last):
+  File "D:\Projects\excel_micro_db\src\core\app_controller.py", line 319, in get_sheet_editable_data
+    editable_data = storage.load_sheet_editable_data(sheet_name)
+AttributeError: 'ProjectDBStorage' object has no attribute 'load_sheet_editable_data'
+2025-09-14 21:58:40 - src.constructor.widgets.sheet_editor - WARNING - Редактируемые данные для листа 'Edge_Cases' не найдены или пусты.
+2025-09-14 22:01:22 - src.constructor.main_window - INFO - Получен запрос на закрытие главного окна
+2025-09-14 22:01:22 - src.core.app_controller - INFO - Завершение работы приложения
+2025-09-14 22:01:22 - src.core.project_manager - DEBUG - Очистка ресурсов ProjectManager
+2025-09-14 22:01:22 - src.core.app_controller - INFO - Приложение завершено
+2025-09-14 22:01:22 - src.constructor.main_window - INFO - Главное окно закрыто
+2025-09-14 22:01:22 - __main__ - INFO - Цикл событий QApplication завершен с кодом 0
+2025-09-15 18:15:31 - __main__ - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\data\test_db_base.sqlite
+2025-09-15 18:15:31 - __main__ - DEBUG - Соединение с БД D:\Projects\excel_micro_db\data\test_db_base.sqlite установлено.
+2025-09-15 18:15:31 - __main__ - INFO - Схема базы данных инициализирована успешно (вызов из base.py).
+2025-09-15 18:15:31 - __main__ - DEBUG - Соединение с БД закрыто.
+2025-09-19 11:28:51 - __main__ - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\data\test_db_base.sqlite
+2025-09-19 11:28:51 - __main__ - DEBUG - Соединение с БД D:\Projects\excel_micro_db\data\test_db_base.sqlite установлено.
+2025-09-19 11:28:51 - __main__ - INFO - Схема базы данных инициализирована успешно (вызов из base.py).
+2025-09-19 11:28:51 - __main__ - DEBUG - Соединение с БД закрыто.

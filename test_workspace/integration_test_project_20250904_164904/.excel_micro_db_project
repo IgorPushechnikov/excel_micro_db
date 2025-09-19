@@ -1,0 +1,13 @@
+{
+  "project_name": "integration_test_project_20250904_164904",
+  "project_path": "D:\\Projects\\excel_micro_db\\test_workspace\\integration_test_project_20250904_164904",
+  "created_at": "2025-09-04T16:49:06.626120",
+  "last_opened": "2025-09-04T16:49:09.888698",
+  "version": "1.0",
+  "excel_files": [],
+  "analyses": [],
+  "config": {
+    "max_file_size_mb": 100,
+    "analysis_timeout_seconds": 300
+  }
+}

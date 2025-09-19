@@ -1,0 +1,4 @@
+2025-09-03 14:29:41 - src.storage.database - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\data\test_db.sqlite
+2025-09-03 14:29:41 - src.storage.database - DEBUG - Соединение с БД D:\Projects\excel_micro_db\data\test_db.sqlite установлено.
+2025-09-03 14:29:41 - src.storage.database - INFO - Схема базы данных инициализирована успешно.
+2025-09-03 14:29:41 - src.storage.database - DEBUG - Соединение с БД закрыто.

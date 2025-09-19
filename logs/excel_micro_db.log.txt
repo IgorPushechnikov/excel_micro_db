@@ -1,0 +1,84 @@
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Инициализация хранилища проекта с БД: D:\Projects\excel_micro_db\test_workspace\integration_test_project_20250904_165122\project_data.db
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Соединение с БД D:\Projects\excel_micro_db\test_workspace\integration_test_project_20250904_165122\project_data.db установлено.
+2025-09-04 20:29:11 - src.storage.database - INFO - Схема базы данных инициализирована успешно.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Начало загрузки всех данных проекта из БД.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Загруженное имя проекта: integration_test_project_20250904_165122
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Найденные листы: ['Sales_Data', 'Mixed_Data', 'Summary', 'Edge_Cases']
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Загрузка данных для листа: 'Sales_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Начало загрузки данных листа 'Sales_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - ID листа 'Sales_Data': 1
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена структура листа 'Sales_Data' (7 элементов).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена сводная информация о сырых данных листа 'Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизация имени таблицы: 'Sales_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизированное имя таблицы: 'Sales_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Начало загрузки сырых данных для листа 'Sales_Data' из таблицы 'raw_data_Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Загружены имена столбцов: ['Product', 'Q1_Sales', 'Q2_Sales', 'Q3_Sales', 'Q4_Sales', 'Total_Sales', 'Average_Sales']
+2025-09-04 20:29:11 - src.storage.database - INFO - [DEBUG_STORAGE] Сырые данные для листа 'Sales_Data' загружены. Всего строк: 4
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружены полные сырые данные листа 'Sales_Data' (4 строк).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 8 формул для листа 'Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 межлистовых ссылок для листа 'Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 диаграмм для листа 'Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 35 стилей для листа ID 1.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 35 стилей для листа 'Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 0 объединенных диапазонов для листа ID 1.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 объединенных диапазонов для листа 'Sales_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Данные листа 'Sales_Data' загружены успешно.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Загрузка данных для листа: 'Mixed_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Начало загрузки данных листа 'Mixed_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - ID листа 'Mixed_Data': 2
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена структура листа 'Mixed_Data' (6 элементов).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена сводная информация о сырых данных листа 'Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизация имени таблицы: 'Mixed_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизированное имя таблицы: 'Mixed_Data'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Начало загрузки сырых данных для листа 'Mixed_Data' из таблицы 'raw_data_Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Загружены имена столбцов: ['ID', 'Name', 'Date', 'Active', 'Score', 'Notes']
+2025-09-04 20:29:11 - src.storage.database - INFO - [DEBUG_STORAGE] Сырые данные для листа 'Mixed_Data' загружены. Всего строк: 5
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружены полные сырые данные листа 'Mixed_Data' (5 строк).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 формул для листа 'Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 межлистовых ссылок для листа 'Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 диаграмм для листа 'Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 36 стилей для листа ID 2.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 36 стилей для листа 'Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 0 объединенных диапазонов для листа ID 2.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 объединенных диапазонов для листа 'Mixed_Data'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Данные листа 'Mixed_Data' загружены успешно.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Загрузка данных для листа: 'Summary'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Начало загрузки данных листа 'Summary'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - ID листа 'Summary': 3
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена структура листа 'Summary' (3 элементов).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена сводная информация о сырых данных листа 'Summary'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизация имени таблицы: 'Summary'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизированное имя таблицы: 'Summary'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Начало загрузки сырых данных для листа 'Summary' из таблицы 'raw_data_Summary'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Загружены имена столбцов: ['Metric', 'Value', 'Source']
+2025-09-04 20:29:11 - src.storage.database - INFO - [DEBUG_STORAGE] Сырые данные для листа 'Summary' загружены. Всего строк: 4
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружены полные сырые данные листа 'Summary' (4 строк).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 4 формул для листа 'Summary'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 4 межлистовых ссылок для листа 'Summary'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 2 диаграмм для листа 'Summary'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 15 стилей для листа ID 3.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 15 стилей для листа 'Summary'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 0 объединенных диапазонов для листа ID 3.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 объединенных диапазонов для листа 'Summary'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Данные листа 'Summary' загружены успешно.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Загрузка данных для листа: 'Edge_Cases'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Начало загрузки данных листа 'Edge_Cases'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - ID листа 'Edge_Cases': 4
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена структура листа 'Edge_Cases' (4 элементов).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружена сводная информация о сырых данных листа 'Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизация имени таблицы: 'Edge_Cases'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Санитизированное имя таблицы: 'Edge_Cases'
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Начало загрузки сырых данных для листа 'Edge_Cases' из таблицы 'raw_data_Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - [DEBUG_STORAGE] Загружены имена столбцов: ['Value1', 'Value2', 'Result', 'Notes']
+2025-09-04 20:29:11 - src.storage.database - INFO - [DEBUG_STORAGE] Сырые данные для листа 'Edge_Cases' загружены. Всего строк: 5
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружены полные сырые данные листа 'Edge_Cases' (5 строк).
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 5 формул для листа 'Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 межлистовых ссылок для листа 'Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 диаграмм для листа 'Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 24 стилей для листа ID 4.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 24 стилей для листа 'Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - INFO - Загружено 0 объединенных диапазонов для листа ID 4.
+2025-09-04 20:29:11 - src.storage.database - DEBUG -  Загружено 0 объединенных диапазонов для листа 'Edge_Cases'.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Данные листа 'Edge_Cases' загружены успешно.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Загрузка всех данных проекта завершена.
+2025-09-04 20:29:11 - src.storage.database - DEBUG - Соединение с БД закрыто.

@@ -1,0 +1,196 @@
+# src/constructor/main_window.py
+"""
+Главное окно графического интерфейса Excel Micro DB.
+"""
+import sys
+from pathlib import Path
+from typing import Optional
+
+# Импорт Qt
+from PySide6.QtWidgets import (
+    QMainWindow, QMenu, QMenuBar, QStatusBar, QWidget, QVBoxLayout, QLabel,
+    QFileDialog, QMessageBox, QApplication
+)
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QAction, QCloseEvent
+import logging
+
+# Импорт из проекта
+from src.core.app_controller import create_app_controller, AppController
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+class MainWindow(QMainWindow):
+    """Главное окно приложения."""
+
+    def __init__(self):
+        super().__init__()
+        self.app_controller: Optional[AppController] = None
+        self._setup_ui()
+        self._setup_controller()
+        self._update_ui_state() # Обновить состояние UI в зависимости от состояния контроллера
+        logger.info("MainWindow инициализировано")
+
+    def _setup_ui(self):
+        """Настройка пользовательского интерфейса."""
+        self.setWindowTitle("Excel Micro DB - Конструктор")
+        self.resize(1000, 700) # Начальные размеры
+
+        # --- Меню ---
+        menubar = self.menuBar()
+        
+        # Меню "Файл"
+        self.file_menu = menubar.addMenu('&Файл')
+        
+        # Действие "Создать проект"
+        self.action_new_project = QAction('&Создать проект...', self)
+        self.action_new_project.setShortcut('Ctrl+N')
+        self.action_new_project.triggered.connect(self._on_new_project)
+        self.file_menu.addAction(self.action_new_project)
+        
+        # Действие "Открыть проект"
+        self.action_open_project = QAction('&Открыть проект...', self)
+        self.action_open_project.setShortcut('Ctrl+O')
+        self.action_open_project.triggered.connect(self._on_open_project)
+        self.file_menu.addAction(self.action_open_project)
+        
+        self.file_menu.addSeparator()
+        
+        # Действие "Выход"
+        self.action_exit = QAction('&Выход', self)
+        self.action_exit.setShortcut('Ctrl+Q')
+        self.action_exit.triggered.connect(self.close) # QMainWindow.close() закроет окно и завершит app.exec()
+        self.file_menu.addAction(self.action_exit)
+
+        # --- Центральный виджет ---
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        layout = QVBoxLayout(self.central_widget)
+        # Пока просто приветствие
+        self.welcome_label = QLabel("Добро пожаловать в Excel Micro DB!\n\n"
+                                   "1. Создайте новый проект (Файл -> Создать проект)\n"
+                                   "2. Или откройте существующий (Файл -> Открыть проект)")
+        self.welcome_label.setAlignment(Qt.AlignCenter)
+        self.welcome_label.setWordWrap(True)
+        layout.addWidget(self.welcome_label)
+        
+        # --- Статусная строка ---
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Готово", 5000) # Показать сообщение на 5 секунд
+
+    def _setup_controller(self):
+        """Инициализация контроллера приложения."""
+        try:
+            logger.debug("Создание AppController")
+            self.app_controller = create_app_controller()
+            # Инициализируем контроллер
+            init_success = self.app_controller.initialize()
+            if not init_success:
+                raise Exception("Не удалось инициализировать AppController")
+            logger.info("AppController инициализирован и готов к работе")
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации AppController: {e}")
+            QMessageBox.critical(
+                self,
+                "Ошибка инициализации",
+                f"Не удалось инициализировать ядро приложения:\n{e}\n\n"
+                "Приложение может работать некорректно."
+            )
+            # Можно решить, продолжать ли работу или закрыть
+            # Пока продолжим, но с отключенным контроллером
+            self.app_controller = None
+
+    def _update_ui_state(self):
+        """Обновление состояния UI в зависимости от состояния контроллера."""
+        # Пока состояние контроллера не влияет на базовые пункты меню
+        # Но это место для будущей логики (например, недоступность пунктов, если контроллер не готов)
+        controller_ready = self.app_controller is not None
+        self.action_new_project.setEnabled(controller_ready)
+        self.action_open_project.setEnabled(controller_ready)
+        if not controller_ready:
+             self.status_bar.showMessage("Ошибка: Контроллер приложения не доступен", 0) # 0 - показывать до следующего сообщения
+
+
+    @Slot()
+    def _on_new_project(self):
+        """Обработчик действия 'Создать проект'."""
+        logger.info("Начало создания нового проекта")
+        if not self.app_controller:
+            QMessageBox.warning(self, "Ошибка", "Контроллер приложения не инициализирован.")
+            return
+
+        # Диалог выбора директории для нового проекта
+        project_dir = QFileDialog.getExistingDirectory(
+            self, "Выберите директорию для нового проекта"
+        )
+        if not project_dir:
+            logger.info("Создание проекта отменено пользователем")
+            return
+
+        try:
+            # Вызов создания проекта через контроллер
+            # create_project ожидает путь и опционально имя
+            # Имя проекта можно запросить дополнительно, пока используем имя папки
+            project_name = Path(project_dir).name
+            success = self.app_controller.create_project(project_dir, project_name)
+            
+            if success:
+                self.status_bar.showMessage(f"Проект '{project_name}' создан и загружен", 5000)
+                QMessageBox.information(self, "Успех", f"Проект '{project_name}' успешно создан в {project_dir}")
+                # TODO: Переключить UI в режим работы с проектом
+            else:
+                self.status_bar.showMessage("Ошибка при создании проекта", 0)
+                # Сообщение об ошибке уже должно быть в логе через контроллер/менеджер
+                QMessageBox.critical(self, "Ошибка", "Не удалось создать проект. Подробности в логе.")
+        except Exception as e:
+            logger.error(f"Необработанная ошибка при создании проекта: {e}", exc_info=True)
+            self.status_bar.showMessage("Необработанная ошибка при создании проекта", 0)
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
+
+    @Slot()
+    def _on_open_project(self):
+        """Обработчик действия 'Открыть проект'."""
+        logger.info("Начало открытия проекта")
+        if not self.app_controller:
+            QMessageBox.warning(self, "Ошибка", "Контроллер приложения не инициализирован.")
+            return
+
+        # Диалог выбора директории существующего проекта
+        project_dir = QFileDialog.getExistingDirectory(
+            self, "Выберите директорию проекта"
+        )
+        if not project_dir:
+            logger.info("Открытие проекта отменено пользователем")
+            return
+
+        try:
+            # Вызов загрузки проекта через контроллер
+            success = self.app_controller.load_project(project_dir)
+            
+            if success:
+                project_name = self.app_controller.current_project.get("project_name", "Неизвестный проект")
+                self.status_bar.showMessage(f"Проект '{project_name}' загружен", 5000)
+                QMessageBox.information(self, "Успех", f"Проект '{project_name}' успешно загружен из {project_dir}")
+                # TODO: Переключить UI в режим работы с проектом
+            else:
+                self.status_bar.showMessage("Ошибка при загрузке проекта", 0)
+                QMessageBox.critical(self, "Ошибка", "Не удалось загрузить проект. Убедитесь, что это корректная директория проекта.")
+        except Exception as e:
+            logger.error(f"Необработанная ошибка при открытии проекта: {e}", exc_info=True)
+            self.status_bar.showMessage("Необработанная ошибка при открытии проекта", 0)
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
+
+    # Переопределяем closeEvent для корректного завершения
+    def closeEvent(self, event: QCloseEvent):
+        """Обработчик события закрытия окна."""
+        logger.info("Получен запрос на закрытие главного окна")
+        try:
+            if self.app_controller:
+                self.app_controller.shutdown() # Корректное завершение контроллера
+        except Exception as e:
+            logger.error(f"Ошибка при завершении работы контроллера: {e}", exc_info=True)
+        finally:
+            event.accept() # Разрешаем закрытие окна
+            logger.info("Главное окно закрыто")
