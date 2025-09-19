@@ -71,6 +71,34 @@ def sanitize_table_name(name: str) -> str:
     logger.debug(f"[DEBUG_STORAGE] Санитизированное имя таблицы: '{sanitized}'")
     return sanitized
 
+def sanitize_column_name(name: str) -> str:
+    """
+    Санитизирует имя для использования в качестве имени столбца SQLite.
+    Заменяет недопустимые символы на подчеркивания.
+
+    Args:
+        name (str): Исходное имя.
+
+    Returns:
+        str: Санитизированное имя.
+    """
+    logger.debug(f"[DEBUG_STORAGE] Санитизация имени столбца: '{name}'")
+
+    if not name:
+        logger.warning("[DEBUG_STORAGE] Получено пустое имя для санитации столбца. Возвращаю '_empty'.")
+        return "_empty"
+
+    # Заменяем все недопустимые символы (все, кроме букв, цифр и подчеркиваний) на '_'
+    sanitized = "".join(ch if ch.isalnum() or ch == '_' else '_' for ch in name)
+    
+    # Убедимся, что имя не пустое и не состоит только из подчеркиваний
+    if not sanitized or all(c == '_' for c in sanitized):
+        sanitized = f"column_{abs(hash(name))}"  # Создаем уникальное имя на основе хеша
+        logger.debug(f"[DEBUG_STORAGE] Имя после санитации было пустым или некорректным. Создано новое имя: '{sanitized}'")
+
+    logger.debug(f"[DEBUG_STORAGE] Санитизированное имя столбца: '{sanitized}'")
+    return sanitized
+
 class ProjectDBStorage:
     """
     Класс для управления подключением к БД проекта и выполнения операций с данными.
