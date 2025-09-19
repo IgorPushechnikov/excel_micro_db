@@ -9,6 +9,7 @@
 import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, TYPE_CHECKING
+import sqlite3 # Импортируем sqlite3 для прямого подключения
 
 # Добавляем корень проекта в путь поиска модулей если нужно
 project_root = Path(__file__).parent.parent.parent
@@ -367,15 +368,23 @@ class AppController:
             db_path = self.project_path / "project_data.db"
             logger.debug(f"AppController: Получение редактируемых данных для листа '{sheet_name}' из БД: {db_path}")
 
-            with ProjectDBStorage(str(db_path)) as storage:
-                editable_data = storage.load_sheet_editable_data(sheet_name)
-
-                if editable_data and 'column_names' in editable_data:
+            # ИСПРАВЛЕНИЕ: Открываем соединение напрямую через sqlite3
+            connection = sqlite3.connect(str(db_path))
+            try:
+                # --- ИСПРАВЛЕННЫЙ ВЫЗОВ ---
+                # Импортируем функцию напрямую из модуля editable_data
+                from src.storage.editable_data import load_sheet_editable_data
+                editable_data_result = load_sheet_editable_data(connection, sheet_name)
+                # --------------------------
+                if editable_data_result and 'column_names' in editable_data_result:
                     logger.info(f"Редактируемые данные для листа '{sheet_name}' успешно получены.")
-                    return editable_data
+                    return editable_data_result
                 else:
                     logger.warning(f"Редактируемые данные для листа '{sheet_name}' не найдены или пусты.")
-                    return {"column_names": [], "rows": []}  # Возвращаем пустую структуру
+                    return {"column_names": [], "rows": []} # Возвращаем пустую структуру
+            finally:
+                connection.close()
+                logger.debug("Соединение с БД закрыто.")
 
         except Exception as e:
             logger.error(f"Ошибка при получении редактируемых данных для листа '{sheet_name}': {e}", exc_info=True)
@@ -412,13 +421,10 @@ class AppController:
             db_path = self.project_path / "project_data.db"
             logger.debug(f"AppController: Обновление ячейки [{sheet_name}][{row_index}, {column_name}] в БД: {db_path}")
 
-            with ProjectDBStorage(str(db_path)) as storage:
-                conn = storage.connection
-                if not conn:
-                    logger.error("Нет активного соединения с БД в AppController.update_sheet_cell_in_project")
-                    return False
-
-                cursor = conn.cursor()
+            # ИСПРАВЛЕНИЕ: Открываем соединение напрямую через sqlite3
+            connection = sqlite3.connect(str(db_path))
+            try:
+                cursor = connection.cursor()
                 cursor.execute("SELECT id FROM sheets WHERE name = ?", (sheet_name,))
                 sheet_row = cursor.fetchone()
                 if not sheet_row:
@@ -453,7 +459,13 @@ class AppController:
 
                 # 3. Обновить значение ячейки в таблице editable_data_...
                 # ИСПРАВЛЕНО: сигнатура и логика вызова
-                update_success = storage.update_editable_cell(sheet_name, row_index, column_name, new_value)
+                # update_success = storage.update_editable_cell(sheet_name, row_index, column_name, new_value)
+
+                # --- ИСПРАВЛЕННЫЙ ВЫЗОВ ---
+                # Импортируем функцию напрямую из модуля editable_data
+                from src.storage.editable_data import update_editable_cell
+                update_success = update_editable_cell(connection, sheet_name, row_index, column_name, new_value)
+                # --------------------------
 
                 if update_success:
                     # 4. Сохранить запись в истории редактирования
@@ -486,34 +498,43 @@ class AppController:
                         "column_name": column_name
                     }
 
-                    history_success = storage.save_edit_history_record(
-                        project_id=project_id,         # <-- Добавлено
-                        sheet_id=sheet_id,
-                        cell_address=cell_address,    # <-- Может быть None
-                        action_type="edit_cell",      # <-- Исправлен тип действия
-                        old_value=old_value,
-                        new_value=new_value,
-                        user=None,                    # <-- Пока нет пользователей
-                        details=history_details       # <-- Передаем детали
-                    )
+                    # --- ИСПРАВЛЕННЫЙ ВЫЗОВ ---
+                    # Используем экземпляр storage (который является ProjectDBStorage) для вызова метода save_edit_history_record
+                    # storage.save_edit_history_record(...) - это правильный способ, так как метод существует у класса
+                    with ProjectDBStorage(str(db_path)) as storage_hist:
+                         history_success = storage_hist.save_edit_history_record(
+                             project_id=project_id,         # <-- Добавлено
+                             sheet_id=sheet_id,
+                             cell_address=cell_address,    # <-- Может быть None
+                             action_type="edit_cell",      # <-- Исправлен тип действия
+                             old_value=old_value,
+                             new_value=new_value,
+                             user=None,                    # <-- Пока нет пользователей
+                             details=history_details       # <-- Передаем детали
+                         )
+                    # --------------------------
 
                     if history_success:
                         logger.info(f"Ячейка [{sheet_name}][{row_index}, {column_name}] обновлена и запись истории сохранена.")
                         return True
                     else:
-                        logger.error(f"Ячейка обновлена, но ошибка при сохранении записи истории для [{sheet_name}][{row_index}, {column_name}].")
+                        logger.error(
+                            f"Ячейка обновлена, но ошибка при сохранении записи истории для [{sheet_name}][{row_index}, {column_name}].")
                         # Решение: считать операцию неудачной, если не удалось записать историю?
                         # Или всё же считать успехом обновление данных?
                         # Пока считаем частичный успех как общий успех, но логируем ошибку.
                         # ЛУЧШЕ: если история критична, то возвращаем False.
                         # Для MVP, скорее всего, лучше вернуть True, но залогировать ошибку.
-                        # Уточним: если save_edit_history_record возвращает False, это значит, 
+                        # Уточним: если save_edit_history_record возвращает False, это значит,
                         # что запись в БД не удалась. Это серьезная проблема.
                         # Возвращаем False.
                         return False 
                 else:
                     logger.error(f"Не удалось обновить ячейку [{sheet_name}][{row_index}, {column_name}] в БД.")
                     return False
+            finally:
+                connection.close()
+                logger.debug("Соединение с БД закрыто.")
         except Exception as e:
             logger.error(f"Ошибка при обновлении ячейки [{sheet_name}][{row_index}, {column_name}]: {e}", exc_info=True)
             return False
@@ -544,7 +565,6 @@ class AppController:
 
         logger.info("Приложение завершено")
 
-
 # Функции для удобного использования контроллера
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
@@ -559,7 +579,6 @@ def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
     controller = AppController(project_path)
     return controller
-
 
 # Пример использования
 
