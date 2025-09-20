@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QDockWidget, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget, QMessageBox, QMenu, QAction
+    QVBoxLayout, QWidget, QMessageBox, QMenu, QAction, QLabel # <-- ДОБАВИЛИ QLabel
 )
 # Импортируем QtCore.Qt для доступа к перечислениям и Signal/Slot
 from PySide6.QtCore import Qt, Signal, Slot, QPersistentModelIndex
