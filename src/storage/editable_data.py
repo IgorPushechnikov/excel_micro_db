@@ -1,5 +1,4 @@
 # src/storage/editable_data.py
-
 """
 Модуль для работы с редактируемыми данными в хранилище проекта Excel Micro DB.
 """
@@ -7,10 +6,12 @@
 import sqlite3
 import logging
 from typing import Optional, Any, Dict, List
-# Импортируем datetime для проверки типов значений
-from datetime import datetime as dt_datetime # Переименовываем во избежание конфликта с именем переменной
 # from src.storage.base import sanitize_table_name # Если потребуется
 # from src.storage.schema import ... # Если потребуются какие-либо константы
+# ИМПОРТ sanitize_column_name БУДЕТ ВНУТРИ ФУНКЦИЙ, ГДЕ ОН ИСПОЛЬЗУЕТСЯ
+
+# Импортируем datetime для проверки типов значений в create_and_populate_editable_table
+from datetime import datetime as dt_datetime # Переименовываем во избежание конфликта с именем переменной
 
 logger = logging.getLogger(__name__)
 
@@ -135,32 +136,60 @@ def update_editable_cell(
         # row_index в Python (0-based) -> id в БД (1-based)
         db_row_id = row_index + 1 
 
+        # --- ДОБАВЛЕННЫЕ ЛОГИ ДЛЯ ОТЛАДКИ ---
+        logger.debug(f"DEBUG_UPDATE: sheet_name='{sheet_name}', row_index={row_index}, column_name='{column_name}'")
+        logger.debug(f"DEBUG_UPDATE: editable_table_name='{editable_table_name}', sanitized_col_name='{sanitized_col_name}', db_row_id={db_row_id}")
+        logger.debug(f"DEBUG_UPDATE: new_value='{new_value}' (type: {type(new_value)})")
+        # ------------------------------------
+
         # Обновляем значение в таблице
         # Экранируем имя столбца
-        cursor.execute(f'''
+        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
+        update_sql = f'''
             UPDATE {editable_table_name} 
             SET "{sanitized_col_name}" = ?
             WHERE id = ?
-        ''', (str(new_value), db_row_id)) # Преобразуем значение в строку для единообразия
+        '''
+        update_params = (str(new_value), db_row_id)
+        logger.debug(f"DEBUG_UPDATE: Выполняется SQL: {update_sql.strip()}, Параметры: {update_params}")
+        # ------------------------------------
+        cursor.execute(update_sql, update_params)
         
-        if cursor.rowcount == 0:
+        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
+        logger.debug(f"DEBUG_UPDATE: cursor.rowcount после UPDATE: {cursor.rowcount}")
+        affected_rows = cursor.rowcount
+        # ------------------------------------
+
+        if affected_rows == 0:
             logger.warning(f"Ячейка [{sheet_name}][{row_index}, {column_name}] не найдена для обновления (id={db_row_id} в таблице {editable_table_name}).")
             # Можно здесь создать новую строку, если она отсутствует, но обычно она должна быть.
             # Для MVP предполагаем, что строка существует.
             connection.commit() # На всякий случай коммитим, даже если ничего не изменилось
+            # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
+            logger.debug(f"DEBUG_UPDATE: connection.commit() вызван из-за rowcount=0")
+            # ------------------------------------
             return False
         else:
             connection.commit()
             logger.info(f"Обновлена ячейка [{sheet_name}][{row_index}, {column_name}] (id={db_row_id}). Новое значение: {new_value}")
+            # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
+            logger.debug(f"DEBUG_UPDATE: connection.commit() вызван из-за rowcount>0")
+            # ------------------------------------
             return True
             
     except sqlite3.Error as e:
         logger.error(f"Ошибка SQLite при обновлении ячейки [{sheet_name}][{row_index}, {column_name}]: {e}")
         connection.rollback()
+        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
+        logger.debug(f"DEBUG_UPDATE: connection.rollback() вызван из-за sqlite3.Error")
+        # ------------------------------------
         return False
     except Exception as e:
         logger.error(f"Неожиданная ошибка при обновлении ячейки [{sheet_name}][{row_index}, {column_name}]: {e}")
         connection.rollback()
+        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
+        logger.debug(f"DEBUG_UPDATE: connection.rollback() вызван из-за Exception")
+        # ------------------------------------
         return False
 
 # === НОВОЕ: Функция для создания и инициализации таблицы редактируемых данных ===
