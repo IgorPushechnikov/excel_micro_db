@@ -6,7 +6,8 @@
 import sys
 import string  # Для генерации имен столбцов Excel
 
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal
+# ИСПРАВЛЕНО: Добавлен QPersistentModelIndex в импорт
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal, QPersistentModelIndex
 from PySide6.QtGui import QBrush, QColor, QAction, QFont # Добавлен QFont для стилей шрифта
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QLabel, QMessageBox,
@@ -134,18 +135,20 @@ class SheetDataModel(QAbstractTableModel):
         return names
 
     # ИСПРАВЛЕНО СНОВА: Сигнатура метода rowCount соответствует базовому классу строго
-    def rowCount(self, parent: Union[QModelIndex, 'QPersistentModelIndex'] = QModelIndex()) -> int:
+    # Pylance требует Union[QModelIndex, QPersistentModelIndex]
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = ...) -> int: # type: ignore
         _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
         return len(self._rows)
 
     # ИСПРАВЛЕНО СНОВА: Сигнатура метода columnCount соответствует базовому классу строго
-    def columnCount(self, parent: Union[QModelIndex, 'QPersistentModelIndex'] = QModelIndex()) -> int:
+    # Pylance требует Union[QModelIndex, QPersistentModelIndex]
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = ...) -> int: # type: ignore
         _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
         return len(self._rows[0]) if self._rows else 0
 
     # ИСПРАВЛЕНО СНОВА: Сигнатура метода data соответствует базовому классу строго
-    # Pylance требует QModelIndex, а не Union. Преобразование внутри не нужно.
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
+    # Pylance требует Union[QModelIndex, QPersistentModelIndex] для index
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = ...) -> Any: # type: ignore
         # Проверка валидности индекса
         if not index.isValid():
             return None
@@ -229,7 +232,8 @@ class SheetDataModel(QAbstractTableModel):
         return None
 
     # ИСПРАВЛЕНО СНОВА: Сигнатура метода headerData соответствует базовому классу строго
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
+    # Pylance требует int для role
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = ...) -> Any: # type: ignore
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
                 if 0 <= section < len(self._generated_column_headers):
@@ -242,7 +246,8 @@ class SheetDataModel(QAbstractTableModel):
         return None
 
     # ИСПРАВЛЕНО СНОВА: Сигнатура метода flags соответствует базовому классу строго
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    # Pylance требует Union[QModelIndex, QPersistentModelIndex] для index
+    def flags(self, index: Union[QModelIndex, QPersistentModelIndex]) -> Qt.ItemFlag: # type: ignore
         # НЕ НУЖНО преобразовывать QPersistentModelIndex
         # if isinstance(index, QPersistentModelIndex):
         #     index = QModelIndex(index)
@@ -252,7 +257,8 @@ class SheetDataModel(QAbstractTableModel):
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
 
     # ИСПРАВЛЕНО СНОВА: Сигнатура метода setData соответствует базовому классу строго
-    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole):
+    # Pylance требует Union[QModelIndex, QPersistentModelIndex] для index
+    def setData(self, index: Union[QModelIndex, QPersistentModelIndex], value: Any, role: int = ...) -> bool: # type: ignore
         """
         Устанавливает данные в модель. Вызывается, когда пользователь редактирует ячейку.
         Испускает cellDataAboutToChange до изменения и dataChanged после.
