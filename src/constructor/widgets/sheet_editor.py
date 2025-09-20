@@ -49,14 +49,21 @@ class SheetDataModel(QAbstractTableModel):
     dataChangedExternally = Signal(QModelIndex, QModelIndex)
     # =========================================================
 
-    def __init__(self, editable_data: Dict[str, Any], parent=None):
+    def __init__(self, editable_ Dict[str, Any], parent=None):
         super().__init__(parent)
         self._editable_data = editable_data
         # Сохраняем оригинальные имена столбцов (из первой строки Excel)
-        # Они могут понадобиться, например, для экспорта или отображения в других частях GUI
+        # Они могут понадобиться, например, для экспорта или отображения в других частя GUI
         self._original_column_names = self._editable_data.get("column_names", [])
         # Данные ячеек (включая "заголовочную" строку)
-        self._rows = self._editable_data.get("rows", [])
+        # ИСПРАВЛЕНО: Преобразуем кортежи из БД в списки для возможности редактирования
+        raw_rows = self._editable_data.get("rows", [])
+        # self._rows = [list(row_tuple) for row_tuple in raw_rows] # <-- Вот ключевое изменение
+        # Более явное преобразование для надежности
+        self._rows: List[List[Any]] = []
+        for row_tuple in raw_rows:
+            self._rows.append(list(row_tuple))
+            
         # Генерируем стандартные имена столбцов Excel
         self._generated_column_headers = self._generate_excel_column_names(
             len(self._rows[0]) if self._rows else 0
@@ -157,6 +164,7 @@ class SheetDataModel(QAbstractTableModel):
                 self.cellDataAboutToChange.emit(index, old_value, new_value_str)
 
                 # 4. Обновляем данные в модели
+                # Теперь это должно работать, так как self._rows содержит списки
                 self._rows[row][col] = new_value_str
 
                 # 5. Сообщаем представлению, что данные изменились
@@ -295,7 +303,7 @@ class SheetEditor(QWidget):
         try:
             editable_data = self.app_controller.get_sheet_editable_data(sheet_name)
             
-            if editable_data is not None and 'column_names' in editable_data:
+            if editable_data is not None and 'column_names' in editable_
                 self._model = SheetDataModel(editable_data)
                 # === НОВОЕ: Подключение к новому сигналу модели ===
                 # Подключаем сигнал модели о предстоящем изменении к слоту редактора
