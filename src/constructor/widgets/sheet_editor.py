@@ -3,7 +3,7 @@
 Виджет-редактор для отображения и редактирования содержимого листа Excel.
 """
 import sys
-from typing import Optional, Dict, Any, List, NamedTuple
+from typing import Optional, Dict, Any, List, NamedTuple, Union
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -52,13 +52,18 @@ class SheetDataModel(QAbstractTableModel):
         self._column_names = self._editable_data.get("column_names", [])
         self._rows = self._editable_data.get("rows", [])
 
-    def rowCount(self, parent=QModelIndex()):
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
         return len(self._rows)
 
-    def columnCount(self, parent=QModelIndex()):
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
         return len(self._column_names)
 
-    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
+    # ИСПРАВЛЕНО: Тип параметра index для совместимости с базовым классом
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role=Qt.ItemDataRole.DisplayRole):
+        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
+        if isinstance(index, QPersistentModelIndex):
+            index = QModelIndex(index)
+            
         if not index.isValid():
             return None
         row = index.row()
@@ -81,17 +86,27 @@ class SheetDataModel(QAbstractTableModel):
                 return str(section + 1)
         return None
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+    # ИСПРАВЛЕНО: Тип параметра index для совместимости с базовым классом
+    def flags(self, index: Union[QModelIndex, QPersistentModelIndex]) -> Qt.ItemFlag:
+        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
+        if isinstance(index, QPersistentModelIndex):
+            index = QModelIndex(index)
+            
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
 
     # === ИЗМЕНЕНО: setData с испусканием сигнала до изменения ===
-    def setData(self, index: QModelIndex, value, role=Qt.ItemDataRole.EditRole):
+    # ИСПРАВЛЕНО: Тип параметра index для совместимости с базовым классом
+    def setData(self, index: Union[QModelIndex, QPersistentModelIndex], value, role=Qt.ItemDataRole.EditRole):
         """
         Устанавливает данные в модель. Вызывается, когда пользователь редактирует ячейку.
         Испускает cellDataAboutToChange до изменения и dataChanged после.
         """
+        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
+        if isinstance(index, QPersistentModelIndex):
+            index = QModelIndex(index)
+            
         if index.isValid() and role == Qt.ItemDataRole.EditRole:
             row = index.row()
             col = index.column()
@@ -294,11 +309,12 @@ class SheetEditor(QWidget):
             logger.debug(f"SheetEditor: Обнаружено изменение в ячейке [{row}, {column_name}]. Новое значение: '{new_value}'")
             
             try:
+                # ИСПРАВЛЕНО: Приведение new_value к str для соответствия сигнатуре метода
                 success = self.app_controller.update_sheet_cell_in_project(
                     sheet_name=self.sheet_name,
                     row_index=row,
                     column_name=column_name,
-                    new_value=new_value # new_value уже строка, как в модели
+                    new_value=str(new_value) if new_value is not None else "" # Приведение к str
                 )
                 
                 if success:
