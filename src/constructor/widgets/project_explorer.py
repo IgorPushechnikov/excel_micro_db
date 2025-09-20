@@ -3,21 +3,15 @@
 Виджет "Обозреватель проекта" для Excel Micro DB GUI.
 Отображает структуру открытого проекта в виде дерева.
 """
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from PySide6.QtWidgets import (
     QDockWidget, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget, QMessageBox, QMenu, QLabel # <-- ДОБАВИЛИ QLabel
+    QVBoxLayout, QWidget, QMessageBox, QLabel # <-- ДОБАВИЛИ QLabel
 )
-from PySide6.QtGui import QAction # <-- ДОБАВИЛИ СЮДА
 # Импортируем QtCore.Qt для доступа к перечислениям и Signal/Slot
-from PySide6.QtCore import Qt, Signal, Slot, QPersistentModelIndex
-# QtCore.Qt уже содержит нужные перечисления. Мы будем использовать их напрямую.
-# from PySide6.QtCore import Qt_ItemDataRole as ItemDataRole, Qt_ItemFlag as ItemFlag # <-- УДАЛЕНО
-# Для добавления иконок в будущем
-from PySide6.QtGui import QIcon
-
+from PySide6.QtCore import Qt, Signal, Slot
 # Явно импортируем sqlite3 в заголовке файла, чтобы Pylance был доволен
 import sqlite3 # <-- ДОБАВЛЕНО
 
@@ -94,7 +88,7 @@ class ProjectExplorer(QDockWidget):
             project_name = self.project_data.get("project_name", "Проект")
             
             # --- Создание корневого элемента проекта ---
-            project_item = QTreeWidgetItem(self.tree, [project_name])
+            project_item = QTreeWidgetItem(self.tree, [f"{project_name}"])
             project_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_PROJECT) # <-- ИСПРАВЛЕНО
             # project_item.setIcon(0, QIcon("path/to/project_icon.png")) # TODO: Иконка проекта
             project_item.setExpanded(True) # Раскрываем проект по умолчанию
@@ -118,8 +112,7 @@ class ProjectExplorer(QDockWidget):
             else:
                 # Если листов нет или ошибка, показываем заглушку
                 no_sheets_item = QTreeWidgetItem(sheets_folder_item, ["(Нет данных)"])
-                no_sheets_item.setFlags(Qt.ItemFlag.NoItemFlags) # <-- ИСПРАВЛЕНО
-                # Делаем недоступным для выбора
+                no_sheets_item.setFlags(Qt.ItemFlag.NoItemFlags) # <-- ИСПРАВЛЕНО # Делаем недоступным для выбора
 
             # --- Удалены папки "Формулы", "Стили", "Диаграммы" ---
             # --- Создание других папок (заглушки) ---
@@ -171,11 +164,11 @@ class ProjectExplorer(QDockWidget):
                 return sheets
 
         except sqlite3.Error as e: # <-- Теперь Pylance знает, что это sqlite3.Error
-            logger.error(f"Ошибка SQLite при загрузке листов из БД проекта: {e}")
+            logger.error(f"Ошибка работы с БД проекта при получении листов: {e}")
             # QMessageBox.warning(self, "Ошибка БД", f"Не удалось получить список листов из БД проекта:\n{e}")
             return []
         except Exception as e:
-            logger.error(f"Неожиданная ошибка при загрузке листов из БД проекта: {e}", exc_info=True)
+            logger.error(f"Неожиданная ошибка при получении листов из БД: {e}", exc_info=True)
             return []
 
     def clear_project(self):
@@ -191,12 +184,10 @@ class ProjectExplorer(QDockWidget):
         if current is None:
             return
 
-        # ИСПРАВЛЕНО: Используем Qt.ItemDataRole.UserRole напрямую
         item_type = current.data(0, Qt.ItemDataRole.UserRole) # <-- ИСПРАВЛЕНО
         
         # Проверяем, является ли выбранный элемент листом
         if item_type == ITEM_TYPE_SHEET:
-            # ИСПРАВЛЕНО: Используем Qt.ItemDataRole.UserRole напрямую
             sheet_name = current.data(0, Qt.ItemDataRole.UserRole + 1) # <-- ИСПРАВЛЕНО
             if sheet_name:
                 logger.debug(f"Выбран лист: {sheet_name}")
