@@ -6,18 +6,17 @@
 import sys
 import string  # Для генерации имен столбцов Excel
 
-# ИСПРАВЛЕНО: Добавлен QPersistentModelIndex в импорт
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal, QPersistentModelIndex
-from PySide6.QtGui import QBrush, QColor, QAction
+from PySide6.QtGui import QBrush, QColor, QAction, QPen # Добавлен QPen для границ
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QLabel, QMessageBox,
     QAbstractItemView, QHeaderView, QApplication, QMenu, QInputDialog, QHBoxLayout, QLineEdit
 )
 
-# ИСПРАВЛЕНО: Добавлен Union в импорт для корректных сигнатур методов
+# Импорты для типизации
 from typing import Optional, Dict, Any, List, NamedTuple, Union
-
 from pathlib import Path
+
 import sqlite3
 import logging
 
@@ -80,6 +79,7 @@ class SheetDataModel(QAbstractTableModel):
     def set_cell_styles(self, styles_data: List[Dict[str, Any]]):
         """Устанавливает стили для ячеек на основе данных из storage.styles."""
         self._cell_styles.clear()
+        logger.debug(f"SheetDataModel.set_cell_styles: Получено {len(styles_data)} записей стилей.")
         for style_info in styles_data:
             range_addr = style_info.get("range_address", "")
             style_attrs = style_info.get("style_attributes", {})
@@ -90,17 +90,27 @@ class SheetDataModel(QAbstractTableModel):
                     row_number_str = ''.join(filter(str.isdigit, range_addr))
                     if col_letter and row_number_str:
                         col_index = self._column_letter_to_index(col_letter)
+                        # Важно: OpenPyXL использует 1-based индексацию для строк
+                        # Модель использует 0-based. Конвертируем.
                         row_index = int(row_number_str) - 1  # Excel 1-based -> Python 0-based
                         if col_index >= 0 and row_index >= 0:
+                            # Логируем загруженные стили для отладки
+                            logger.debug(f"SheetDataModel.set_cell_styles: Установлен стиль для [{row_index}, {col_index}]: {list(style_attrs.keys())}")
                             self._cell_styles[(row_index, col_index)] = style_attrs
+                        else:
+                            logger.warning(f"SheetDataModel.set_cell_styles: Некорректный индекс после парсинга {range_addr}: row={row_index}, col={col_index}")
+                    else:
+                        logger.warning(f"SheetDataModel.set_cell_styles: Не удалось извлечь координаты из адреса '{range_addr}'")
                 except Exception as e:
-                    logger.warning(f"Не удалось распарсить адрес ячейки '{range_addr}' для стиля: {e}")
+                    logger.warning(f"SheetDataModel.set_cell_styles: Ошибка парсинга адреса '{range_addr}': {e}")
 
         # Сообщаем представлению, что данные могли измениться (для перерисовки стилей)
-        top_left = self.index(0, 0)
-        bottom_right = self.index(self.rowCount() - 1, self.columnCount() - 1)
-        if top_left.isValid() and bottom_right.isValid():
-            self.dataChanged.emit(top_left, bottom_right)
+        if self._rows:
+            top_left = self.index(0, 0)
+            bottom_right = self.index(self.rowCount() - 1, self.columnCount() - 1)
+            if top_left.isValid() and bottom_right.isValid():
+                self.dataChanged.emit(top_left, bottom_right)
+                logger.debug("SheetDataModel.set_cell_styles: Сигнал dataChanged отправлен для обновления стилей.")
 
     def _column_letter_to_index(self, letter: str) -> int:
         """Преобразует букву столбца Excel (например, 'A', 'Z', 'AA') в 0-базовый индекс."""
@@ -124,24 +134,25 @@ class SheetDataModel(QAbstractTableModel):
         return names
 
     # ИСПРАВЛЕНО: Сигнатура метода rowCount соответствует базовому классу
-    # Тип parent должен быть Union[QModelIndex, QPersistentModelIndex], как в базовом классе
-    # Pylance требует точного соответствия сигнатур при переопределении
     def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
-        # Игнорируем parent, так как у нас плоская таблица без иерархии
-        # Это стандартная практика для простых моделей таблиц
-        _ = parent # Подавляем предупреждение о неиспользованной переменной
+        _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
         return len(self._rows)
 
     # ИСПРАВЛЕНО: Сигнатура метода columnCount соответствует базовому классу
     def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
-        _ = parent # Подавляем предупреждение о неиспользованной переменной
+        _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
         return len(self._rows[0]) if self._rows else 0
 
     # ИСПРАВЛЕНО: Сигнатура метода data соответствует базовому классу
-    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole): # role: int
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = Qt.ItemDataRole.DisplayRole):
         # Проверка валидности индекса
         if not index.isValid():
             return None
+
+        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
+        # (Хотя сигнатура теперь правильная, на всякий случай)
+        if isinstance(index, QPersistentModelIndex):
+            index = QModelIndex(index)
 
         row = index.row()
         col = index.column()
@@ -159,31 +170,56 @@ class SheetDataModel(QAbstractTableModel):
         elif role == Qt.ItemDataRole.BackgroundRole:
             style = self._cell_styles.get((row, col))
             if style:
+                # logger.debug(f"Запрос BackgroundRole для [{row},{col}]: {style}") # Для отладки
+                # OpenPyXL обычно хранит цвет фона в fill_fg_color
                 fill_fg_color = style.get("fill_fg_color")
+                # Также проверим fill_bg_color, если fg_color не задан или пуст
+                if not fill_fg_color or fill_fg_color == "00000000": # Прозрачный
+                     fill_fg_color = style.get("fill_bg_color")
                 if fill_fg_color and isinstance(fill_fg_color, str) and fill_fg_color.startswith('#'):
                     try:
                         color = QColor(fill_fg_color)
                         if color.isValid():
+                            # logger.debug(f"BackgroundRole: Цвет {fill_fg_color} применен к [{row},{col}]")
                             return QBrush(color)
+                        else:
+                            logger.debug(f"BackgroundRole: Цвет {fill_fg_color} невалиден для [{row},{col}]")
                     except Exception as e:
-                        logger.warning(f"Ошибка преобразования цвета фона '{fill_fg_color}': {e}")
+                        logger.warning(f"Ошибка преобразования цвета фона '{fill_fg_color}' для [{row},{col}]: {e}")
         elif role == Qt.ItemDataRole.ForegroundRole:
             style = self._cell_styles.get((row, col))
             if style:
+                # logger.debug(f"Запрос ForegroundRole для [{row},{col}]: {style}") # Для отладки
+                # OpenPyXL обычно хранит цвет шрифта в font_color
                 font_color = style.get("font_color")
                 if font_color and isinstance(font_color, str) and font_color.startswith('#'):
                     try:
                         color = QColor(font_color)
                         if color.isValid():
+                            # logger.debug(f"ForegroundRole: Цвет {font_color} применен к [{row},{col}]")
                             return QBrush(color)
+                        else:
+                           logger.debug(f"ForegroundRole: Цвет {font_color} невалиден для [{row},{col}]")
                     except Exception as e:
-                        logger.warning(f"Ошибка преобразования цвета шрифта '{font_color}': {e}")
+                        logger.warning(f"Ошибка преобразования цвета шрифта '{font_color}' для [{row},{col}]: {e}")
+        elif role == Qt.ItemDataRole.FontRole:
+            # Можно добавить обработку стилей шрифта (жирность, курсив и т.д.) здесь
+            # style = self._cell_styles.get((row, col))
+            # if style:
+            #     font = QFont()
+            #     if style.get("font_b"): # Жирный
+            #         font.setBold(True)
+            #     if style.get("font_i"): # Курсив
+            #         font.setItalic(True)
+            #     # ... другие свойства шрифта
+            #     return font
+            pass
         # ======================================
 
         return None
 
     # ИСПРАВЛЕНО: Сигнатура метода headerData соответствует базовому классу
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole): # role: int
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
                 if 0 <= section < len(self._generated_column_headers):
@@ -191,21 +227,30 @@ class SheetDataModel(QAbstractTableModel):
                 else:
                     return f"Col_{section}"  # fallback
             elif orientation == Qt.Orientation.Vertical:
-                return str(section + 1) # Номера строк (1-based)
+                # Номера строк (1-based), как в Excel
+                return str(section + 1)
         return None
 
     # ИСПРАВЛЕНО: Сигнатура метода flags соответствует базовому классу
-    def flags(self, index) -> Qt.ItemFlag: # Убрана аннотация Union
+    def flags(self, index: Union[QModelIndex, QPersistentModelIndex]) -> Qt.ItemFlag:
+        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
+        if isinstance(index, QPersistentModelIndex):
+            index = QModelIndex(index)
+
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
 
     # ИСПРАВЛЕНО: Сигнатура метода setData соответствует базовому классу
-    def setData(self, index, value, role: int = Qt.ItemDataRole.EditRole): # role: int
+    def setData(self, index: Union[QModelIndex, QPersistentModelIndex], value, role: int = Qt.ItemDataRole.EditRole):
         """
         Устанавливает данные в модель. Вызывается, когда пользователь редактирует ячейку.
         Испускает cellDataAboutToChange до изменения и dataChanged после.
         """
+        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
+        if isinstance(index, QPersistentModelIndex):
+            index = QModelIndex(index)
+
         if index.isValid() and role == Qt.ItemDataRole.EditRole:
             row = index.row()
             col = index.column()
@@ -216,7 +261,8 @@ class SheetDataModel(QAbstractTableModel):
                     f"SheetDataModel: Испускание cellDataAboutToChange для [{row},{col}]: '{old_value}' -> '{new_value_str}'")
                 self.cellDataAboutToChange.emit(index, old_value, new_value_str)
                 self._rows[row][col] = new_value_str
-                self.dataChanged.emit(index, index, [role]) # role передается как список
+                # role передается как список в dataChanged
+                self.dataChanged.emit(index, index, [role])
                 logger.debug(
                     f"SheetDataModel: Данные ячейки [{row}, {col}] изменены с '{old_value}' на '{new_value_str}'.")
                 return True
@@ -233,7 +279,7 @@ class SheetDataModel(QAbstractTableModel):
             logger.debug(f"Модель (внутр.): Данные ячейки [{row}, {col}] обновлены до '{value}'.")
 
 
-# === SheetEditor с исправлениями для Pylance и логики ===
+# === SheetEditor с исправлениями и улучшениями ===
 class SheetEditor(QWidget):
     """
     Виджет для редактирования/просмотра содержимого одного листа.
@@ -252,9 +298,10 @@ class SheetEditor(QWidget):
         self._max_undo_steps = 50
         # ==========================
 
-        # === НОВОЕ: Строка редактирования ===
+        # === НОВОЕ: Строка редактирования и индикация ячейки ===
         self._formula_bar: Optional[QLineEdit] = None
         self._current_editing_index: Optional[QModelIndex] = None
+        self._cell_address_label: Optional[QLabel] = None # Для отображения адреса активной ячейки
         # ===================================
 
         self._setup_ui()
@@ -267,14 +314,21 @@ class SheetEditor(QWidget):
         self.label_sheet_name.setStyleSheet("font-weight: bold; padding: 5px;")
         layout.addWidget(self.label_sheet_name)
 
-        # === НОВОЕ: Добавление строки редактирования ===
+        # === НОВОЕ: Добавление строки редактирования и индикации ячейки ===
         formula_layout = QHBoxLayout()
+        self._cell_address_label = QLabel("Ячейка: ")
+        self._cell_address_label.setStyleSheet("font-weight: normal; padding: 2px;")
+        self._cell_address_label.setMinimumWidth(80) # Минимальная ширина для адреса
+
         formula_label = QLabel("Формула/Значение:")
         self._formula_bar = QLineEdit()
         # Проверка на None не обязательна здесь, так как мы только что создали объект
         if self._formula_bar:
              self._formula_bar.setPlaceholderText("Выберите ячейку или введите значение/формулу")
              self._formula_bar.returnPressed.connect(self._on_formula_bar_return_pressed)
+             # Подключаем сигнал изменения текста для обновления модели при потере фокуса или Enter
+             # self._formula_bar.editingFinished.connect(self._on_formula_bar_editing_finished) # Альтернатива
+        formula_layout.addWidget(self._cell_address_label)
         formula_layout.addWidget(formula_label)
         formula_layout.addWidget(self._formula_bar)
         layout.addLayout(formula_layout)
@@ -282,22 +336,28 @@ class SheetEditor(QWidget):
 
         self.table_view = QTableView()
         self.table_view.setAlternatingRowColors(True)
+        # ИЗМЕНЕНО: Позволяем выбирать только одну ячейку для упрощения логики
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
+        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection) # Только одна ячейка
 
         # === НОВОЕ: Подключение сигнала выбора ячейки ===
         self.table_view.clicked.connect(self._on_cell_clicked)
+        # Подключаем сигнал selectionChanged для более надежного отслеживания
+        self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         # =============================================
 
         # Настройка контекстного меню
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table_view.customContextMenuRequested.connect(self._on_context_menu)
 
+        # === ИЗМЕНЕНО: Настройка заголовков ===
+        # Горизонтальный заголовок (столбцы)
         horizontal_header = self.table_view.horizontalHeader()
-        horizontal_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        horizontal_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive) # Позволяем пользователю менять ширину
+        # Вертикальный заголовок (строки)
         vertical_header = self.table_view.verticalHeader()
-        vertical_header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
-        vertical_header.setDefaultSectionSize(20)
+        vertical_header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed) # Фиксированная высота строк
+        vertical_header.setDefaultSectionSize(20) # Высота строки по умолчанию
 
         layout.addWidget(self.table_view)
 
@@ -315,25 +375,76 @@ class SheetEditor(QWidget):
     @Slot(QModelIndex)
     def _on_cell_clicked(self, index: QModelIndex):
         """Обработчик клика по ячейке в таблице."""
+        # logger.debug(f"SheetEditor._on_cell_clicked: Клик по индексу {index.row()}, {index.column()}")
+        self._update_formula_bar(index)
+
+    @Slot() # Для selectionChanged
+    def _on_selection_changed(self):
+        """Обработчик изменения выделения в таблице."""
+        # logger.debug("SheetEditor._on_selection_changed: Выделение изменилось")
+        if self.table_view.selectionModel():
+            selected_indexes = self.table_view.selectionModel().selectedIndexes()
+            if selected_indexes:
+                # Берем первую выбранную ячейку
+                index = selected_indexes[0]
+                self._update_formula_bar(index)
+            else:
+                self._clear_formula_bar()
+
+    def _update_formula_bar(self, index: QModelIndex):
+        """Обновляет строку редактирования и метку адреса на основе выбранного индекса."""
         if not index.isValid() or not self._model:
-            self._current_editing_index = None
-            # Проверяем, что _formula_bar существует
-            if self._formula_bar:
-                self._formula_bar.setText("")
-                self._formula_bar.setPlaceholderText("Выберите ячейку или введите значение/формулу")
+            self._clear_formula_bar()
             return
 
-        self._current_editing_index = index
+        self._current_editing_index = QModelIndex(index) # Сохраняем копию индекса
+
+        # Обновляем метку с адресом ячейки
+        if self._cell_address_label:
+            row = index.row()
+            col = index.column()
+            # Генерируем имя столбца Excel
+            col_name = self._model._generated_column_headers[col] if 0 <= col < len(self._model._generated_column_headers) else f"Col_{col}"
+            # Номер строки в Excel 1-based
+            row_name = str(row + 1)
+            cell_address = f"{col_name}{row_name}"
+            self._cell_address_label.setText(f"Ячейка: {cell_address}")
+
         # Получаем значение ячейки из модели для отображения в строке редактирования
         display_value = self._model.data(index, Qt.ItemDataRole.DisplayRole)
         # Проверяем, что _formula_bar существует
         if self._formula_bar:
             # Убеждаемся, что display_value - строка
-            self._formula_bar.setText(display_value if isinstance(display_value, str) else str(display_value) if display_value is not None else "")
+            text_to_set = ""
+            if display_value is not None:
+                if isinstance(display_value, str):
+                    text_to_set = display_value
+                else:
+                    text_to_set = str(display_value)
+            self._formula_bar.setText(text_to_set)
+            # logger.debug(f"SheetEditor._update_formula_bar: Установлен текст '{text_to_set}' для ячейки {index.row()}, {index.column()}")
+
+    def _clear_formula_bar(self):
+        """Очищает строку редактирования и метку адреса."""
+        self._current_editing_index = None
+        if self._cell_address_label:
+            self._cell_address_label.setText("Ячейка: ")
+        if self._formula_bar:
+            self._formula_bar.setText("")
+            self._formula_bar.setPlaceholderText("Выберите ячейку или введите значение/формулу")
 
     @Slot()
     def _on_formula_bar_return_pressed(self):
         """Обработчик нажатия Enter в строке редактирования."""
+        self._apply_formula_bar_value()
+
+    # @Slot() # Альтернатива для editingFinished
+    # def _on_formula_bar_editing_finished(self):
+    #     """Обработчик завершения редактирования строки редактирования."""
+    #     self._apply_formula_bar_value()
+
+    def _apply_formula_bar_value(self):
+        """Применяет значение из строки редактирования к выбранной ячейке."""
         # Проверяем, что _formula_bar существует
         if not self._formula_bar:
             logger.warning("Строка редактирования не инициализирована.")
@@ -348,6 +459,8 @@ class SheetEditor(QWidget):
         success = self._model.setData(self._current_editing_index, new_text, Qt.ItemDataRole.EditRole)
         if success:
             logger.debug(f"Строка редактирования: Значение '{new_text}' установлено в ячейку.")
+            # Явно выбираем ячейку в таблице после обновления, чтобы сохранить выделение
+            self.table_view.setCurrentIndex(self._current_editing_index)
         else:
             logger.warning(f"Строка редактирования: Не удалось установить значение '{new_text}' в ячейку.")
 
@@ -374,10 +487,7 @@ class SheetEditor(QWidget):
         self._clear_undo_redo_stacks()
 
         # === НОВОЕ: Очистка строки редактирования ===
-        self._current_editing_index = None
-        if self._formula_bar:
-            self._formula_bar.setText("")
-            self._formula_bar.setPlaceholderText("Выберите ячейку или введите значение/формулу")
+        self._clear_formula_bar() # Используем общий метод очистки
         # =========================================
 
         if not self.app_controller:
@@ -412,22 +522,22 @@ class SheetEditor(QWidget):
                         # Импортируем функцию загрузки стилей
                         from src.storage.styles import load_sheet_styles
                         styles_data = load_sheet_styles(conn, sheet_id)
-                        logger.debug(f"Загружено {len(styles_data)} стилей для листа '{sheet_name}'.")
+                        logger.info(f"SheetEditor.load_sheet: Загружено {len(styles_data)} стилей для листа '{sheet_name}' из БД.")
                         # Передаем стили в модель
                         self._model.set_cell_styles(styles_data)
                     else:
-                        logger.warning(f"Лист '{sheet_name}' не найден в БД при попытке загрузить стили.")
+                        logger.warning(f"SheetEditor.load_sheet: Лист '{sheet_name}' не найден в БД при попытке загрузить стили.")
                     conn.close()
                 except Exception as e:
-                    logger.error(f"Ошибка при загрузке стилей для листа '{sheet_name}': {e}")
+                    logger.error(f"SheetEditor.load_sheet: Ошибка при загрузке стилей для листа '{sheet_name}': {e}", exc_info=True)
                 # =================================================
 
             else:
                 self.table_view.setModel(None)
                 self._model = None
-                logger.warning(f"Редактируемые данные для листа '{sheet_name}' не найдены или пусты.")
+                logger.warning(f"SheetEditor.load_sheet: Редактируемые данные для листа '{sheet_name}' не найдены или пусты.")
         except Exception as e:
-            logger.error(f"Ошибка при загрузке листа '{sheet_name}': {e}", exc_info=True)
+            logger.error(f"SheetEditor.load_sheet: Ошибка при загрузке листа '{sheet_name}': {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Ошибка загрузки",
@@ -575,8 +685,5 @@ class SheetEditor(QWidget):
         self.table_view.setModel(None)
         self._model = None
         # === НОВОЕ: Очистка строки редактирования ===
-        self._current_editing_index = None
-        if self._formula_bar:
-             self._formula_bar.setText("")
-             self._formula_bar.setPlaceholderText("Выберите ячейку или введите значение/формулу")
+        self._clear_formula_bar() # Используем общий метод очистки
         # =========================================
