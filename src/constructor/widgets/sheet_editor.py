@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QHeaderView, QApplication, QMenu, QInputDialog, QHBoxLayout, QLineEdit
 )
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal # Импортируем QModelIndex
+from typing import Union
 from PySide6.QtGui import QBrush, QColor, QAction # Импортируем QAction
 
 import sqlite3
@@ -120,12 +121,18 @@ class SheetDataModel(QAbstractTableModel):
             names.append(name if name else "A")  # fallback для count=0
         return names
 
-    def rowCount(self, parent=QModelIndex()) -> int: # Убрана аннотация Union
-        _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
+    # ИСПРАВЛЕНО: Сигнатура метода rowCount соответствует базовому классу
+    # Тип parent должен быть Union[QModelIndex, QPersistentModelIndex], как в базовом классе
+    # Pylance требует точного соответствия сигнатур при переопределении
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
+        # Игнорируем parent, так как у нас плоская таблица без иерархии
+        # Это стандартная практика для простых моделей таблиц
+        _ = parent # Подавляем предупреждение о неиспользованной переменной
         return len(self._rows)
 
-    def columnCount(self, parent=QModelIndex()) -> int: # Убрана аннотация Union
-        _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
+    # ИСПРАВЛЕНО: Сигнатура метода columnCount соответствует базовому классу
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
+        _ = parent # Подавляем предупреждение о неиспользованной переменной
         return len(self._rows[0]) if self._rows else 0
 
     # ИСПРАВЛЕНО: Сигнатура метода data соответствует базовому классу
