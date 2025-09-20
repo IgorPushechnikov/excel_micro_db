@@ -320,9 +320,9 @@ class SheetEditor(QWidget):
         self._cell_address_label: Optional[QLabel] = None # Для отображения адреса активной ячейки
         # ===================================
 
-        # Подключаемся к сигналу изменения модели выделения таблицы
-        # Это необходимо, потому что selectionModel() может быть None до setModel()
-        self.table_view.selectionModelChanged.connect(self._on_selection_model_changed)
+        # === УДАЛЕНО: Подключение к несуществующему сигналу selectionModelChanged ===
+        # self.table_view.selectionModelChanged.connect(self._on_selection_model_changed)
+        # ======================================================================
 
         self._setup_ui()
 
@@ -364,7 +364,7 @@ class SheetEditor(QWidget):
         self.table_view.clicked.connect(self._on_cell_clicked)
         # === УДАЛЕНО: Подключение selectionChanged из _setup_ui ===
         # self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
-        # Подключение selectionChanged теперь происходит в _on_selection_model_changed
+        # Подключение selectionChanged теперь происходит в _connect_selection_model_signals
         # =============================================
 
         # Настройка контекстного меню
@@ -399,30 +399,36 @@ class SheetEditor(QWidget):
         # logger.debug(f"SheetEditor._on_cell_clicked: Клик по индексу {index.row()}, {index.column()}")
         self._update_formula_bar(index)
 
-    @Slot() # Для selectionModelChanged
-    def _on_selection_model_changed(self):
-        """Слот, вызываемый при изменении модели выделения таблицы (обычно после setModel)."""
-        logger.debug("SheetEditor._on_selection_model_changed: Модель выделения изменилась.")
-        new_selection_model = self.table_view.selectionModel()
-        if new_selection_model:
-            # Подключаемся к сигналу selectionChanged новой модели выделения
-            new_selection_model.selectionChanged.connect(self._on_selection_changed)
-            logger.debug("SheetEditor._on_selection_model_changed: Подключен к selectionChanged новой модели.")
-        else:
-            logger.warning("SheetEditor._on_selection_model_changed: Новая модель выделения - None.")
+    # === УДАЛЕНО: Слот _on_selection_model_changed ===
+    # @Slot() # Для selectionModelChanged
+    # def _on_selection_model_changed(self):
+    #     """Слот, вызываемый при изменении модели выделения таблицы (обычно после setModel)."""
+    #     logger.debug("SheetEditor._on_selection_model_changed: Модель выделения изменилась.")
+    #     new_selection_model = self.table_view.selectionModel()
+    #     if new_selection_model:
+    #         # Подключаемся к сигналу selectionChanged новой модели выделения
+    #         new_selection_model.selectionChanged.connect(self._on_selection_changed)
+    #         logger.debug("SheetEditor._on_selection_model_changed: Подключен к selectionChanged новой модели.")
+    #     else:
+    #         logger.warning("SheetEditor._on_selection_model_changed: Новая модель выделения - None.")
+    # ==============================================================
 
     @Slot() # Для selectionChanged
     def _on_selection_changed(self):
         """Обработчик изменения выделения в таблице."""
         # logger.debug("SheetEditor._on_selection_changed: Выделение изменилось")
-        if self.table_view.selectionModel():
-            selected_indexes = self.table_view.selectionModel().selectedIndexes()
+        # === ИЗМЕНЕНО: Проверка на None и проверка наличия selectedIndexes ===
+        selection_model = self.table_view.selectionModel()
+        if selection_model:
+            selected_indexes = selection_model.selectedIndexes()
             if selected_indexes:
                 # Берем первую выбранную ячейку
                 index = selected_indexes[0]
                 self._update_formula_bar(index)
             else:
+                # Если ничего не выбрано, очищаем строку редактирования
                 self._clear_formula_bar()
+        # ==============================================================
 
     def _update_formula_bar(self, index: QModelIndex):
         """Обновляет строку редактирования и метку адреса на основе выбранного индекса."""
@@ -542,6 +548,9 @@ class SheetEditor(QWidget):
                 # --- ЭТОТ ВЫЗОВ ВАЖЕН ---
                 self.table_view.setModel(self._model)
                 # ------------------------
+                # === НОВОЕ: Подключение сигналов модели выделения ПОСЛЕ setModel ===
+                self._connect_selection_model_signals()
+                # =================================================================
                 logger.info(f"Лист '{sheet_name}' успешно загружен в редактор. "
                             f"Строк: {len(editable_data.get('rows', []))}, "
                             f"Столбцов: {len(editable_data.get('column_names', []))}")
@@ -568,8 +577,11 @@ class SheetEditor(QWidget):
                 # =================================================
 
             else:
-                self.table_view.setModel(None) # Это тоже должно вызвать selectionModelChanged
+                self.table_view.setModel(None) # Это должно вызвать selectionModelChanged
                 self._model = None
+                # === НОВОЕ: Отключаем сигналы модели выделения при очистке ===
+                self._disconnect_selection_model_signals()
+                # =========================================================
                 logger.warning(f"SheetEditor.load_sheet: Редактируемые данные для листа '{sheet_name}' не найдены или пусты.")
         except Exception as e:
             logger.error(f"SheetEditor.load_sheet: Ошибка при загрузке листа '{sheet_name}': {e}", exc_info=True)
@@ -580,6 +592,32 @@ class SheetEditor(QWidget):
             )
             self.table_view.setModel(None) # Это тоже должно вызвать selectionModelChanged
             self._model = None
+            # === НОВОЕ: Отключаем сигналы модели выделения при ошибке ===
+            self._disconnect_selection_model_signals()
+            # =========================================================
+
+    # === НОВОЕ: Метод для подключения сигналов модели выделения ===
+    def _connect_selection_model_signals(self):
+        """Подключает сигналы модели выделения таблицы."""
+        selection_model = self.table_view.selectionModel()
+        if selection_model:
+            selection_model.selectionChanged.connect(self._on_selection_changed)
+            logger.debug("SheetEditor: Подключен к сигналу selectionChanged модели выделения.")
+        else:
+            logger.warning("SheetEditor: Модель выделения отсутствует при попытке подключения сигналов.")
+
+    # === НОВОЕ: Метод для отключения сигналов модели выделения ===
+    def _disconnect_selection_model_signals(self):
+        """Отключает сигналы модели выделения таблицы."""
+        selection_model = self.table_view.selectionModel()
+        if selection_model:
+            # Отключаем сигнал, если он был подключен
+            try:
+                selection_model.selectionChanged.disconnect(self._on_selection_changed)
+                logger.debug("SheetEditor: Отключен от сигнала selectionChanged модели выделения.")
+            except RuntimeError:
+                # Сигнал мог быть не подключен
+                pass
 
     # === НОВОЕ: Слот для обработки сигнала о предстоящем изменении ===
     @Slot(QModelIndex, object, object)
@@ -721,4 +759,7 @@ class SheetEditor(QWidget):
         self._model = None
         # === НОВОЕ: Очистка строки редактирования ===
         self._clear_formula_bar() # Используем общий метод очистки
+        # === НОВОЕ: Отключаем сигналы модели выделения при очистке ===
+        self._disconnect_selection_model_signals()
+        # =========================================================
         # =========================================
