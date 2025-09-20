@@ -10,12 +10,10 @@ from PySide6.QtWidgets import (
     QDockWidget, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget, QMessageBox
 )
-# Импортируем конкретные перечисления из QtCore.Qt
+# Импортируем QtCore.Qt для доступа к перечислениям и Signal/Slot
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtCore import ( # <-- Импорт Enum'ов
-    Qt_ItemDataRole as ItemDataRole,
-    Qt_ItemFlag as ItemFlag
-)
+# Импортируем конкретные перечисления, если они понадобятся
+# from PySide6.QtCore import Qt_ItemDataRole as ItemDataRole, Qt_ItemFlag as ItemFlag # <-- УДАЛЕНО/ЗАКОММЕНТИРОВАНО
 # Для добавления иконок в будущем
 from PySide6.QtGui import QIcon
 
@@ -27,9 +25,9 @@ logger = get_logger(__name__)
 ITEM_TYPE_PROJECT = 1001
 ITEM_TYPE_SHEETS_FOLDER = 1002
 ITEM_TYPE_SHEET = 1003
-# ITEM_TYPE_FORMULAS_FOLDER = 1004 # Удалено
-# ITEM_TYPE_STYLES_FOLDER = 1005   # Удалено
-# ITEM_TYPE_CHARTS_FOLDER = 1006   # Удалено
+ITEM_TYPE_FORMULAS_FOLDER = 1004
+ITEM_TYPE_STYLES_FOLDER = 1005
+ITEM_TYPE_CHARTS_FOLDER = 1006
 
 
 class ProjectExplorer(QDockWidget):
@@ -89,14 +87,14 @@ class ProjectExplorer(QDockWidget):
             project_name = self.project_data.get("project_name", "Проект")
             
             # --- Создание корневого элемента проекта ---
-            project_item = QTreeWidgetItem(self.tree, [f"{project_name}"])
-            project_item.setData(0, ItemDataRole.UserRole, ITEM_TYPE_PROJECT)
+            project_item = QTreeWidgetItem(self.tree, [project_name])
+            project_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_PROJECT) # <-- Используем Qt.ItemDataRole.UserRole
             # project_item.setIcon(0, QIcon("path/to/project_icon.png")) # TODO: Иконка проекта
             project_item.setExpanded(True) # Раскрываем проект по умолчанию
 
             # --- Создание папки "Листы" ---
             sheets_folder_item = QTreeWidgetItem(project_item, ["Листы"])
-            sheets_folder_item.setData(0, ItemDataRole.UserRole, ITEM_TYPE_SHEETS_FOLDER)
+            sheets_folder_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_SHEETS_FOLDER) # <-- Используем Qt.ItemDataRole.UserRole
             # sheets_folder_item.setIcon(0, QIcon("path/to/sheets_icon.png")) # TODO: Иконка папки
             sheets_folder_item.setExpanded(True) # Раскрываем папку листов по умолчанию
 
@@ -107,27 +105,28 @@ class ProjectExplorer(QDockWidget):
                 for sheet_info in sheets_info:
                     sheet_name = sheet_info.get("name", "Безымянный лист")
                     sheet_item = QTreeWidgetItem(sheets_folder_item, [sheet_name])
-                    sheet_item.setData(0, ItemDataRole.UserRole, ITEM_TYPE_SHEET)
-                    sheet_item.setData(0, ItemDataRole.UserRole + 1, sheet_name) # Сохраняем имя листа в данных элемента
+                    sheet_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_SHEET) # <-- Используем Qt.ItemDataRole.UserRole
+                    sheet_item.setData(0, Qt.ItemDataRole.UserRole + 1, sheet_name) # <-- Используем Qt.ItemDataRole.UserRole
                     # sheet_item.setIcon(0, QIcon("path/to/sheet_icon.png")) # TODO: Иконка листа
             else:
                 # Если листов нет или ошибка, показываем заглушку
+                # ИСПРАВЛЕНО: Используем Qt.ItemFlag.NoItemFlags
                 no_sheets_item = QTreeWidgetItem(sheets_folder_item, ["(Нет данных)"])
-                no_sheets_item.setFlags(ItemFlag.NoItemFlags) # Делаем недоступным для выбора
+                no_sheets_item.setFlags(Qt.ItemFlag.NoItemFlags) # <-- ИСПРАВЛЕНО # Делаем недоступным для выбора
 
             # --- Удалены папки "Формулы", "Стили", "Диаграммы" ---
             # --- Создание других папок (заглушки) ---
             # Они будут заполняться позже
             # formulas_folder_item = QTreeWidgetItem(project_item, ["Формулы"]) # <-- УДАЛЕНО
-            # formulas_folder_item.setData(0, ItemDataRole.UserRole, ITEM_TYPE_FORMULAS_FOLDER) # <-- УДАЛЕНО
+            # formulas_folder_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_FORMULAS_FOLDER) # <-- УДАЛЕНО
             # formulas_folder_item.setIcon(0, QIcon("path/to/formulas_icon.png")) # <-- УДАЛЕНО
 
             # styles_folder_item = QTreeWidgetItem(project_item, ["Стили"]) # <-- УДАЛЕНО
-            # styles_folder_item.setData(0, ItemDataRole.UserRole, ITEM_TYPE_STYLES_FOLDER) # <-- УДАЛЕНО
+            # styles_folder_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_STYLES_FOLDER) # <-- УДАЛЕНО
             # styles_folder_item.setIcon(0, QIcon("path/to/styles_icon.png")) # <-- УДАЛЕНО
 
             # charts_folder_item = QTreeWidgetItem(project_item, ["Диаграммы"]) # <-- УДАЛЕНО
-            # charts_folder_item.setData(0, ItemDataRole.UserRole, ITEM_TYPE_CHARTS_FOLDER) # <-- УДАЛЕНО
+            # charts_folder_item.setData(0, Qt.ItemDataRole.UserRole, ITEM_TYPE_CHARTS_FOLDER) # <-- УДАЛЕНО
             # charts_folder_item.setIcon(0, QIcon("path/to/charts_icon.png")) # <-- УДАЛЕНО
 
             logger.info(f"Структура проекта '{project_name}' загружена в обозреватель")
@@ -135,8 +134,9 @@ class ProjectExplorer(QDockWidget):
         except Exception as e:
             logger.error(f"Ошибка при загрузке структуры проекта в обозреватель: {e}", exc_info=True)
             # Показываем сообщение об ошибке в дереве или статус баре родителя
+            # ИСПРАВЛЕНО: Используем Qt.ItemFlag.NoItemFlags
             error_item = QTreeWidgetItem(self.tree, [f"Ошибка загрузки: {e}"])
-            error_item.setFlags(ItemFlag.NoItemFlags)
+            error_item.setFlags(Qt.ItemFlag.NoItemFlags) # <-- ИСПРАВЛЕНО
 
     def _get_sheets_info_from_db(self) -> List[Dict[str, Any]]:
         """
@@ -183,11 +183,12 @@ class ProjectExplorer(QDockWidget):
         if current is None:
             return
 
-        item_type = current.data(0, ItemDataRole.UserRole)
+        # ИСПРАВЛЕНО: Используем Qt.ItemDataRole.UserRole
+        item_type = current.data(0, Qt.ItemDataRole.UserRole) # <-- ИСПРАВЛЕНО
         
         # Проверяем, является ли выбранный элемент листом
         if item_type == ITEM_TYPE_SHEET:
-            sheet_name = current.data(0, ItemDataRole.UserRole + 1)
+            sheet_name = current.data(0, Qt.ItemDataRole.UserRole + 1) # <-- ИСПРАВЛЕНО
             if sheet_name:
                 logger.debug(f"Выбран лист: {sheet_name}")
                 # Испускаем сигнал с именем выбранного листа
