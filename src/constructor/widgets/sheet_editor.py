@@ -49,11 +49,11 @@ class SheetDataModel(QAbstractTableModel):
     dataChangedExternally = Signal(QModelIndex, QModelIndex)
     # =========================================================
 
-    def __init__(self, editable_ Dict[str, Any], parent=None):
+    def __init__(self, editable_data: Dict[str, Any], parent=None):
         super().__init__(parent)
         self._editable_data = editable_data
         # Сохраняем оригинальные имена столбцов (из первой строки Excel)
-        # Они могут понадобиться, например, для экспорта или отображения в других частя GUI
+        # Они могут понадобиться, например, для экспорта или отображения в других частях GUI
         self._original_column_names = self._editable_data.get("column_names", [])
         # Данные ячеек (включая "заголовочную" строку)
         # ИСПРАВЛЕНО: Преобразуем кортежи из БД в списки для возможности редактирования
@@ -303,7 +303,7 @@ class SheetEditor(QWidget):
         try:
             editable_data = self.app_controller.get_sheet_editable_data(sheet_name)
             
-            if editable_data is not None and 'column_names' in editable_
+            if editable_data is not None and 'column_names' in editable_data:
                 self._model = SheetDataModel(editable_data)
                 # === НОВОЕ: Подключение к новому сигналу модели ===
                 # Подключаем сигнал модели о предстоящем изменении к слоту редактора
