@@ -6,8 +6,8 @@
 import sys
 import string  # Для генерации имен столбцов Excel
 
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal, QPersistentModelIndex
-from PySide6.QtGui import QBrush, QColor, QAction, QPen # Добавлен QPen для границ
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal
+from PySide6.QtGui import QBrush, QColor, QAction, QFont # Добавлен QFont для стилей шрифта
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QLabel, QMessageBox,
     QAbstractItemView, QHeaderView, QApplication, QMenu, QInputDialog, QHBoxLayout, QLineEdit
@@ -133,26 +133,26 @@ class SheetDataModel(QAbstractTableModel):
             names.append(name if name else "A")  # fallback для count=0
         return names
 
-    # ИСПРАВЛЕНО: Сигнатура метода rowCount соответствует базовому классу
-    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
+    # ИСПРАВЛЕНО СНОВА: Сигнатура метода rowCount соответствует базовому классу строго
+    def rowCount(self, parent: Union[QModelIndex, 'QPersistentModelIndex'] = QModelIndex()) -> int:
         _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
         return len(self._rows)
 
-    # ИСПРАВЛЕНО: Сигнатура метода columnCount соответствует базовому классу
-    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:
+    # ИСПРАВЛЕНО СНОВА: Сигнатура метода columnCount соответствует базовому классу строго
+    def columnCount(self, parent: Union[QModelIndex, 'QPersistentModelIndex'] = QModelIndex()) -> int:
         _ = parent # Чтобы избежать предупреждения о неиспользованном параметре
         return len(self._rows[0]) if self._rows else 0
 
-    # ИСПРАВЛЕНО: Сигнатура метода data соответствует базовому классу
-    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = Qt.ItemDataRole.DisplayRole):
+    # ИСПРАВЛЕНО СНОВА: Сигнатура метода data соответствует базовому классу строго
+    # Pylance требует QModelIndex, а не Union. Преобразование внутри не нужно.
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
         # Проверка валидности индекса
         if not index.isValid():
             return None
 
-        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
-        # (Хотя сигнатура теперь правильная, на всякий случай)
-        if isinstance(index, QPersistentModelIndex):
-            index = QModelIndex(index)
+        # НЕ НУЖНО преобразовывать QPersistentModelIndex, так как QModelIndex может его представлять
+        # if isinstance(index, QPersistentModelIndex):
+        #     index = QModelIndex(index)
 
         row = index.row()
         col = index.column()
@@ -203,22 +203,32 @@ class SheetDataModel(QAbstractTableModel):
                     except Exception as e:
                         logger.warning(f"Ошибка преобразования цвета шрифта '{font_color}' для [{row},{col}]: {e}")
         elif role == Qt.ItemDataRole.FontRole:
-            # Можно добавить обработку стилей шрифта (жирность, курсив и т.д.) здесь
-            # style = self._cell_styles.get((row, col))
-            # if style:
-            #     font = QFont()
-            #     if style.get("font_b"): # Жирный
-            #         font.setBold(True)
-            #     if style.get("font_i"): # Курсив
-            #         font.setItalic(True)
-            #     # ... другие свойства шрифта
-            #     return font
-            pass
+             # Можно добавить обработку стилей шрифта (жирность, курсив и т.д.) здесь
+             style = self._cell_styles.get((row, col))
+             if style:
+                 font = QFont()
+                 # Жирный шрифт
+                 font_b = style.get("font_b")
+                 if font_b is True or (isinstance(font_b, str) and font_b.lower() in ('1', 'true')):
+                     font.setBold(True)
+                 # Курсив
+                 font_i = style.get("font_i")
+                 if font_i is True or (isinstance(font_i, str) and font_i.lower() in ('1', 'true')):
+                     font.setItalic(True)
+                 # Подчеркнутый (u может быть 'single', 'double' и т.д.)
+                 font_u = style.get("font_u")
+                 if font_u and font_u != "none":
+                     font.setUnderline(True)
+                 # Зачеркнутый
+                 font_strike = style.get("font_strike")
+                 if font_strike is True or (isinstance(font_strike, str) and font_strike.lower() in ('1', 'true')):
+                     font.setStrikeOut(True)
+                 return font
         # ======================================
 
         return None
 
-    # ИСПРАВЛЕНО: Сигнатура метода headerData соответствует базовому классу
+    # ИСПРАВЛЕНО СНОВА: Сигнатура метода headerData соответствует базовому классу строго
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
@@ -231,25 +241,25 @@ class SheetDataModel(QAbstractTableModel):
                 return str(section + 1)
         return None
 
-    # ИСПРАВЛЕНО: Сигнатура метода flags соответствует базовому классу
-    def flags(self, index: Union[QModelIndex, QPersistentModelIndex]) -> Qt.ItemFlag:
-        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
-        if isinstance(index, QPersistentModelIndex):
-            index = QModelIndex(index)
+    # ИСПРАВЛЕНО СНОВА: Сигнатура метода flags соответствует базовому классу строго
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        # НЕ НУЖНО преобразовывать QPersistentModelIndex
+        # if isinstance(index, QPersistentModelIndex):
+        #     index = QModelIndex(index)
 
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
 
-    # ИСПРАВЛЕНО: Сигнатура метода setData соответствует базовому классу
-    def setData(self, index: Union[QModelIndex, QPersistentModelIndex], value, role: int = Qt.ItemDataRole.EditRole):
+    # ИСПРАВЛЕНО СНОВА: Сигнатура метода setData соответствует базовому классу строго
+    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole):
         """
         Устанавливает данные в модель. Вызывается, когда пользователь редактирует ячейку.
         Испускает cellDataAboutToChange до изменения и dataChanged после.
         """
-        # Преобразуем QPersistentModelIndex в QModelIndex если нужно
-        if isinstance(index, QPersistentModelIndex):
-            index = QModelIndex(index)
+        # НЕ НУЖНО преобразовывать QPersistentModelIndex
+        # if isinstance(index, QPersistentModelIndex):
+        #     index = QModelIndex(index)
 
         if index.isValid() and role == Qt.ItemDataRole.EditRole:
             row = index.row()
