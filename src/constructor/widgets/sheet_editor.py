@@ -320,6 +320,10 @@ class SheetEditor(QWidget):
         self._cell_address_label: Optional[QLabel] = None # Для отображения адреса активной ячейки
         # ===================================
 
+        # Подключаемся к сигналу изменения модели выделения таблицы
+        # Это необходимо, потому что selectionModel() может быть None до setModel()
+        self.table_view.selectionModelChanged.connect(self._on_selection_model_changed)
+
         self._setup_ui()
 
     def _setup_ui(self):
@@ -356,10 +360,11 @@ class SheetEditor(QWidget):
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection) # Только одна ячейка
 
-        # === НОВОЕ: Подключение сигнала выбора ячейки ===
+        # === ИСПРАВЛЕНО: Подключение сигнала clicked ===
         self.table_view.clicked.connect(self._on_cell_clicked)
-        # Подключаем сигнал selectionChanged для более надежного отслеживания
-        self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        # === УДАЛЕНО: Подключение selectionChanged из _setup_ui ===
+        # self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        # Подключение selectionChanged теперь происходит в _on_selection_model_changed
         # =============================================
 
         # Настройка контекстного меню
@@ -393,6 +398,18 @@ class SheetEditor(QWidget):
         """Обработчик клика по ячейке в таблице."""
         # logger.debug(f"SheetEditor._on_cell_clicked: Клик по индексу {index.row()}, {index.column()}")
         self._update_formula_bar(index)
+
+    @Slot() # Для selectionModelChanged
+    def _on_selection_model_changed(self):
+        """Слот, вызываемый при изменении модели выделения таблицы (обычно после setModel)."""
+        logger.debug("SheetEditor._on_selection_model_changed: Модель выделения изменилась.")
+        new_selection_model = self.table_view.selectionModel()
+        if new_selection_model:
+            # Подключаемся к сигналу selectionChanged новой модели выделения
+            new_selection_model.selectionChanged.connect(self._on_selection_changed)
+            logger.debug("SheetEditor._on_selection_model_changed: Подключен к selectionChanged новой модели.")
+        else:
+            logger.warning("SheetEditor._on_selection_model_changed: Новая модель выделения - None.")
 
     @Slot() # Для selectionChanged
     def _on_selection_changed(self):
@@ -522,7 +539,9 @@ class SheetEditor(QWidget):
                 self._model.dataChanged.connect(self._on_model_data_changed)
                 # ==================================================
                 self._model.dataChangedExternally.connect(self.table_view.dataChanged)
+                # --- ЭТОТ ВЫЗОВ ВАЖЕН ---
                 self.table_view.setModel(self._model)
+                # ------------------------
                 logger.info(f"Лист '{sheet_name}' успешно загружен в редактор. "
                             f"Строк: {len(editable_data.get('rows', []))}, "
                             f"Столбцов: {len(editable_data.get('column_names', []))}")
@@ -549,7 +568,7 @@ class SheetEditor(QWidget):
                 # =================================================
 
             else:
-                self.table_view.setModel(None)
+                self.table_view.setModel(None) # Это тоже должно вызвать selectionModelChanged
                 self._model = None
                 logger.warning(f"SheetEditor.load_sheet: Редактируемые данные для листа '{sheet_name}' не найдены или пусты.")
         except Exception as e:
@@ -559,7 +578,7 @@ class SheetEditor(QWidget):
                 "Ошибка загрузки",
                 f"Не удалось загрузить содержимое листа '{sheet_name}':\n{e}"
             )
-            self.table_view.setModel(None)
+            self.table_view.setModel(None) # Это тоже должно вызвать selectionModelChanged
             self._model = None
 
     # === НОВОЕ: Слот для обработки сигнала о предстоящем изменении ===
@@ -698,7 +717,7 @@ class SheetEditor(QWidget):
         self.sheet_name = None
         self._clear_undo_redo_stacks()
         self.label_sheet_name.setText("Лист: <Не выбран>")
-        self.table_view.setModel(None)
+        self.table_view.setModel(None) # Это должно вызвать selectionModelChanged
         self._model = None
         # === НОВОЕ: Очистка строки редактирования ===
         self._clear_formula_bar() # Используем общий метод очистки
