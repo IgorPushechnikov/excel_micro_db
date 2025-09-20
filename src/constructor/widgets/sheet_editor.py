@@ -380,7 +380,8 @@ class SheetEditor(QWidget):
                 logger.warning(f"SheetEditor: Изменение за пределами модели. row={row}, col={col}")
                 return
 
-            column_name = self._model._generated_column_headers[col] if col < len(self._model._generated_column_headers) else f"Col_{col}"
+            # Используем оригинальное имя столбца из данных Excel, а не сгенерированное
+            column_name = self._model._original_column_names[col] if col < len(self._model._original_column_names) else f"Col_{col}"
             # Новое значение уже в модели, получаем его
             new_value = self._model._rows[row][col] if row < len(self._model._rows) and col < len(self._model._rows[row]) else None
             
