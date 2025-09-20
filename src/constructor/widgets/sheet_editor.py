@@ -6,20 +6,22 @@
 import sys
 import string  # Для генерации имен столбцов Excel
 
-from typing import Optional, Dict, Any, List, NamedTuple, Union
-from pathlib import Path
-
+# ИСПРАВЛЕНО: Добавлен QPersistentModelIndex в импорт
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal, QPersistentModelIndex
+from PySide6.QtGui import QBrush, QColor, QAction
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QLabel, QMessageBox,
     QAbstractItemView, QHeaderView, QApplication, QMenu, QInputDialog, QHBoxLayout, QLineEdit
 )
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Slot, Signal # Импортируем QModelIndex
-from typing import Union
-from PySide6.QtGui import QBrush, QColor, QAction # Импортируем QAction
 
+# ИСПРАВЛЕНО: Добавлен Union в импорт для корректных сигнатур методов
+from typing import Optional, Dict, Any, List, NamedTuple, Union
+
+from pathlib import Path
 import sqlite3
 import logging
 
+# Импорт для аннотаций типов, избегая циклических импортов
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
