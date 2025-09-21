@@ -40,15 +40,22 @@ def create_raw_data_table(connection: sqlite3.Connection, sheet_name: str, colum
     Returns:
         bool: True, если таблица создана или уже существует, False в случае ошибки.
     """
+    # === ИСПРАВЛЕНО: Инициализация table_name в начале функции ===
+    # Инициализируем table_name в начале области видимости функции, чтобы Pylance был доволен
+    # и чтобы переменная была доступна в блоках except
+    table_name = ""
+    # === КОНЕЦ ИСПРАВЛЕНИЯ ===
+
     if not connection:
-        logger.error("Получено пустое соединение для создания таблицы сырых данных.")
+        logger.error("[DEBUG_STORAGE] Получено пустое соединение для создания таблицы сырых данных.")
         return False
 
     try:
         cursor = connection.cursor()
-        # Инициализируем table_name в начале области видимости функции, чтобы Pylance был доволен
-        table_name = ""
+        # === ИСПРАВЛЕНО: Присваивание значения table_name внутри try ===
+        # table_name будет определена здесь, если код дойдет до этой точки без ошибок
         table_name = _get_raw_data_table_name(sheet_name)
+        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
         logger.debug(f"[DEBUG_STORAGE] Создание таблицы сырых данных '{table_name}' для листа '{sheet_name}'.")
 
         # 1. Проверяем, существует ли таблица
@@ -68,7 +75,7 @@ def create_raw_data_table(connection: sqlite3.Connection, sheet_name: str, colum
         for col_name in column_names:
             # Санитизируем имя столбца
             # Импортируем здесь внутри цикла для избежания циклического импорта
-            from src.storage.base import sanitize_table_name
+            from src.storage.base import sanitize_table_name # Хотя это избыточно, но соответствует стилю файла
             sanitized_col_name = sanitize_table_name(col_name)
             # - ИСПРАВЛЕНО: Проверка на конфликт имён -
             # Проверяем, не совпадает ли санитизированное имя с зарезервированными
@@ -91,11 +98,15 @@ def create_raw_data_table(connection: sqlite3.Connection, sheet_name: str, colum
         return True
 
     except sqlite3.Error as e:
+        # === ИСПРАВЛЕНО: table_name теперь всегда определена ===
         logger.error(f"[DEBUG_STORAGE] Ошибка SQLite при создании таблицы '{table_name}': {e}")
+        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
         connection.rollback()
         return False
     except Exception as e:
+        # === ИСПРАВЛЕНО: table_name теперь всегда определена ===
         logger.error(f"[DEBUG_STORAGE] Неожиданная ошибка при создании таблицы '{table_name}': {e}")
+        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
         connection.rollback()
         return False
 
@@ -136,7 +147,7 @@ def save_sheet_raw_data(connection: sqlite3.Connection, sheet_id: int, sheet_nam
         sanitized_col_names = []
         for cn in column_names:
             # Импортируем здесь внутри цикла для избежания циклического импорта
-            from src.storage.base import sanitize_table_name
+            from src.storage.base import sanitize_table_name # Хотя это избыточно, но соответствует стилю файла
             s_cn = sanitize_table_name(cn)
             # Применяем ту же логику переименования, что и при создании
             if s_cn.lower() == 'id':  # Только 'id' конфликтует, 'row_index' не создается как столбец
@@ -164,7 +175,7 @@ def save_sheet_raw_data(connection: sqlite3.Connection, sheet_id: int, sheet_nam
             row_values = []
             for orig_col_name in column_names:  # Итерируемся по оригинальным именам
                 # Импортируем здесь внутри цикла для избежания циклического импорта
-                from src.storage.base import sanitize_table_name
+                from src.storage.base import sanitize_table_name # Хотя это избыточно, но соответствует стилю файла
                 sanitized_name = sanitize_table_name(orig_col_name)
                 if sanitized_name.lower() == 'id':
                     sanitized_name = f"data_{sanitized_name}"
