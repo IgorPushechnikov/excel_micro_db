@@ -429,7 +429,7 @@ if __name__ == "__main__":
     print(f"Путь к тестовой БД: {test_db_path}")
     try:
         # === ИСПРАВЛЕНО: Импорт ProjectDBStorage ===
-        from src.storage.database import ProjectDBStorage # <-- Добавлен импорт
+        from src.storage.base import ProjectDBStorage # <-- Добавлен импорт
         # === КОНЕЦ ИСПРАВЛЕНИЙ ===
         storage = ProjectDBStorage(str(test_db_path))
         storage.connect()
