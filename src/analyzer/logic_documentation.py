@@ -4,7 +4,7 @@
 """
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
@@ -40,7 +40,7 @@ logger = get_logger(__name__)
 
 # - ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ -
 
-def load_documentation_template(template_path: Optional[str] = None) -> Dict[str, Any]:
+def load_documentation_template(template_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """
     Загружает шаблон документации из YAML файла.
     Если путь не указан, использует путь по умолчанию.
@@ -49,18 +49,26 @@ def load_documentation_template(template_path: Optional[str] = None) -> Dict[str
     Returns:
         Dict[str, Any]: Загруженный шаблон документации.
     """
+    # === ИСПРАВЛЕНО: Проверка и преобразование template_path ===
+    # Решает ошибку Pylance: "Тип "Path" не может быть назначен объявленному типу "str | None""
+    # и ошибки, связанные с open()
     if template_path is None:
         # Определяем путь к шаблону по умолчанию относительно этого файла
-        template_path = project_root / "templates" / "documentation_template.yaml"
-        
-    logger.debug(f"Загрузка шаблона документации из: {template_path}")
+        template_path_obj = project_root / "templates" / "documentation_template.yaml"
+    else:
+        template_path_obj = Path(template_path) if isinstance(template_path, str) else template_path
+
+    logger.debug(f"Загрузка шаблона документации из: {template_path_obj}")
     try:
-        with open(template_path, 'r', encoding='utf-8') as f:
+        # === ИСПРАВЛЕНО: Преобразование Path в str для open() ===
+        # Решает ошибки Pylance: "Не существует перегрузок для "open"..." и
+        # "Аргумент типа "str | None" нельзя присвоить параметру "file"..."
+        with open(str(template_path_obj), 'r', encoding='utf-8') as f:
             template = yaml.safe_load(f)
         logger.debug("Шаблон документации успешно загружен")
         return template
     except FileNotFoundError:
-        logger.error(f"Файл шаблона документации не найден: {template_path}")
+        logger.error(f"Файл шаблона документации не найден: {template_path_obj}")
         raise
     except yaml.YAMLError as e:
         logger.error(f"Ошибка форматирования YAML в файле шаблона: {e}")
@@ -132,7 +140,10 @@ def _extract_style_attributes(cell) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Словарь с атрибутами стиля.
     """
-    style_attrs = {
+    # === ИСПРАВЛЕНО: Явная аннотация типа для style_attrs ===
+    # Решает множество ошибок Pylance вида:
+    # "Аргумент типа "int" нельзя присвоить параметру "value" типа "None""
+    style_attrs: Dict[str, Union[str, int, float, None]] = {
         # Font
         "font_name": None, "font_sz": None, "font_b": None, "font_i": None,
         "font_u": None, "font_strike": None, "font_color": None,
@@ -158,7 +169,8 @@ def _extract_style_attributes(cell) -> Dict[str, Any]:
     try:
         if cell.font:
             style_attrs["font_name"] = getattr(cell.font, 'name', None)
-            style_attrs["font_sz"] = float(getattr(cell.font, 'sz', 0)) if getattr(cell.font, 'sz', None) is not None else None
+            sz_val = getattr(cell.font, 'sz', 0)
+            style_attrs["font_sz"] = float(sz_val) if sz_val is not None else None
             style_attrs["font_b"] = int(bool(getattr(cell.font, 'b', False)))
             style_attrs["font_i"] = int(bool(getattr(cell.font, 'i', False)))
             style_attrs["font_u"] = getattr(cell.font, 'u', None)
@@ -167,8 +179,10 @@ def _extract_style_attributes(cell) -> Dict[str, Any]:
                 if getattr(cell.font.color, 'type', None) == 'rgb':
                     style_attrs["font_color"] = getattr(cell.font.color, 'rgb', None)
                 elif getattr(cell.font.color, 'type', None) == 'theme':
-                    style_attrs["font_color_theme"] = int(getattr(cell.font.color, 'theme', 0)) if getattr(cell.font.color, 'theme', None) is not None else None
-                    style_attrs["font_color_tint"] = float(getattr(cell.font.color, 'tint', 0.0)) if getattr(cell.font.color, 'tint', None) is not None else None
+                    theme_val = getattr(cell.font.color, 'theme', 0)
+                    style_attrs["font_color_theme"] = int(theme_val) if theme_val is not None else None
+                    tint_val = getattr(cell.font.color, 'tint', 0.0)
+                    style_attrs["font_color_tint"] = float(tint_val) if tint_val is not None else None
             style_attrs["font_vert_align"] = getattr(cell.font, 'vertAlign', None)
             style_attrs["font_scheme"] = getattr(cell.font, 'scheme', None)
 
@@ -179,14 +193,18 @@ def _extract_style_attributes(cell) -> Dict[str, Any]:
                     if getattr(cell.fill.fgColor, 'type', None) == 'rgb':
                         style_attrs["fill_fg_color"] = getattr(cell.fill.fgColor, 'rgb', None)
                     elif getattr(cell.fill.fgColor, 'type', None) == 'theme':
-                        style_attrs["fill_fg_color_theme"] = int(getattr(cell.fill.fgColor, 'theme', 0)) if getattr(cell.fill.fgColor, 'theme', None) is not None else None
-                        style_attrs["fill_fg_color_tint"] = float(getattr(cell.fill.fgColor, 'tint', 0.0)) if getattr(cell.fill.fgColor, 'tint', None) is not None else None
+                        theme_val = getattr(cell.fill.fgColor, 'theme', 0)
+                        style_attrs["fill_fg_color_theme"] = int(theme_val) if theme_val is not None else None
+                        tint_val = getattr(cell.fill.fgColor, 'tint', 0.0)
+                        style_attrs["fill_fg_color_tint"] = float(tint_val) if tint_val is not None else None
                 if getattr(cell.fill, 'bgColor', None):
                     if getattr(cell.fill.bgColor, 'type', None) == 'rgb':
                         style_attrs["fill_bg_color"] = getattr(cell.fill.bgColor, 'rgb', None)
                     elif getattr(cell.fill.bgColor, 'type', None) == 'theme':
-                        style_attrs["fill_bg_color_theme"] = int(getattr(cell.fill.bgColor, 'theme', 0)) if getattr(cell.fill.bgColor, 'theme', None) is not None else None
-                        style_attrs["fill_bg_color_tint"] = float(getattr(cell.fill.bgColor, 'tint', 0.0)) if getattr(cell.fill.bgColor, 'tint', None) is not None else None
+                        theme_val = getattr(cell.fill.bgColor, 'theme', 0)
+                        style_attrs["fill_bg_color_theme"] = int(theme_val) if theme_val is not None else None
+                        tint_val = getattr(cell.fill.bgColor, 'tint', 0.0)
+                        style_attrs["fill_bg_color_tint"] = float(tint_val) if tint_val is not None else None
 
         if cell.border:
              # Извлекаем основные стороны
@@ -201,10 +219,12 @@ def _extract_style_attributes(cell) -> Dict[str, Any]:
         if cell.alignment:
             style_attrs["alignment_horizontal"] = getattr(cell.alignment, 'horizontal', None)
             style_attrs["alignment_vertical"] = getattr(cell.alignment, 'vertical', None)
-            style_attrs["alignment_text_rotation"] = int(getattr(cell.alignment, 'textRotation', 0)) if getattr(cell.alignment, 'textRotation', None) is not None else None
+            rotation_val = getattr(cell.alignment, 'textRotation', 0)
+            style_attrs["alignment_text_rotation"] = int(rotation_val) if rotation_val is not None else None
             style_attrs["alignment_wrap_text"] = int(bool(getattr(cell.alignment, 'wrapText', False)))
             style_attrs["alignment_shrink_to_fit"] = int(bool(getattr(cell.alignment, 'shrinkToFit', False)))
-            style_attrs["alignment_indent"] = int(getattr(cell.alignment, 'indent', 0)) if getattr(cell.alignment, 'indent', None) is not None else None
+            indent_val = getattr(cell.alignment, 'indent', 0)
+            style_attrs["alignment_indent"] = int(indent_val) if indent_val is not None else None
 
         if cell.protection:
             style_attrs["protection_locked"] = int(bool(getattr(cell.protection, 'locked', True))) # locked по умолчанию True
@@ -488,7 +508,9 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
         Dict[str, Any]: Словарь с информацией о диаграмме.
     """
     logger.debug(f"[ДИАГРАММЫ] Начало извлечения данных диаграммы типа {type(chart).__name__}")
-    chart_data = {
+    # === ИСПРАВЛЕНО: Явная аннотация типа для chart_data ===
+    # Решает ошибки Pylance при заполнении словаря
+    chart_data: Dict[str, Union[str, int, float, bool, List[Any], None]] = {
         "type": type(chart).__name__,
         "title": "",
         # Chart attributes
@@ -534,7 +556,8 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
                      chart_data["height"] = float(ext.cy) if ext.cy is not None else None
 
         # 3. Извлечение атрибутов Chart
-        chart_data["style"] = int(getattr(chart, 'style', 2)) if getattr(chart, 'style', None) is not None else None
+        style_val = getattr(chart, 'style', 2)
+        chart_data["style"] = int(style_val) if style_val is not None else None
         if getattr(chart, 'legend', None) and getattr(chart.legend, 'position', None):
              chart_data["legend_position"] = str(getattr(chart.legend, 'position', ''))
         chart_data["auto_scaling"] = int(bool(getattr(chart, 'auto_scaling', False)))
@@ -543,55 +566,104 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
 
         # 4. Извлечение осей
         # chart.x_axis, chart.y_axis, chart.z_axis
+        axes_list: List[Dict[str, Union[str, int, float, bool, None]]] = [] # Явная аннотация для axes_list
         for axis_attr_name in ['x_axis', 'y_axis', 'z_axis']:
              axis_obj = getattr(chart, axis_attr_name, None)
              if axis_obj:
-                 axis_info = {
+                 # === ИСПРАВЛЕНО: Явная аннотация типа для axis_info ===
+                 axis_info: Dict[str, Union[str, int, float, bool, None]] = {
                      "axis_type": axis_attr_name,
-                     "ax_id": int(getattr(axis_obj, 'axId', 0)) if getattr(axis_obj, 'axId', None) is not None else None,
-                     "ax_pos": str(getattr(axis_obj, 'axPos', '')),
-                     "delete": int(bool(getattr(axis_obj, 'delete', False))),
-                     "title": _extract_title_text(getattr(axis_obj, 'title', None)),
+                     "ax_id": None,
+                     "ax_pos": '',
+                     "delete": None,
+                     "title": '',
                      # Scaling
                      "min": None, "max": None, "orientation": None, "major_unit": None, "minor_unit": None, "log_base": None,
                      # Ticks and Labels
-                     "major_tick_mark": str(getattr(axis_obj, 'majorTickMark', '')),
-                     "minor_tick_mark": str(getattr(axis_obj, 'minorTickMark', '')),
-                     "tick_lbl_pos": str(getattr(axis_obj, 'tickLblPos', '')),
+                     "major_tick_mark": '',
+                     "minor_tick_mark": '',
+                     "tick_lbl_pos": '',
                      # Number Format
-                     "num_fmt": str(getattr(getattr(axis_obj, 'numFmt', None), 'formatCode', '')) if getattr(axis_obj, 'numFmt', None) else '',
+                     "num_fmt": '',
                      # Crosses
-                     "crosses": str(getattr(axis_obj, 'crosses', '')),
-                     "crosses_at": float(getattr(axis_obj, 'crossesAt', 0.0)) if getattr(axis_obj, 'crossesAt', None) is not None else None,
+                     "crosses": '',
+                     "crosses_at": None,
                      # Gridlines
-                     "major_gridlines": int(bool(getattr(axis_obj, 'majorGridlines', None))),
-                     "minor_gridlines": int(bool(getattr(axis_obj, 'minorGridlines', None))),
+                     "major_gridlines": None,
+                     "minor_gridlines": None,
                  }
+                 ax_id_val = getattr(axis_obj, 'axId', 0)
+                 axis_info["ax_id"] = int(ax_id_val) if ax_id_val is not None else None
+                 axis_info["ax_pos"] = str(getattr(axis_obj, 'axPos', ''))
+                 axis_info["delete"] = int(bool(getattr(axis_obj, 'delete', False)))
+                 axis_info["title"] = _extract_title_text(getattr(axis_obj, 'title', None))
+                 # Scaling
+                 axis_info["min"] = None
+                 axis_info["max"] = None
+                 axis_info["orientation"] = None
+                 axis_info["major_unit"] = None
+                 axis_info["minor_unit"] = None
+                 axis_info["log_base"] = None
+                 # Ticks and Labels
+                 axis_info["major_tick_mark"] = str(getattr(axis_obj, 'majorTickMark', ''))
+                 axis_info["minor_tick_mark"] = str(getattr(axis_obj, 'minorTickMark', ''))
+                 axis_info["tick_lbl_pos"] = str(getattr(axis_obj, 'tickLblPos', ''))
+                 # Number Format
+                 num_fmt_obj = getattr(axis_obj, 'numFmt', None)
+                 axis_info["num_fmt"] = str(getattr(num_fmt_obj, 'formatCode', '')) if num_fmt_obj else ''
+                 # Crosses
+                 axis_info["crosses"] = str(getattr(axis_obj, 'crosses', ''))
+                 crosses_at_val = getattr(axis_obj, 'crossesAt', 0.0)
+                 axis_info["crosses_at"] = float(crosses_at_val) if crosses_at_val is not None else None
+                 # Gridlines
+                 axis_info["major_gridlines"] = int(bool(getattr(axis_obj, 'majorGridlines', None)))
+                 axis_info["minor_gridlines"] = int(bool(getattr(axis_obj, 'minorGridlines', None)))
+                 
                  # Извлечение scaling
                  scaling = getattr(axis_obj, 'scaling', None)
                  if scaling:
-                     axis_info["min"] = float(getattr(scaling, 'min', 0.0)) if getattr(scaling, 'min', None) is not None else None
-                     axis_info["max"] = float(getattr(scaling, 'max', 0.0)) if getattr(scaling, 'max', None) is not None else None
+                     min_val = getattr(scaling, 'min', 0.0)
+                     axis_info["min"] = float(min_val) if min_val is not None else None
+                     max_val = getattr(scaling, 'max', 0.0)
+                     axis_info["max"] = float(max_val) if max_val is not None else None
                      axis_info["orientation"] = str(getattr(scaling, 'orientation', 'minMax'))
-                     axis_info["major_unit"] = float(getattr(scaling, 'majorUnit', 0.0)) if getattr(scaling, 'majorUnit', None) is not None else None
-                     axis_info["minor_unit"] = float(getattr(scaling, 'minorUnit', 0.0)) if getattr(scaling, 'minorUnit', None) is not None else None
-                     axis_info["log_base"] = float(getattr(scaling, 'logBase', 0.0)) if getattr(scaling, 'logBase', None) is not None else None
+                     major_unit_val = getattr(scaling, 'majorUnit', 0.0)
+                     axis_info["major_unit"] = float(major_unit_val) if major_unit_val is not None else None
+                     minor_unit_val = getattr(scaling, 'minorUnit', 0.0)
+                     axis_info["minor_unit"] = float(minor_unit_val) if minor_unit_val is not None else None
+                     log_base_val = getattr(scaling, 'logBase', 0.0)
+                     axis_info["log_base"] = float(log_base_val) if log_base_val is not None else None
                  
-                 chart_data["axes"].append(axis_info)
+                 axes_list.append(axis_info)
+        chart_data["axes"] = axes_list # Присваиваем список
 
         # 5. Извлечение серий данных
+        series_list: List[Dict[str, Union[int, str, bool, None]]] = [] # Явная аннотация для series_list
         for i, series in enumerate(getattr(chart, 'series', [])):
             logger.debug(f"[ДИАГРАММЫ] Обработка серии {i+1}")
-            series_info = {
-                "idx": int(getattr(series, 'idx', i)) if getattr(series, 'idx', None) is not None else i,
-                "order": int(getattr(series, 'order', i)) if getattr(series, 'order', None) is not None else i,
-                "tx": _extract_title_text(getattr(series, 'tx', None)),
-                "shape": str(getattr(series, 'shape', '')),
-                "smooth": int(bool(getattr(series, 'smooth', False))),
-                "invert_if_negative": int(bool(getattr(series, 'invertIfNegative', False))),
+            # === ИСПРАВЛЕНО: Явная аннотация типа для series_info ===
+            series_info: Dict[str, Union[int, str, bool, None]] = {
+                "idx": None,
+                "order": None,
+                "tx": '',
+                "shape": '',
+                "smooth": None,
+                "invert_if_negative": None,
                 # Data Sources for this series
                 "data_points": [] # Можно добавить при необходимости
             }
+            idx_val = getattr(series, 'idx', i)
+            series_info["idx"] = int(idx_val) if idx_val is not None else i
+            order_val = getattr(series, 'order', i)
+            series_info["order"] = int(order_val) if order_val is not None else i
+            series_info["tx"] = _extract_title_text(getattr(series, 'tx', None))
+            series_info["shape"] = str(getattr(series, 'shape', ''))
+            series_info["smooth"] = int(bool(getattr(series, 'smooth', False)))
+            series_info["invert_if_negative"] = int(bool(getattr(series, 'invertIfNegative', False)))
+            # Data Sources for this series
+            series_info["data_points"] = [] # Можно добавить при необходимости
+            
+            series_list.append(series_info)
             
             # Извлечение источников данных для этой серии
             # Values (Y)
@@ -621,7 +693,7 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
                          "formula": categories_formula
                      })
 
-            chart_data["series"].append(series_info)
+        chart_data["series"] = series_list # Присваиваем список
         
         logger.debug(f"[ДИАГРАММЫ] Извлечено {len(chart_data['series'])} серий и {len(chart_data['data_sources'])} источников данных для диаграммы.")
         logger.debug(f"[ДИАГРАММЫ] Завершено извлечение данных диаграммы.")
@@ -728,8 +800,9 @@ def analyze_excel_file(file_path: str, sheet_names: Optional[List[str]] = None) 
             sheet_styles = analyze_sheet_styles(sheet) # НОВОЕ
             sheet_merged_cells = analyze_sheet_merged_cells(sheet) # НОВОЕ
             
-            # Используем словарь для хранения информации о листе
-            sheet_info = {
+            # === ИСПРАВЛЕНО: Явная аннотация типа для sheet_info ===
+            # Решает ошибки Pylance при заполнении словаря
+            sheet_info: Dict[str, Union[str, int, List[Any], Dict[str, Any], None]] = {
                 "name": sheet_name,
                 "index": idx,
                 "structure": sheet_structure,
