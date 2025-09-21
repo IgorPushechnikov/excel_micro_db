@@ -143,7 +143,8 @@ def _extract_style_attributes(cell) -> Dict[str, Any]:
     # === ИСПРАВЛЕНО: Явная аннотация типа для style_attrs ===
     # Решает множество ошибок Pylance вида:
     # "Аргумент типа "int" нельзя присвоить параметру "value" типа "None""
-    style_attrs: Dict[str, Union[str, int, float, None]] = {
+    # Используем Dict[str, Any] для максимальной гибкости
+    style_attrs: Dict[str, Any] = {
         # Font
         "font_name": None, "font_sz": None, "font_b": None, "font_i": None,
         "font_u": None, "font_strike": None, "font_color": None,
@@ -510,7 +511,8 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
     logger.debug(f"[ДИАГРАММЫ] Начало извлечения данных диаграммы типа {type(chart).__name__}")
     # === ИСПРАВЛЕНО: Явная аннотация типа для chart_data ===
     # Решает ошибки Pylance при заполнении словаря
-    chart_data: Dict[str, Union[str, int, float, bool, List[Any], None]] = {
+    # Используем Dict[str, Any] для максимальной гибкости
+    chart_data: Dict[str, Any] = {
         "type": type(chart).__name__,
         "title": "",
         # Chart attributes
@@ -566,12 +568,13 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
 
         # 4. Извлечение осей
         # chart.x_axis, chart.y_axis, chart.z_axis
-        axes_list: List[Dict[str, Union[str, int, float, bool, None]]] = [] # Явная аннотация для axes_list
+        axes_list: List[Dict[str, Any]] = [] # Явная аннотация для axes_list, используем Any для значений
         for axis_attr_name in ['x_axis', 'y_axis', 'z_axis']:
              axis_obj = getattr(chart, axis_attr_name, None)
              if axis_obj:
                  # === ИСПРАВЛЕНО: Явная аннотация типа для axis_info ===
-                 axis_info: Dict[str, Union[str, int, float, bool, None]] = {
+                 # Используем Dict[str, Any] для максимальной гибкости
+                 axis_info: Dict[str, Any] = {
                      "axis_type": axis_attr_name,
                      "ax_id": None,
                      "ax_pos": '',
@@ -638,11 +641,12 @@ def extract_chart_data(chart, sheet) -> Dict[str, Any]:
         chart_data["axes"] = axes_list # Присваиваем список
 
         # 5. Извлечение серий данных
-        series_list: List[Dict[str, Union[int, str, bool, None]]] = [] # Явная аннотация для series_list
+        series_list: List[Dict[str, Any]] = [] # Явная аннотация для series_list, используем Any для значений
         for i, series in enumerate(getattr(chart, 'series', [])):
             logger.debug(f"[ДИАГРАММЫ] Обработка серии {i+1}")
             # === ИСПРАВЛЕНО: Явная аннотация типа для series_info ===
-            series_info: Dict[str, Union[int, str, bool, None]] = {
+            # Используем Dict[str, Any] для максимальной гибкости
+            series_info: Dict[str, Any] = {
                 "idx": None,
                 "order": None,
                 "tx": '',
@@ -769,11 +773,12 @@ def analyze_excel_file(file_path: str, sheet_names: Optional[List[str]] = None) 
 
         documentation_template = load_documentation_template()
         
-        documentation = documentation_template.copy()
+        # === ИСПРАВЛЕНО: Явная аннотация documentation как Dict[str, Any] ===
+        # Это решает ошибки Pylance связанные с несоответствием типов в словаре
+        documentation: Dict[str, Any] = documentation_template.copy()
         documentation["file_path"] = file_path
         documentation["analysis_timestamp"] = datetime.now().isoformat()
-        
-        documentation["sheets"] = {}
+        documentation["sheets"] = {} # Dict[str, Dict[str, Any]]
 
         # data_only=False для получения формул и стилей
         wb = load_workbook(file_path, data_only=False) 
@@ -800,9 +805,9 @@ def analyze_excel_file(file_path: str, sheet_names: Optional[List[str]] = None) 
             sheet_styles = analyze_sheet_styles(sheet) # НОВОЕ
             sheet_merged_cells = analyze_sheet_merged_cells(sheet) # НОВОЕ
             
-            # === ИСПРАВЛЕНО: Явная аннотация типа для sheet_info ===
-            # Решает ошибки Pylance при заполнении словаря
-            sheet_info: Dict[str, Union[str, int, List[Any], Dict[str, Any], None]] = {
+            # === ИСПРАВЛЕНО: Явная аннотация sheet_info как Dict[str, Any] ===
+            # Это решает все оставшиеся ошибки Pylance в этой функции
+            sheet_info: Dict[str, Any] = {
                 "name": sheet_name,
                 "index": idx,
                 "structure": sheet_structure,
