@@ -25,7 +25,7 @@ if str(project_root) not in sys.path:
 from src.utils.logger import get_logger
 from src.core.app_controller import create_app_controller, AppController
 from src.constructor.widgets.project_explorer import ProjectExplorer
-from src.constructor.widgets.sheet_editor_widgets import SheetEditor
+from src.constructor.widgets.sheet_editor import SheetEditor
 
 # Встроенный WelcomeWidget для устранения ошибки импорта
 class WelcomeWidget(QWidget):
