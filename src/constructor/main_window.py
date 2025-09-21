@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, Slot, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QMenu, QStatusBar, QToolBar,
-    QStackedWidget, QWidget, QMessageBox, QFileDialog, QDockWidget, QLabel, QVBoxLayout # Добавлен QVBoxLayout для заглушки
+    QStackedWidget, QWidget, QMessageBox, QFileDialog, QDockWidget, QLabel, QVBoxLayout
 )
 
 # Добавляем корень проекта в путь поиска модулей если нужно
@@ -24,10 +24,10 @@ if str(project_root) not in sys.path:
 # Импорт внутренних модулей
 from src.utils.logger import get_logger
 from src.core.app_controller import create_app_controller, AppController
-from src.constructor.widgets.project_explorer import ProjectExplorer # Предполагается, что ProjectExplorer теперь QWidget
+from src.constructor.widgets.project_explorer import ProjectExplorer
 from src.constructor.widgets.sheet_editor import SheetEditor
 
-# === ИСПРАВЛЕНО: Встроенный WelcomeWidget для устранения ошибки импорта ===
+# Встроенный WelcomeWidget для устранения ошибки импорта
 class WelcomeWidget(QWidget):
     """Простая заглушка для приветственного экрана."""
     def __init__(self, parent=None):
@@ -86,7 +86,6 @@ class MainWindow(QMainWindow):
             self.setCentralWidget(self.stacked_widget)
 
         # Создаем виджеты
-        # === ИСПРАВЛЕНО: Используем встроенный класс WelcomeWidget ===
         self.welcome_widget = WelcomeWidget()
         self.sheet_editor = SheetEditor()
 
@@ -96,29 +95,25 @@ class MainWindow(QMainWindow):
         if self.stacked_widget and self.sheet_editor:
             self.stacked_widget.addWidget(self.sheet_editor)
 
-        # === ИСПРАВЛЕНО: Создание и настройка Project Explorer в док-виджете ===
-        # 1. Создаем ЭКЗЕМПЛЯР ProjectExplorer (который теперь QWidget)
+        # Создание и настройка Project Explorer в док-виджете
         self.project_explorer = ProjectExplorer(self) # Передаем parent
 
-        # 2. Создаем ОТДЕЛЬНЫЙ QDockWidget, который будет контейнером
-        #    Заголовок устанавливается ЗДЕСЬ
-        self.project_explorer_dock = QDockWidget("Проект", self) # <-- Заголовок у внешнего дока
-        # Или self.project_explorer_dock = QDockWidget("", self) # <-- Альтернатива: Без заголовка
+        # Создаем ОТДЕЛЬНЫЙ QDockWidget, который будет контейнером
+        self.project_explorer_dock = QDockWidget("Проект", self)
 
         if self.project_explorer_dock:
             # Разрешаем закреплять слева и справа
             self.project_explorer_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
 
-        # 3. Помещаем ЭКЗЕМПЛЯР ProjectExplorer (QWidget) ВНУТРЬ QDockWidget
+        # Помещаем ЭКЗЕМПЛЯР ProjectExplorer (QWidget) ВНУТРЬ QDockWidget
         if self.project_explorer_dock and self.project_explorer:
-            self.project_explorer_dock.setWidget(self.project_explorer) # <-- QWidget становится содержимым QDockWidget
+            self.project_explorer_dock.setWidget(self.project_explorer)
 
-        # 4. Добавляем ГОТОВЫЙ QDockWidget в главное окно
+        # Добавляем ГОТОВЫЙ QDockWidget в главное окно
         if self.project_explorer_dock:
             self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.project_explorer_dock)
 
         # Подключаем сигналы
-        # === ИСПРАВЛЕНО: Проверка существования и типа атрибута sheet_selected ===
         if self.project_explorer and hasattr(self.project_explorer, 'sheet_selected'):
             sheet_selected_attr = getattr(self.project_explorer, 'sheet_selected')
             if callable(getattr(sheet_selected_attr, 'connect', None)):
@@ -131,7 +126,6 @@ class MainWindow(QMainWindow):
         else:
             error_msg = "Сигнал 'sheet_selected' не найден в ProjectExplorer."
             logger.error(error_msg)
-            # QMessageBox.critical(self, "Критическая ошибка GUI", f"{error_msg}...") # Опционально, если критично
 
         if self.sheet_editor and self.app_controller:
             # Устанавливаем контроллер для sheet_editor
@@ -231,16 +225,13 @@ class MainWindow(QMainWindow):
     def _on_sheet_selected(self, sheet_name: str):
         """Слот для обработки сигнала выбора листа в ProjectExplorer."""
         logger.debug(f"MainWindow получил сигнал о выборе листа: {sheet_name}")
-        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам app_controller ===
         if not self.app_controller:
             logger.warning("AppController не инициализирован.")
             return
-        # Используем getattr с безопасным значением по умолчанию
         if not getattr(self.app_controller, 'is_project_loaded', False):
             logger.warning("Попытка загрузить лист без загруженного проекта.")
             return
 
-        # === ИСПРАВЛЕНО: Проверка на None перед использованием sheet_editor и stacked_widget ===
         if self.sheet_editor and self.stacked_widget:
             # Переключаемся на виджет редактора листа
             if isinstance(self.sheet_editor, QWidget):
@@ -249,12 +240,9 @@ class MainWindow(QMainWindow):
                 logger.error("sheet_editor не является экземпляром QWidget.")
                 return
 
-            # === ИСПРАВЛЕНО: Получаем путь к БД проекта ===
+            # Получаем путь к БД проекта
             db_path: Optional[str] = None
             if self.app_controller:
-                # Получаем project_path из app_controller
-                # Это может быть атрибут или ключ в current_project
-                # Основываясь на логах и структуре AppController, предполагаем атрибут project_path
                 project_path_attr = getattr(self.app_controller, 'project_path', None)
                 if project_path_attr:
                     try:
@@ -267,27 +255,23 @@ class MainWindow(QMainWindow):
                     except Exception as e:
                         logger.error(f"Ошибка при формировании пути к БД: {e}")
 
-            # === ИСПРАВЛЕНО: Проверка db_path перед вызовом load_sheet ===
             if db_path and self.sheet_editor:
                 logger.debug(f"Загрузка листа '{sheet_name}' с использованием БД: {db_path}")
-                # Загружаем лист в редактор
-                # Сигнатура: load_sheet(self, project_db_path: str, sheet_name: str)
-                # === ИСПРАВЛЕНО: Передаем оба обязательных аргумента ===
+                # Явно утверждаем, что sheet_editor - это SheetEditor
+                assert isinstance(self.sheet_editor, SheetEditor), "sheet_editor должен быть экземпляром SheetEditor"
                 self.sheet_editor.load_sheet(db_path, sheet_name)
             elif not db_path:
                 error_msg = "Не удалось определить путь к БД проекта для загрузки листа."
                 logger.error(error_msg)
                 QMessageBox.critical(self, "Ошибка", f"{error_msg}\nУбедитесь, что проект корректно загружен.")
-            else: # sheet_editor is None
+            else:
                 logger.error("sheet_editor не инициализирован при попытке загрузки листа.")
         else:
             error_msg = "sheet_editor или stacked_widget не инициализированы."
             logger.error(error_msg)
-            # Не показываем QMessageBox здесь, чтобы не засорять UI при инициализации
 
     def _show_welcome_screen(self):
         """Показывает приветственный экран."""
-        # === ИСПРАВЛЕНО: Проверка на None перед использованием stacked_widget и welcome_widget ===
         if self.stacked_widget and self.welcome_widget:
             if isinstance(self.welcome_widget, QWidget):
                 self.stacked_widget.setCurrentWidget(self.welcome_widget)
@@ -331,7 +315,6 @@ class MainWindow(QMainWindow):
         if success:
             logger.info(f"Проект успешно загружен из: {project_path}")
             # Обновляем ProjectExplorer
-            # === ИСПРАВЛЕНО: Предоставление project_data и db_path в правильной сигнатуре ===
             if self.project_explorer and self.app_controller:
                 # Получаем project_data из app_controller
                 project_data: Optional[Dict[str, Any]] = getattr(self.app_controller, 'current_project', None)
@@ -360,8 +343,6 @@ class MainWindow(QMainWindow):
                 # Проверяем, получены ли оба необходимых аргумента
                 if project_data is not None and db_path:
                     try:
-                        # === ИСПРАВЛЕНО: Передаем оба обязательных аргумента в правильном порядке ===
-                        # Сигнатура: load_project(self, project_data: Dict[str, Any], db_path: str)
                         self.project_explorer.load_project(project_data, db_path)
                         logger.debug("ProjectExplorer успешно загрузил структуру проекта.")
                     except Exception as e:
@@ -385,7 +366,6 @@ class MainWindow(QMainWindow):
 
     def _on_close_project(self):
         """Обработчик действия 'Закрыть проект'."""
-        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам ===
         if not self.app_controller:
              logger.info("AppController не инициализирован при попытке закрыть проект.")
              return
@@ -408,7 +388,6 @@ class MainWindow(QMainWindow):
 
     def _on_analyze_excel(self):
         """Обработчик действия 'Анализировать Excel-файл'."""
-        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам ===
         if not self.app_controller:
              QMessageBox.critical(self, "Ошибка", "Контроллер приложения не доступен.")
              return
@@ -425,7 +404,6 @@ class MainWindow(QMainWindow):
                 logger.info(f"Файл {file_path} успешно проанализирован.")
                 QMessageBox.information(self, "Успех", "Файл успешно проанализирован.")
                 # Обновляем ProjectExplorer ПОСЛЕ АНАЛИЗА
-                # === ИСПРАВЛЕНО: Предоставление project_data и db_path в правильной сигнатуре ===
                 if self.project_explorer and self.app_controller:
                      # Получаем project_data из app_controller
                      project_data: Optional[Dict[str, Any]] = getattr(self.app_controller, 'current_project', None)
@@ -454,8 +432,6 @@ class MainWindow(QMainWindow):
                      # Проверяем, получены ли оба необходимых аргумента
                      if project_data is not None and db_path:
                         try:
-                            # === ИСПРАВЛЕНО: Передаем оба обязательных аргумента в правильном порядке ===
-                            # Сигнатура: load_project(self, project_data: Dict[str, Any], db_path: str)
                             self.project_explorer.load_project(project_data, db_path)
                             logger.debug("ProjectExplorer успешно обновлен после анализа.")
                         except Exception as e:
@@ -477,7 +453,6 @@ class MainWindow(QMainWindow):
 
     def _on_export_to_excel(self):
         """Обработчик действия 'Экспортировать в Excel'."""
-        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам ===
         if not self.app_controller:
              QMessageBox.critical(self, "Ошибка", "Контроллер приложения не доступен.")
              return
