@@ -1,0 +1,13 @@
+{
+  "project_name": "Test 3",
+  "project_path": "D:\\Projects\\excel_micro_db\\test_workspace\\Test 3",
+  "created_at": "2025-09-21T09:34:18.939634",
+  "last_opened": "2025-09-21T09:38:16.673984",
+  "version": "1.0",
+  "excel_files": [],
+  "analyses": [],
+  "config": {
+    "max_file_size_mb": 100,
+    "analysis_timeout_seconds": 300
+  }
+}

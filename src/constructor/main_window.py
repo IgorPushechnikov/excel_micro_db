@@ -1,338 +1,509 @@
 # src/constructor/main_window.py
 """
-Главное окно графического интерфейса Excel Micro DB.
+Главное окно приложения Excel Micro DB.
 """
+
 import sys
+import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
-# Импорт Qt
+# Импорты из PySide6
+from PySide6.QtCore import Qt, Slot, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QMainWindow, QMenu, QMenuBar, QStatusBar, QWidget, QVBoxLayout, QLabel,
-    QFileDialog, QMessageBox, QApplication, QDockWidget, QStackedWidget,
-    QProgressDialog # НОВОЕ: для отображения прогресса
+    QMainWindow, QMenuBar, QMenu, QStatusBar, QToolBar,
+    QStackedWidget, QWidget, QMessageBox, QFileDialog, QDockWidget, QLabel, QVBoxLayout # Добавлен QVBoxLayout для заглушки
 )
-from PySide6.QtCore import Qt, Slot, QTimer # QTimer для имитации асинхронности
-from PySide6.QtGui import QAction, QCloseEvent
-import logging
 
-# Импорт из проекта
-from src.core.app_controller import create_app_controller, AppController
+# Добавляем корень проекта в путь поиска модулей если нужно
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Импорт внутренних модулей
 from src.utils.logger import get_logger
-# Импорт новых виджетов
-from src.constructor.widgets.project_explorer import ProjectExplorer
+from src.core.app_controller import create_app_controller, AppController
+from src.constructor.widgets.project_explorer import ProjectExplorer # Предполагается, что ProjectExplorer теперь QWidget
 from src.constructor.widgets.sheet_editor import SheetEditor
+
+# === ИСПРАВЛЕНО: Встроенный WelcomeWidget для устранения ошибки импорта ===
+class WelcomeWidget(QWidget):
+    """Простая заглушка для приветственного экрана."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        label = QLabel("Добро пожаловать в Excel Micro DB!\nПожалуйста, создайте или откройте проект.")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Улучшаем стиль метки
+        label.setStyleSheet("font-size: 16px; padding: 20px;")
+        layout.addWidget(label)
+        self.setLayout(layout)
 
 logger = get_logger(__name__)
 
-class MainWindow(QMainWindow):
-    """Главное окно приложения."""
 
-    def __init__(self):
-        super().__init__()
+class MainWindow(QMainWindow):
+    """
+    Главное окно приложения.
+    Является центральным элементом графического интерфейса.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        logger.debug("Создание экземпляра MainWindow")
+        self.setWindowTitle("Excel Micro DB")
+        self.resize(1200, 800)
+
+        # Инициализация атрибутов
         self.app_controller: Optional[AppController] = None
         self.project_explorer: Optional[ProjectExplorer] = None
         self.sheet_editor: Optional[SheetEditor] = None
-        self.central_stacked_widget: Optional[QStackedWidget] = None
-        self._welcome_widget: Optional[QWidget] = None
-        # НОВОЕ: Диалог прогресса
-        self.progress_dialog: Optional[QProgressDialog] = None
+        self.welcome_widget: Optional[QWidget] = None
+        self.stacked_widget: Optional[QStackedWidget] = None
+        self.project_explorer_dock: Optional[QDockWidget] = None
+
+        # Создание и настройка UI
         self._setup_ui()
-        self._setup_controller()
-        self._update_ui_state()
+        self._create_actions()
+        self._create_menus()
+        self._create_toolbars()
+        self._create_status_bar()
+
+        # Инициализация контроллера приложения
+        self._init_app_controller()
+
+        # Показать приветственный экран
+        self._show_welcome_screen()
+
         logger.info("MainWindow инициализировано")
 
     def _setup_ui(self):
         """Настройка пользовательского интерфейса."""
-        self.setWindowTitle("Excel Micro DB - Конструктор")
-        self.resize(1000, 700)
+        # Создаем центральный стек виджетов
+        self.stacked_widget = QStackedWidget()
+        if self.stacked_widget:
+            self.setCentralWidget(self.stacked_widget)
 
-        # --- Меню ---
-        menubar = self.menuBar()
-        self.file_menu = menubar.addMenu('&Файл')
-        
-        self.action_new_project = QAction('&Создать проект...', self)
-        self.action_new_project.setShortcut('Ctrl+N')
-        self.action_new_project.triggered.connect(self._on_new_project)
-        self.file_menu.addAction(self.action_new_project)
-        
-        self.action_open_project = QAction('&Открыть проект...', self)
-        self.action_open_project.setShortcut('Ctrl+O')
-        self.action_open_project.triggered.connect(self._on_open_project)
-        self.file_menu.addAction(self.action_open_project)
-        
-        self.file_menu.addSeparator()
-        
-        # НОВОЕ: Действие "Анализировать файл"
-        self.action_analyze_file = QAction('&Анализировать файл...', self)
-        self.action_analyze_file.setShortcut('Ctrl+A')
-        self.action_analyze_file.triggered.connect(self._on_analyze_file)
-        # Изначально отключено, будет включено при загрузке проекта
-        self.action_analyze_file.setEnabled(False)
-        self.file_menu.addAction(self.action_analyze_file)
-        
-        self.file_menu.addSeparator()
-        
-        self.action_exit = QAction('&Выход', self)
-        self.action_exit.setShortcut('Ctrl+Q')
-        self.action_exit.triggered.connect(self.close)
-        self.file_menu.addAction(self.action_exit)
-
-        # --- Центральный виджет (Стек) ---
-        self.central_stacked_widget = QStackedWidget()
-        self.setCentralWidget(self.central_stacked_widget)
-
-        self._welcome_widget = QWidget()
-        welcome_layout = QVBoxLayout(self._welcome_widget)
-        self.welcome_label = QLabel("Добро пожаловать в Excel Micro DB!\n\n"
-                                   "1. Создайте новый проект (Файл -> Создать проект)\n"
-                                   "2. Или откройте существующий (Файл -> Открыть проект)\n"
-                                   "3. После загрузки проекта можно анализировать Excel-файлы (Файл -> Анализировать файл)")
-        self.welcome_label.setAlignment(Qt.AlignCenter)
-        self.welcome_label.setWordWrap(True)
-        welcome_layout.addWidget(self.welcome_label)
-        self.central_stacked_widget.addWidget(self._welcome_widget)
-
+        # Создаем виджеты
+        # === ИСПРАВЛЕНО: Используем встроенный класс WelcomeWidget ===
+        self.welcome_widget = WelcomeWidget()
         self.sheet_editor = SheetEditor()
-        # === НОВОЕ: Передача AppController в SheetEditor ===
-        # Это необходимо для того, чтобы SheetEditor мог вызывать методы
-        # AppController для загрузки редактируемых данных и сохранения изменений.
-        # Пока контроллер может быть None, но он будет установлен позже в _setup_controller
-        # и обновлён в _update_ui_state если проект загружается/создаётся.
-        self.sheet_editor.set_app_controller(self.app_controller)
-        # =====================================================
-        self.central_stacked_widget.addWidget(self.sheet_editor)
-        self.central_stacked_widget.setCurrentWidget(self._welcome_widget)
 
-        # --- Обозреватель проекта ---
-        self.project_explorer = ProjectExplorer(self)
-        self.project_explorer.sheet_selected.connect(self._on_sheet_selected)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.project_explorer)
-        
-        # --- Статусная строка ---
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Готово", 5000)
+        # Добавляем виджеты в стек
+        if self.stacked_widget and self.welcome_widget:
+            self.stacked_widget.addWidget(self.welcome_widget)
+        if self.stacked_widget and self.sheet_editor:
+            self.stacked_widget.addWidget(self.sheet_editor)
 
-    def _setup_controller(self):
-        """Инициализация контроллера приложения."""
-        try:
-            logger.debug("Создание AppController")
-            self.app_controller = create_app_controller()
-            init_success = self.app_controller.initialize()
-            if not init_success:
-                raise Exception("Не удалось инициализировать AppController")
-            logger.info("AppController инициализирован и готов к работе")
-            # === НОВОЕ: Обновление контроллера в SheetEditor после инициализации ===
-            if self.sheet_editor:
-                 self.sheet_editor.set_app_controller(self.app_controller)
-            # ======================================================================
-        except Exception as e:
-            logger.error(f"Ошибка при инициализации AppController: {e}")
-            QMessageBox.critical(
-                self,
-                "Ошибка инициализации",
-                f"Не удалось инициализировать ядро приложения:\n{e}\n\n"
-                "Приложение может работать некорректно."
-            )
-            self.app_controller = None
+        # === ИСПРАВЛЕНО: Создание и настройка Project Explorer в док-виджете ===
+        # 1. Создаем ЭКЗЕМПЛЯР ProjectExplorer (который теперь QWidget)
+        self.project_explorer = ProjectExplorer(self) # Передаем parent
 
-    def _update_ui_state(self):
-        """Обновление состояния UI в зависимости от состояния контроллера."""
-        controller_ready = self.app_controller is not None
-        project_loaded = controller_ready and self.app_controller.is_project_loaded
-        
-        self.action_new_project.setEnabled(controller_ready)
-        self.action_open_project.setEnabled(controller_ready)
-        # НОВОЕ: Включаем/выключаем действие анализа
-        self.action_analyze_file.setEnabled(project_loaded)
-        
-        if not controller_ready:
-             self.status_bar.showMessage("Ошибка: Контроллер приложения не доступен", 0)
-             
-        if self.project_explorer:
-            if project_loaded:
-                project_data = self.app_controller.current_project
-                project_path = self.app_controller.project_path
-                if project_data and project_path:
-                    db_path = project_path / "project_data.db"
-                    self.project_explorer.load_project(project_data, str(db_path))
-                else:
-                    self.project_explorer.clear_project()
+        # 2. Создаем ОТДЕЛЬНЫЙ QDockWidget, который будет контейнером
+        #    Заголовок устанавливается ЗДЕСЬ
+        self.project_explorer_dock = QDockWidget("Проект", self) # <-- Заголовок у внешнего дока
+        # Или self.project_explorer_dock = QDockWidget("", self) # <-- Альтернатива: Без заголовка
+
+        if self.project_explorer_dock:
+            # Разрешаем закреплять слева и справа
+            self.project_explorer_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+
+        # 3. Помещаем ЭКЗЕМПЛЯР ProjectExplorer (QWidget) ВНУТРЬ QDockWidget
+        if self.project_explorer_dock and self.project_explorer:
+            self.project_explorer_dock.setWidget(self.project_explorer) # <-- QWidget становится содержимым QDockWidget
+
+        # 4. Добавляем ГОТОВЫЙ QDockWidget в главное окно
+        if self.project_explorer_dock:
+            self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.project_explorer_dock)
+
+        # Подключаем сигналы
+        # === ИСПРАВЛЕНО: Проверка существования и типа атрибута sheet_selected ===
+        if self.project_explorer and hasattr(self.project_explorer, 'sheet_selected'):
+            sheet_selected_attr = getattr(self.project_explorer, 'sheet_selected')
+            if callable(getattr(sheet_selected_attr, 'connect', None)):
+                sheet_selected_attr.connect(self._on_sheet_selected)
+                logger.debug("Сигнал sheet_selected успешно подключен.")
             else:
-                self.project_explorer.clear_project()
-        
-        # === НОВОЕ: Обновление контроллера в SheetEditor при изменении состояния ===
-        # Это гарантирует, что SheetEditor всегда имеет актуальную ссылку на AppController,
-        # особенно важно после загрузки/создания проекта или в случае ошибки контроллера.
-        if self.sheet_editor:
+                error_msg = "Атрибут 'sheet_selected' в ProjectExplorer не является сигналом."
+                logger.error(error_msg)
+                QMessageBox.warning(self, "Ошибка GUI", f"{error_msg} Функциональность выбора листа может быть нарушена.")
+        else:
+            error_msg = "Сигнал 'sheet_selected' не найден в ProjectExplorer."
+            logger.error(error_msg)
+            # QMessageBox.critical(self, "Критическая ошибка GUI", f"{error_msg}...") # Опционально, если критично
+
+        if self.sheet_editor and self.app_controller:
+            # Устанавливаем контроллер для sheet_editor
             self.sheet_editor.set_app_controller(self.app_controller)
-        # ===========================================================================
 
-    @Slot()
-    def _on_new_project(self):
-        """Обработчик действия 'Создать проект'."""
-        logger.info("Начало создания нового проекта")
-        if not self.app_controller:
-            QMessageBox.warning(self, "Ошибка", "Контроллер приложения не инициализирован.")
-            return
+    def _create_actions(self):
+        """Создание действий (QAction) для меню и панелей инструментов."""
+        self.action_new_project = QAction("&Новый проект", self)
+        self.action_new_project.setShortcut("Ctrl+N")
+        self.action_new_project.triggered.connect(self._on_new_project)
 
-        project_dir = QFileDialog.getExistingDirectory(
-            self, "Выберите директорию для нового проекта"
-        )
-        if not project_dir:
-            logger.info("Создание проекта отменено пользователем")
-            return
+        self.action_open_project = QAction("&Открыть проект", self)
+        self.action_open_project.setShortcut("Ctrl+O")
+        self.action_open_project.triggered.connect(self._on_open_project)
 
+        self.action_save_project = QAction("&Сохранить проект", self)
+        self.action_save_project.setShortcut("Ctrl+S")
+        # Сохранение проекта может быть реализовано позже или через контроллер
+        # self.action_save_project.triggered.connect(self._on_save_project)
+
+        self.action_close_project = QAction("&Закрыть проект", self)
+        self.action_close_project.triggered.connect(self._on_close_project)
+
+        self.action_exit = QAction("&Выход", self)
+        self.action_exit.setShortcut("Ctrl+Q")
+        self.action_exit.triggered.connect(self.close)
+
+        self.action_analyze_excel = QAction("&Анализировать Excel-файл", self)
+        self.action_analyze_excel.triggered.connect(self._on_analyze_excel)
+
+        self.action_export_to_excel = QAction("&Экспортировать в Excel", self)
+        self.action_export_to_excel.triggered.connect(self._on_export_to_excel)
+
+    def _create_menus(self):
+        """Создание меню."""
+        menubar = self.menuBar()
+        # В macOS меню обычно находится в строке меню системы, а не в окне.
+        # Qt обрабатывает это автоматически, но проверка не повредит.
+        if not menubar:
+             logger.error("Не удалось получить QMenuBar")
+             return
+
+        # Меню "Файл"
+        file_menu = menubar.addMenu("&Файл")
+        if file_menu:
+            file_menu.addAction(self.action_new_project)
+            file_menu.addAction(self.action_open_project)
+            file_menu.addAction(self.action_save_project)
+            file_menu.addSeparator()
+            file_menu.addAction(self.action_close_project)
+            file_menu.addAction(self.action_exit)
+
+        # Меню "Инструменты"
+        tools_menu = menubar.addMenu("&Инструменты")
+        if tools_menu:
+            tools_menu.addAction(self.action_analyze_excel)
+            tools_menu.addAction(self.action_export_to_excel)
+
+    def _create_toolbars(self):
+        """Создание панелей инструментов."""
+        toolbar = self.addToolBar("Основные")
+        if toolbar:
+            toolbar.addAction(self.action_new_project)
+            toolbar.addAction(self.action_open_project)
+            toolbar.addAction(self.action_analyze_excel)
+            toolbar.addAction(self.action_export_to_excel)
+
+    def _create_status_bar(self):
+        """Создание строки состояния."""
+        self.statusBar().showMessage("Готов")
+
+    def _init_app_controller(self):
+        """Инициализация контроллера приложения."""
+        logger.debug("Создание AppController")
         try:
-            project_name = Path(project_dir).name
-            success = self.app_controller.create_project(project_dir, project_name)
-            
-            if success:
-                self.status_bar.showMessage(f"Проект '{project_name}' создан и загружен", 5000)
-                QMessageBox.information(self, "Успех", f"Проект '{project_name}' успешно создан в {project_dir}")
-                self._update_ui_state()
-                self.central_stacked_widget.setCurrentWidget(self._welcome_widget)
+            # Создаем контроллер
+            self.app_controller = create_app_controller()
+            # Инициализируем его
+            if self.app_controller:
+                 success = self.app_controller.initialize()
+                 if success:
+                     logger.info("AppController инициализирован и готов к работе")
+                     # Устанавливаем контроллер для sheet_editor, если он уже создан
+                     if self.sheet_editor:
+                         self.sheet_editor.set_app_controller(self.app_controller)
+                 else:
+                     logger.error("Не удалось инициализировать AppController")
+                     QMessageBox.critical(self, "Ошибка", "Не удалось инициализировать контроллер приложения.")
             else:
-                self.status_bar.showMessage("Ошибка при создании проекта", 0)
-                QMessageBox.critical(self, "Ошибка", "Не удалось создать проект. Подробности в логе.")
+                logger.error("Не удалось создать AppController")
+                QMessageBox.critical(self, "Ошибка", "Не удалось создать контроллер приложения.")
         except Exception as e:
-            logger.error(f"Необработанная ошибка при создании проекта: {e}", exc_info=True)
-            self.status_bar.showMessage("Необработанная ошибка при создании проекта", 0)
-            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
-
-    @Slot()
-    def _on_open_project(self):
-        """Обработчик действия 'Открыть проект'."""
-        logger.info("Начало открытия проекта")
-        if not self.app_controller:
-            QMessageBox.warning(self, "Ошибка", "Контроллер приложения не инициализирован.")
-            return
-
-        project_dir = QFileDialog.getExistingDirectory(
-            self, "Выберите директорию проекта"
-        )
-        if not project_dir:
-            logger.info("Открытие проекта отменено пользователем")
-            return
-
-        try:
-            success = self.app_controller.load_project(project_dir)
-            
-            if success:
-                project_name = self.app_controller.current_project.get("project_name", "Неизвестный проект")
-                self.status_bar.showMessage(f"Проект '{project_name}' загружен", 5000)
-                QMessageBox.information(self, "Успех", f"Проект '{project_name}' успешно загружен из {project_dir}")
-                self._update_ui_state()
-                self.central_stacked_widget.setCurrentWidget(self._welcome_widget)
-            else:
-                self.status_bar.showMessage("Ошибка при загрузке проекта", 0)
-                QMessageBox.critical(self, "Ошибка", "Не удалось загрузить проект. Убедитесь, что это корректная директория проекта.")
-        except Exception as e:
-            logger.error(f"Необработанная ошибка при открытии проекта: {e}", exc_info=True)
-            self.status_bar.showMessage("Необработанная ошибка при открытии проекта", 0)
-            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
-
-    @Slot()
-    def _on_analyze_file(self):
-        """Обработчик действия 'Анализировать файл'."""
-        logger.info("Начало анализа Excel-файла")
-        if not self.app_controller or not self.app_controller.is_project_loaded:
-            QMessageBox.warning(self, "Ошибка", "Проект не загружен.")
-            return
-
-        # Диалог выбора Excel-файла
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Выберите Excel-файл для анализа", "", "Excel Files (*.xlsx *.xls)"
-        )
-        if not file_path:
-            logger.info("Анализ файла отменён пользователем")
-            return
-
-        try:
-            # Создаем и настраиваем диалог прогресса
-            # Примечание: анализ может быть быстрым, диалог может моргнуть.
-            # Для реального прогресса нужно модифицировать analyze_excel_file
-            # чтобы он мог сообщать о прогрессе.
-            self.progress_dialog = QProgressDialog("Анализ файла...", "Отмена", 0, 0, self)
-            self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-            self.progress_dialog.setWindowTitle("Анализ")
-            # Скрываем кнопку отмены, так как analyze_excel_file не поддерживает отмену
-            self.progress_dialog.setCancelButton(None)
-            self.progress_dialog.show()
-
-            # Принудительное обновление UI до начала длительной операции
-            QApplication.processEvents()
-
-            # Вызов анализа через контроллер
-            # analyze_excel_file может быть блокирующим, поэтому диалог будет "зависшим"
-            # В реальном приложении лучше запускать это в отдельном потоке.
-            success = self.app_controller.analyze_excel_file(file_path)
-
-            # Закрываем диалог прогресса
-            if self.progress_dialog:
-                self.progress_dialog.close()
-                self.progress_dialog = None
-
-            if success:
-                self.status_bar.showMessage("Анализ файла завершён успешно", 5000)
-                QMessageBox.information(self, "Успех", f"Файл '{Path(file_path).name}' успешно проанализирован.")
-                # Обновляем обозреватель проекта, чтобы отобразить новые данные
-                self._update_ui_state()
-                # Переключаемся на приветствие/пустой редактор
-                self.central_stacked_widget.setCurrentWidget(self._welcome_widget)
-            else:
-                self.status_bar.showMessage("Ошибка при анализе файла", 0)
-                QMessageBox.critical(self, "Ошибка", "Не удалось проанализировать файл. Подробности в логе.")
-
-        except Exception as e:
-            # Закрываем диалог прогресса в случае ошибки
-            if self.progress_dialog:
-                self.progress_dialog.close()
-                self.progress_dialog = None
-
-            logger.error(f"Необработанная ошибка при анализе файла: {e}", exc_info=True)
-            self.status_bar.showMessage("Необработанная ошибка при анализе файла", 0)
-            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка при анализе файла:\n{e}")
+            logger.error(f"Ошибка при инициализации AppController: {e}", exc_info=True)
+            QMessageBox.critical(self, "Критическая ошибка", f"Ошибка при инициализации контроллера приложения:\n{e}")
 
     @Slot(str)
     def _on_sheet_selected(self, sheet_name: str):
-        """
-        Обработчик сигнала sheet_selected от ProjectExplorer.
-        Вызывается, когда пользователь выбирает лист в обозревателе.
-        """
+        """Слот для обработки сигнала выбора листа в ProjectExplorer."""
         logger.debug(f"MainWindow получил сигнал о выборе листа: {sheet_name}")
-        # === ИЗМЕНЕНО: Логика загрузки теперь внутри SheetEditor.load_sheet ===
-        # SheetEditor теперь сам взаимодействует с AppController
-        if self.app_controller and self.app_controller.is_project_loaded and self.app_controller.project_path:
-            try:
-                db_path = self.app_controller.project_path / "project_data.db"
-                self.central_stacked_widget.setCurrentWidget(self.sheet_editor)
-                # SheetEditor.load_sheet теперь использует AppController для получения данных
-                self.sheet_editor.load_sheet(str(db_path), sheet_name)
-                self.status_bar.showMessage(f"Открыт лист: {sheet_name}", 3000)
-            except Exception as e:
-                logger.error(f"Ошибка при открытии листа '{sheet_name}' в редакторе: {e}", exc_info=True)
-                self.status_bar.showMessage(f"Ошибка при открытии листа: {e}", 0)
-                QMessageBox.critical(self, "Ошибка", f"Не удалось открыть лист '{sheet_name}':\n{e}")
-                self.central_stacked_widget.setCurrentWidget(self._welcome_widget)
-        else:
-            logger.warning("Попытка открыть лист, но проект не загружен.")
-            self.status_bar.showMessage("Ошибка: Проект не загружен.", 0)
-            QMessageBox.warning(self, "Ошибка", "Проект не загружен. Невозможно открыть лист.")
-        # ======================================================================
+        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам app_controller ===
+        if not self.app_controller:
+            logger.warning("AppController не инициализирован.")
+            return
+        # Используем getattr с безопасным значением по умолчанию
+        if not getattr(self.app_controller, 'is_project_loaded', False):
+            logger.warning("Попытка загрузить лист без загруженного проекта.")
+            return
 
-    def closeEvent(self, event: QCloseEvent):
+        # === ИСПРАВЛЕНО: Проверка на None перед использованием sheet_editor и stacked_widget ===
+        if self.sheet_editor and self.stacked_widget:
+            # Переключаемся на виджет редактора листа
+            if isinstance(self.sheet_editor, QWidget):
+                self.stacked_widget.setCurrentWidget(self.sheet_editor)
+            else:
+                logger.error("sheet_editor не является экземпляром QWidget.")
+                return
+
+            # === ИСПРАВЛЕНО: Получаем путь к БД проекта ===
+            db_path: Optional[str] = None
+            if self.app_controller:
+                # Получаем project_path из app_controller
+                # Это может быть атрибут или ключ в current_project
+                # Основываясь на логах и структуре AppController, предполагаем атрибут project_path
+                project_path_attr = getattr(self.app_controller, 'project_path', None)
+                if project_path_attr:
+                    try:
+                        if isinstance(project_path_attr, Path):
+                            db_path_obj = project_path_attr / "project_data.db"
+                        else: # Предполагаем строку
+                            db_path_obj = Path(project_path_attr) / "project_data.db"
+                        db_path = str(db_path_obj)
+                        logger.debug(f"Путь к БД определен через app_controller.project_path: {db_path}")
+                    except Exception as e:
+                        logger.error(f"Ошибка при формировании пути к БД: {e}")
+
+            # === ИСПРАВЛЕНО: Проверка db_path перед вызовом load_sheet ===
+            if db_path and self.sheet_editor:
+                logger.debug(f"Загрузка листа '{sheet_name}' с использованием БД: {db_path}")
+                # Загружаем лист в редактор
+                # Сигнатура: load_sheet(self, project_db_path: str, sheet_name: str)
+                # === ИСПРАВЛЕНО: Передаем оба обязательных аргумента ===
+                self.sheet_editor.load_sheet(db_path, sheet_name)
+            elif not db_path:
+                error_msg = "Не удалось определить путь к БД проекта для загрузки листа."
+                logger.error(error_msg)
+                QMessageBox.critical(self, "Ошибка", f"{error_msg}\nУбедитесь, что проект корректно загружен.")
+            else: # sheet_editor is None
+                logger.error("sheet_editor не инициализирован при попытке загрузки листа.")
+        else:
+            error_msg = "sheet_editor или stacked_widget не инициализированы."
+            logger.error(error_msg)
+            # Не показываем QMessageBox здесь, чтобы не засорять UI при инициализации
+
+    def _show_welcome_screen(self):
+        """Показывает приветственный экран."""
+        # === ИСПРАВЛЕНО: Проверка на None перед использованием stacked_widget и welcome_widget ===
+        if self.stacked_widget and self.welcome_widget:
+            if isinstance(self.welcome_widget, QWidget):
+                self.stacked_widget.setCurrentWidget(self.welcome_widget)
+            else:
+                 logger.warning("welcome_widget не является экземпляром QWidget.")
+        else:
+             logger.debug("Невозможно показать приветственный экран: stacked_widget или welcome_widget отсутствуют.")
+
+    def _on_new_project(self):
+        """Обработчик действия 'Новый проект'."""
+        logger.info("Начало создания нового проекта")
+        project_path = QFileDialog.getExistingDirectory(self, "Выберите директорию для нового проекта")
+        if project_path:
+            if self.app_controller:
+                success = self.app_controller.create_project(project_path)
+                if success:
+                    logger.info(f"Проект успешно создан в: {project_path}")
+                    self._load_project(project_path)
+                else:
+                    logger.error(f"Не удалось создать проект в: {project_path}")
+                    QMessageBox.critical(self, "Ошибка", "Не удалось создать проект.")
+            else:
+                logger.error("AppController не инициализирован.")
+                QMessageBox.critical(self, "Ошибка", "Контроллер приложения не доступен.")
+
+    def _on_open_project(self):
+        """Обработчик действия 'Открыть проект'."""
+        logger.info("Начало открытия проекта")
+        project_path = QFileDialog.getExistingDirectory(self, "Выберите директорию проекта")
+        if project_path:
+            self._load_project(project_path)
+
+    def _load_project(self, project_path: str):
+        """Загружает проект по указанному пути."""
+        if not self.app_controller:
+            logger.error("AppController не инициализирован.")
+            QMessageBox.critical(self, "Ошибка", "Контроллер приложения не доступен.")
+            return
+
+        success = self.app_controller.load_project(project_path)
+        if success:
+            logger.info(f"Проект успешно загружен из: {project_path}")
+            # Обновляем ProjectExplorer
+            # === ИСПРАВЛЕНО: Предоставление project_data и db_path в правильной сигнатуре ===
+            if self.project_explorer and self.app_controller:
+                # Получаем project_data из app_controller
+                project_data: Optional[Dict[str, Any]] = getattr(self.app_controller, 'current_project', None)
+                if project_data is None:
+                     logger.error("AppController.current_project отсутствует или None.")
+                     QMessageBox.warning(self, "Предупреждение", "Не удалось получить данные проекта из AppController.")
+                     return
+
+                # Получаем путь к БД проекта
+                db_path: Optional[str] = None
+                if self.app_controller:
+                    project_path_attr = getattr(self.app_controller, 'project_path', None)
+                    if project_path_attr:
+                        try:
+                            if isinstance(project_path_attr, Path):
+                                db_path_obj = project_path_attr / "project_data.db"
+                            else: # Предполагаем строку
+                                db_path_obj = Path(project_path_attr) / "project_data.db"
+                            db_path = str(db_path_obj)
+                            logger.debug(f"Путь к БД для ProjectExplorer: {db_path}")
+                        except Exception as e:
+                            logger.error(f"Ошибка при формировании пути к БД для ProjectExplorer: {e}")
+                            QMessageBox.warning(self, "Предупреждение", f"Ошибка при формировании пути к БД: {e}")
+                            return # Прерываем, если не можем получить путь к БД
+
+                # Проверяем, получены ли оба необходимых аргумента
+                if project_data is not None and db_path:
+                    try:
+                        # === ИСПРАВЛЕНО: Передаем оба обязательных аргумента в правильном порядке ===
+                        # Сигнатура: load_project(self, project_data: Dict[str, Any], db_path: str)
+                        self.project_explorer.load_project(project_data, db_path)
+                        logger.debug("ProjectExplorer успешно загрузил структуру проекта.")
+                    except Exception as e:
+                         error_msg = f"Неожиданная ошибка при вызове load_project в ProjectExplorer: {e}"
+                         logger.error(error_msg, exc_info=True)
+                         QMessageBox.warning(self, "Предупреждение", error_msg)
+                else:
+                    missing = []
+                    if project_data is None:
+                        missing.append("project_data")
+                    if not db_path:
+                        missing.append("db_path")
+                    error_msg = f"Не удалось получить необходимые данные для ProjectExplorer: {', '.join(missing)}."
+                    logger.error(error_msg)
+                    QMessageBox.warning(self, "Предупреждение", error_msg)
+
+            self._show_welcome_screen()
+        else:
+            logger.error(f"Не удалось загрузить проект из: {project_path}")
+            QMessageBox.critical(self, "Ошибка", "Не удалось загрузить проект.")
+
+    def _on_close_project(self):
+        """Обработчик действия 'Закрыть проект'."""
+        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам ===
+        if not self.app_controller:
+             logger.info("AppController не инициализирован при попытке закрыть проект.")
+             return
+        if not getattr(self.app_controller, 'is_project_loaded', False):
+            logger.info("Попытка закрыть проект, но проект не был загружен.")
+            return
+
+        reply = QMessageBox.question(self, 'Подтверждение', 'Вы уверены, что хотите закрыть проект?',
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
+
+        if reply == QMessageBox.StandardButton.Yes:
+            logger.info("Пользователь подтвердил закрытие проекта.")
+            if self.project_explorer:
+                self.project_explorer.clear_project()
+            if self.sheet_editor:
+                self.sheet_editor.clear_sheet()
+            self._show_welcome_screen()
+            logger.info("Проект закрыт.")
+
+    def _on_analyze_excel(self):
+        """Обработчик действия 'Анализировать Excel-файл'."""
+        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам ===
+        if not self.app_controller:
+             QMessageBox.critical(self, "Ошибка", "Контроллер приложения не доступен.")
+             return
+        if not getattr(self.app_controller, 'is_project_loaded', False):
+            QMessageBox.warning(self, "Предупреждение", "Сначала необходимо открыть или создать проект.")
+            return
+
+        logger.info("Начало анализа Excel-файла")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Выберите Excel-файл для анализа", "",
+                                                   "Excel Files (*.xlsx *.xlsm)")
+        if file_path:
+            success = self.app_controller.analyze_excel_file(file_path)
+            if success:
+                logger.info(f"Файл {file_path} успешно проанализирован.")
+                QMessageBox.information(self, "Успех", "Файл успешно проанализирован.")
+                # Обновляем ProjectExplorer ПОСЛЕ АНАЛИЗА
+                # === ИСПРАВЛЕНО: Предоставление project_data и db_path в правильной сигнатуре ===
+                if self.project_explorer and self.app_controller:
+                     # Получаем project_data из app_controller
+                     project_data: Optional[Dict[str, Any]] = getattr(self.app_controller, 'current_project', None)
+                     if project_data is None:
+                          logger.error("AppController.current_project отсутствует или None (после анализа).")
+                          QMessageBox.warning(self, "Предупреждение", "Не удалось получить данные проекта из AppController (после анализа).")
+                          return
+
+                     # Получаем путь к БД проекта (он должен быть уже установлен после анализа/загрузки)
+                     db_path: Optional[str] = None
+                     if self.app_controller:
+                        project_path_attr = getattr(self.app_controller, 'project_path', None)
+                        if project_path_attr:
+                            try:
+                                if isinstance(project_path_attr, Path):
+                                    db_path_obj = project_path_attr / "project_data.db"
+                                else: # Предполагаем строку
+                                    db_path_obj = Path(project_path_attr) / "project_data.db"
+                                db_path = str(db_path_obj)
+                                logger.debug(f"Путь к БД для ProjectExplorer (после анализа): {db_path}")
+                            except Exception as e:
+                                logger.error(f"Ошибка при формировании пути к БД для ProjectExplorer (после анализа): {e}")
+                                QMessageBox.warning(self, "Предупреждение", f"Ошибка при формировании пути к БД (после анализа): {e}")
+                                return # Прерываем, если не можем получить путь к БД
+
+                     # Проверяем, получены ли оба необходимых аргумента
+                     if project_data is not None and db_path:
+                        try:
+                            # === ИСПРАВЛЕНО: Передаем оба обязательных аргумента в правильном порядке ===
+                            # Сигнатура: load_project(self, project_data: Dict[str, Any], db_path: str)
+                            self.project_explorer.load_project(project_data, db_path)
+                            logger.debug("ProjectExplorer успешно обновлен после анализа.")
+                        except Exception as e:
+                             error_msg = f"Неожиданная ошибка при обновлении ProjectExplorer после анализа: {e}"
+                             logger.error(error_msg, exc_info=True)
+                             QMessageBox.warning(self, "Предупреждение", error_msg)
+                     else:
+                         missing = []
+                         if project_data is None:
+                             missing.append("project_data")
+                         if not db_path:
+                             missing.append("db_path")
+                         error_msg = f"Не удалось получить необходимые данные для ProjectExplorer после анализа: {', '.join(missing)}."
+                         logger.error(error_msg)
+                         QMessageBox.warning(self, "Предупреждение", error_msg)
+            else:
+                logger.error(f"Не удалось проанализировать файл {file_path}.")
+                QMessageBox.critical(self, "Ошибка", "Не удалось проанализировать файл.")
+
+    def _on_export_to_excel(self):
+        """Обработчик действия 'Экспортировать в Excel'."""
+        # === ИСПРАВЛЕНО: Безопасный доступ к атрибутам ===
+        if not self.app_controller:
+             QMessageBox.critical(self, "Ошибка", "Контроллер приложения не доступен.")
+             return
+        if not getattr(self.app_controller, 'is_project_loaded', False):
+            QMessageBox.warning(self, "Предупреждение", "Сначала необходимо открыть или создать проект.")
+            return
+
+        logger.info("Начало экспорта проекта в Excel")
+        file_path, _ = QFileDialog.getSaveFileName(self, "Сохранить как", "",
+                                                   "Excel Files (*.xlsx)")
+        if file_path:
+            if not file_path.lower().endswith('.xlsx'):
+                file_path += '.xlsx'
+            # Сигнатура: export_results(self, export_type: str, output_path: str) -> bool:
+            success = self.app_controller.export_results('excel', file_path)
+            if success:
+                logger.info(f"Проект успешно экспортирован в: {file_path}")
+                QMessageBox.information(self, "Успех", f"Проект успешно экспортирован в:\n{file_path}")
+            else:
+                logger.error(f"Не удалось экспортировать проект в: {file_path}")
+                QMessageBox.critical(self, "Ошибка", "Не удалось экспортировать проект.")
+
+    def closeEvent(self, event):
         """Обработчик события закрытия окна."""
         logger.info("Получен запрос на закрытие главного окна")
-        # Закрываем диалог прогресса, если он открыт
-        if self.progress_dialog:
-            self.progress_dialog.close()
-        try:
-            if self.app_controller:
-                self.app_controller.shutdown()
-        except Exception as e:
-            logger.error(f"Ошибка при завершении работы контроллера: {e}", exc_info=True)
-        finally:
-            event.accept()
-            logger.info("Главное окно закрыто")
+        if self.app_controller:
+            self.app_controller.shutdown()
+        event.accept()
+        logger.info("Главное окно закрыто")
