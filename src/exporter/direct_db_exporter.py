@@ -40,15 +40,18 @@ def _add_project_root_to_path_if_needed():
         current_script_path = Path(__file__).resolve()
         potential_root = current_script_path.parent
         max_levels_up = 10
+        # === ИСПРАВЛЕНО: Инициализация project_root_candidate до блока if ===
+        # Решает ошибку Pylance: "Элемент "project_root_candidate", возможно, не привязан"
+        project_root_candidate: Optional[Path] = None # <--- Инициализация
         root_found = False
         for _ in range(max_levels_up):
             if (potential_root / 'src').is_dir():
-                project_root_candidate = potential_root
+                project_root_candidate = potential_root # <--- Присвоение
                 root_found = True
                 break
             potential_root = potential_root.parent
 
-        if root_found:
+        if root_found and project_root_candidate:
             project_root_str = str(project_root_candidate)
             if project_root_str not in sys.path:
                 sys.path.insert(0, project_root_str)
@@ -190,7 +193,10 @@ def _create_openpyxl_border_from_db_row(border_row: sqlite3.Row) -> Border:
         # Фильтруем None
         filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
         logger.debug(f"[СТИЛЬ] Создан Border с параметрами: {filtered_kwargs}")
-        return Border(**filtered_kwargs)
+        # === ДОБАВЛЕНО: # type: ignore[arg-type] для подавления ошибки Pylance ===
+        # Решает ошибку Pylance: "Аргумент типа "bool" нельзя присвоить параметру "..." типа "Side | None""
+        # если Pylance всё ещё не понимает, что filtered_kwargs содержит правильные типы.
+        return Border(**filtered_kwargs) # type: ignore[arg-type]
     except Exception as e:
         logger.error(f"[СТИЛЬ] Ошибка создания Border из строки БД: {e}", exc_info=True)
         return Border()
@@ -535,35 +541,30 @@ def export_sheet_styles(conn: sqlite3.Connection, wb: OpenpyxlWorkbook, sheet_id
             #     logger.debug(f"[СТИЛЬ] Стиль '{named_style.name}' уже в книге.")
 
             # Применяем стиль к диапазону
+            # === ИСПРАВЛЕНО: Упрощенная и надежная логика итерации ===
+            # Решает ошибку Pylance: ""MergedCell" не является итерируемым"
             try:
                 logger.debug(f"[СТИЛЬ] Применение стиля '{named_style.name}' к диапазону {range_address}...")
-                cell_range = ws[range_address]
+                
+                # Получаем диапазон. Может быть Cell или tuple[tuple[Cell]]
+                cell_range_object = ws[range_address] 
+                
+                # Создаем плоский список ячеек для стилизации
                 cells_to_style = []
-                if isinstance(cell_range, Cell):
-                    cells_to_style = [cell_range]
-                    logger.debug(f"[СТИЛЬ] Диапазон {range_address} - это одиночная ячейка {cell_range.coordinate}")
+                
+                # Проверяем, является ли объект итерируемым (tuple, list и т.д.)
+                if isinstance(cell_range_object, (list, tuple)):
+                    # Это диапазон ячеек, итерируемся по строкам и столбцам
+                    logger.debug(f"[СТИЛЬ] Диапазон {range_address} - это коллекция.")
+                    for row in cell_range_object:
+                        if isinstance(row, (list, tuple)): # Строка диапазона
+                            cells_to_style.extend(row)
+                        else: # Отдельная ячейка в "плоском" кортеже
+                            cells_to_style.append(row)
                 else:
-                    # Предполагаем, что это итерируемый объект (tuple, CellRange)
-                    logger.debug(f"[СТИЛЬ] Диапазон {range_address} - это итерируемый объект {type(cell_range)}")
-                    try:
-                        for item in cell_range:
-                            if isinstance(item, Cell):
-                                cells_to_style.append(item)
-                                logger.debug(f"[СТИЛЬ] Добавлена ячейка {item.coordinate}")
-                            elif isinstance(item, CellRange) or hasattr(item, '__iter__'):
-                                logger.debug(
-                                    f"[СТИЛЬ] Обнаружен поддиапазон {type(item)}, итерация по ячейкам...")
-                                try:
-                                    for sub_item in item:
-                                        cells_to_style.append(sub_item)
-                                except TypeError:
-                                    logger.error(f"[СТИЛЬ] Ошибка итерации по поддиапазону {item}. Пропущен.")
-                            else:
-                                logger.warning(
-                                    f"[СТИЛЬ] Неожиданный тип элемента в диапазоне {range_address}: {type(item)}")
-                    except TypeError as te:
-                        logger.error(f"[СТИЛЬ] Ошибка итерации по диапазону {range_address}: {te}. Пропущен.")
-                        continue  # Пропускаем этот диапазон
+                    # Это отдельная ячейка (openpyxl.cell.cell.Cell)
+                    logger.debug(f"[СТИЛЬ] Диапазон {range_address} - это одиночная ячейка {cell_range_object.coordinate}.")
+                    cells_to_style = [cell_range_object] # Оборачиваем в список
 
                 logger.debug(f"[СТИЛЬ] Всего ячеек для стиля в {range_address}: {len(cells_to_style)}")
                 styled_in_range = 0
