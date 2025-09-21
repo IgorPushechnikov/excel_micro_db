@@ -2,11 +2,13 @@
 """Модуль для экспорта стилей ячеек листа Excel."""
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Iterable, Set # Добавлены Set, Iterable
+from typing import Dict, Any, List, Optional, Union, Iterable, Set, Tuple, cast
+# === ИЗМЕНЕНО: Импорт Cell без MergedCell и внутренних типов ===
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.workbook.workbook import Workbook
-from openpyxl.cell.cell import Cell # Импортируем Cell напрямую
-from openpyxl.worksheet.cell_range import CellRange # Импортируем CellRange напрямую
+from openpyxl.cell.cell import Cell
+# Явно импортируем CellRange
+from openpyxl.worksheet.cell_range import CellRange
 # Импорты для стилей
 from openpyxl.styles import (
     Font, Fill, Border, PatternFill, Side, Alignment, Protection, NamedStyle, Color
@@ -14,13 +16,21 @@ from openpyxl.styles import (
 # === ИСПРАВЛЕНО: Импорт ChartBase ===
 # ChartBase определен в openpyxl.chart._chart
 from openpyxl.chart._chart import ChartBase
-# === КОНЕЦ ИСПРАВЛЕНИЙ ===
+
 # Добавляем корень проекта в путь поиска модулей если нужно
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
 from src.utils.logger import get_logger
+# === ИСПРАВЛЕНО: Импорт ProjectDBStorage для тестирования ===
+# Этот импорт используется только в блоке if __name__ == "__main__"
+# и не должен мешать основному импорту модуля.
+# В основном коде ProjectDBStorage должен передаваться извне или импортироваться явно в использующих его модулях.
+# from src.storage.base import ProjectDBStorage # <-- Импорт для теста внизу файла
+
 logger = get_logger(__name__)
+
 # === ИЗМЕНЕНО: Функция для создания Font ===
 def _create_openpyxl_font_from_attrs(font_db_attrs: Dict[str, Any]) -> Optional[Font]:
     """
@@ -81,7 +91,9 @@ def _create_openpyxl_font_from_attrs(font_db_attrs: Dict[str, Any]) -> Optional[
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания Font из атрибутов БД {font_db_attrs}: {e}")
         return None
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
+
 # === ИЗМЕНЕНО: Функция для создания Fill ===
 def _create_openpyxl_fill_from_attrs(fill_db_attrs: Dict[str, Any]) -> Optional[Fill]:
     """Создает объект Fill openpyxl из атрибутов БД."""
@@ -122,7 +134,9 @@ def _create_openpyxl_fill_from_attrs(fill_db_attrs: Dict[str, Any]) -> Optional[
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания Fill из атрибутов {fill_db_attrs}: {e}")
         return None
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
+
 # === ИЗМЕНЕНО: Функция для создания Side ===
 def _create_openpyxl_side_from_attrs(side_style: Optional[str], side_color: Optional[str]) -> Optional[Side]:
     """Создает объект Side openpyxl из стиля и цвета."""
@@ -142,7 +156,9 @@ def _create_openpyxl_side_from_attrs(side_style: Optional[str], side_color: Opti
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания Side из style='{side_style}', color='{side_color}': {e}")
         return None # Возвращаем None, что означает отсутствие границы для этой стороны
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
+
 # === ИЗМЕНЕНО: Функция для создания Border ===
 def _create_openpyxl_border_from_attrs(border_db_attrs: Dict[str, Any]) -> Border:
     """Создает объект Border openpyxl из атрибутов БД."""
@@ -181,6 +197,7 @@ def _create_openpyxl_border_from_attrs(border_db_attrs: Dict[str, Any]) -> Borde
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания Border из атрибутов БД {border_db_attrs}: {e}")
         # Возвращаем пустую границу в случае ошибки
         return Border()
+
 # === ИЗМЕНЕНО: Функция для создания Alignment ===
 def _create_openpyxl_alignment_from_attrs(align_db_attrs: Dict[str, Any]) -> Alignment:
     """Создает объект Alignment openpyxl из атрибутов БД."""
@@ -200,7 +217,9 @@ def _create_openpyxl_alignment_from_attrs(align_db_attrs: Dict[str, Any]) -> Ali
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания Alignment из атрибутов {align_db_attrs}: {e}")
         return Alignment()
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
+
 # === ИЗМЕНЕНО: Функция для создания Protection ===
 def _create_openpyxl_protection_from_attrs(prot_db_attrs: Dict[str, Any]) -> Protection:
     """Создает объект Protection openpyxl из атрибутов БД."""
@@ -223,7 +242,9 @@ def _create_openpyxl_protection_from_attrs(prot_db_attrs: Dict[str, Any]) -> Pro
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания Protection из атрибутов {prot_db_attrs}: {e}")
         return Protection()
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
+
 # === ИЗМЕНЕНО: Функция для создания NamedStyle ===
 def _create_named_style_from_style_attrs(style_db_attrs: Dict[str, Any], style_name: str) -> Optional[NamedStyle]:
     """
@@ -280,8 +301,10 @@ def _create_named_style_from_style_attrs(style_db_attrs: Dict[str, Any], style_n
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка создания именованного стиля '{style_name}': {e}", exc_info=True)
         return None
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
-# === НОВОЕ: Функция для получения имен существующих стилей ===
+
+# === ИСПРАВЛЕНО: Функция для получения имен существующих стилей ===
 def _get_existing_style_names(workbook: Workbook) -> Set[str]:
     """
     Получает множество имен существующих именованных стилей в книге.
@@ -291,17 +314,21 @@ def _get_existing_style_names(workbook: Workbook) -> Set[str]:
         Set[str]: Множество имен существующих стилей.
     """
     try:
-        # === ИСПРАВЛЕНО: Корректная обработка workbook.named_styles ===
-        # workbook.named_styles возвращает список имен (строк) существующих стилей
-        # НЕ нужно итерироваться по нему как по списку объектов с атрибутом 'name'
-        existing_style_names = set(workbook.named_styles)
+        # === ИСПРАВЛЕНО: Уточнение типа для Pylance ===
+        # Явно аннотируем тип для workbook.named_styles
+        # workbook.named_styles возвращает список объектов NamedStyle.
+        named_styles_list: List[NamedStyle] = list(workbook.named_styles) # type: ignore
+        # Извлекаем имена
+        existing_style_names = {ns.name for ns in named_styles_list}
         logger.debug(f"[ЭКСПОРТ_СТИЛЕЙ] Получены имена существующих стилей из workbook.named_styles: {existing_style_names}")
         return existing_style_names
         # === КОНЕЦ ИСПРАВЛЕНИЙ ===
     except Exception as e:
         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка при получении имен существующих стилей: {e}")
         return set() # Возвращаем пустое множество в случае ошибки
+
 # === КОНЕЦ НОВОГО ===
+
 # === ИЗМЕНЕНО: Основная функция экспорта стилей ===
 def export_sheet_styles(ws: Worksheet, styled_ranges_data: List[Dict[str, Any]], workbook: Workbook) -> None:
     """
@@ -373,33 +400,44 @@ def export_sheet_styles(ws: Worksheet, styled_ranges_data: List[Dict[str, Any]],
             try:
                 cell_range = ws[range_addr]
                 cells_to_style: List[Cell] = []
-                # === ИЗМЕНЕНО: Упрощенная и более надежная итерация ===
+                
+                # === ИСПРАВЛЕНО: Упрощенная и более надежная итерация с точными типами ===
+                # Явно обрабатываем известные типы, возвращаемые ws[...]
                 if isinstance(cell_range, Cell):
                     # Это одиночная ячейка
                     cells_to_style = [cell_range]
-                elif hasattr(cell_range, '__iter__'):
-                    # Это итерируемый объект (например, tuple из CellRange или Cell)
-                    for item in cell_range:
-                        if isinstance(item, Cell):
-                            cells_to_style.append(item)
-                        elif hasattr(item, '__iter__'):
-                            # Это CellRange, итерируемся по ячейкам внутри
-                            for cell in item:
-                                cells_to_style.append(cell)
-                        else:
-                            logger.warning(f"[ЭКСПОРТ_СТИЛЕЙ] Неожиданный тип элемента в CellRange: {type(item)}")
+                elif isinstance(cell_range, tuple):
+                    # Это tuple из строк (каждая строка - tuple из ячеек)
+                    # cell_range это tuple[tuple[<CellLike>, ...], ...]
+                    # Итерируемся по строкам, затем по ячейкам в строке
+                    for row_tuple in cell_range:
+                        # row_tuple это tuple[<CellLike>, ...]
+                        # Итерируемся по ячейкам в строке. Используем # type: ignore
+                        # потому что Pylance не уверен в итерируемости row_tuple,
+                        # но openpyxl гарантирует это для результата ws[...]
+                        for cell_in_row in row_tuple: # type: ignore
+                            # cell_in_row это Cell или MergedCell
+                            # openpyxl.cell.cell.Cell является базовым классом.
+                            # Приводим тип для уверенности Pylance и безопасности.
+                            cells_to_style.append(cast(Cell, cell_in_row))
+                elif isinstance(cell_range, CellRange):
+                    # Это CellRange, итерируемся по ячейкам внутри
+                    # Используем # type: ignore потому что Pylance может не понять итерируемость CellRange
+                    for cell_in_range in cell_range: # type: ignore
+                        cells_to_style.append(cast(Cell, cell_in_range))
                 else:
-                    # Теоретически не должно произойти, так как ws[addr] всегда возвращает Cell или CellRange
+                    # Теоретически не должно произойти, но на всякий случай
                     logger.warning(f"[ЭКСПОРТ_СТИЛЕЙ] Неожиданный тип для диапазона '{range_addr}': {type(cell_range)}. Пропущен.")
                     continue
-                # === КОНЕЦ ИЗМЕНЕНИЙ ===
+                # === КОНЕЦ ИСПРАВЛЕНИЙ ===
+                
                 logger.debug(f"[ЭКСПОРТ_СТИЛЕЙ] Применение стиля '{style_name}' к {len(cells_to_style)} ячейкам в диапазоне '{range_addr}'.")
                 for cell in cells_to_style:
                     try:
                         # === ИСПРАВЛЕНО: Применяем стиль по имени ===
                         # Проверяем, что стиль существует в книге перед применением
-                        # Используем внутренний словарь для более эффективной проверки
-                        if style_name in workbook._named_styles:
+                        # Используем множество existing_style_names для проверки
+                        if style_name in existing_style_names:
                             try:
                                 # Применяем стиль к ячейке, используя имя именованного стиля
                                 # Это публичный способ связать ячейку с именованным стилем
@@ -408,7 +446,7 @@ def export_sheet_styles(ws: Worksheet, styled_ranges_data: List[Dict[str, Any]],
                             except Exception as apply_cell_style_e:
                                 logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка применения стиля '{style_name}' к ячейке {cell.coordinate}: {apply_cell_style_e}")
                         else:
-                            logger.warning(f"[ЭКСПОРТ_СТИЛЕЙ] Стиль '{style_name}' не найден в книге. Не удалось применить к ячейке {cell.coordinate}.")
+                            logger.warning(f"[ЭКСПОРТ_СТИЛЕЙ] Стиль '{style_name}' не найден в книге (в existing_style_names). Не удалось применить к ячейке {cell.coordinate}.")
                         # === КОНЕЦ ИСПРАВЛЕНИЙ ===
                     except Exception as apply_cell_style_e:
                         logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка применения стиля '{style_name}' к ячейке {cell.coordinate}: {apply_cell_style_e}")
@@ -419,7 +457,9 @@ def export_sheet_styles(ws: Worksheet, styled_ranges_data: List[Dict[str, Any]],
         except Exception as e:
             logger.error(f"[ЭКСПОРТ_СТИЛЕЙ] Ошибка обработки стиля {i+1}: {e}", exc_info=True)
     logger.info(f"[ЭКСПОРТ_СТИЛЕЙ] === Конец экспорта стилей для листа '{ws.title}'. Применено {applied_styles_count} стилей. ===")
+
 # === КОНЕЦ ИЗМЕНЕНИЙ ===
+
 # - ТОЧКА ВХОДА ДЛЯ ТЕСТИРОВАНИЯ -
 if __name__ == "__main__":
     # Простой тест подключения и инициализации
