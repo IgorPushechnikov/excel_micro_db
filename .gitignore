@@ -5,3 +5,5 @@
 
 data/samples/test_sample.xlsx
 *.xlsx
+/test_workspace
+/logs
