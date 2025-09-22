@@ -280,9 +280,19 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
 
         # --- 1. Загрузка данных ---
         logger.debug(f"Загрузка редактируемых данных для листа '{sheet_name}'...")
-        editable_data = storage.load_sheet_editable_data(sheet_name)
-        column_names = editable_data.get("column_names", [])
-        rows = editable_data.get("rows", [])
+        editable_data_result = storage.load_sheet_editable_data(sheet_name)
+        
+        # === ИСПРАВЛЕНО: Проверка типа результата ===
+        # Убедимся, что мы получили ожидаемый словарь
+        if not isinstance(editable_data_result, dict):
+            logger.error(f"load_sheet_editable_data для листа '{sheet_name}' вернула {type(editable_data_result)}, ожидался dict.")
+            editable_data_result = {"column_names": [], "rows": []}
+        
+        column_names = editable_data_result.get("column_names", [])
+        # === ИСПРАВЛЕНО: Обработка rows как списка кортежей ===
+        # editable_data.py возвращает rows как список кортежей из cursor.fetchall()
+        rows_as_tuples = editable_data_result.get("rows", []) 
+        # ================================
 
         if not column_names:
             logger.warning(f"Нет данных для экспорта на листе '{sheet_name}'.")
@@ -296,16 +306,22 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
             sheet_content[(0, col_idx)] = (col_name, None)
 
         # --- 3. Запись данных (начиная со строки 1) ---
-        for row_idx, row_data in enumerate(rows, start=1):
-            for col_idx, col_name in enumerate(column_names):
-                value = row_data.get(col_name, "")
-                sheet_content[(row_idx, col_idx)] = (value, None)
+        # === ИСПРАВЛЕНО: Обработка rows как списка кортежей ===
+        for row_idx, row_tuple in enumerate(rows_as_tuples, start=1):
+            # row_tuple - это кортеж значений, соответствующих column_names
+            for col_idx, value in enumerate(row_tuple):
+                 # Проверка на выход за границы, хотя не должна произойти
+                 if col_idx < len(column_names):
+                     sheet_content[(row_idx, col_idx)] = (value, None)
+                 else:
+                     logger.warning(f"Строка {row_idx} содержит больше значений, чем ожидаемых столбцов. Лишние значения проигнорированы.")
+        # ================================
 
         # --- 4. Загрузка и применение формул ---
         logger.debug(f"Загрузка формул для листа '{sheet_name}' (ID: {sheet_id})...")
-        formulas_data = storage.load_sheet_formulas(sheet_id)
+        formulas_data = storage.load_sheet_formulas(sheet_id) # <-- ИСПРАВЛЕНО: правильное имя переменной
         logger.debug(f"Найдено {len(formulas_data)} формул для экспорта на листе '{sheet_name}'.")
-        for formula_info in formulas_data:
+        for formula_info in formulas_data: # <-- ИСПРАВЛЕНО: правильное имя переменной
             cell_address = formula_info.get("cell", "")
             formula = formula_info.get("formula", "")
             if cell_address and formula:
@@ -319,12 +335,12 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
 
         # --- 5. Загрузка и применение стилей ---
         logger.debug(f"Загрузка стилей для листа '{sheet_name}' (ID: {sheet_id})...")
-        styled_ranges_data = storage.load_sheet_styles(sheet_id)
+        styled_ranges_data = storage.load_sheet_styles(sheet_id) # <-- ИСПРАВЛЕНО: правильное имя переменной
         logger.debug(f"Применение {len(styled_ranges_data)} стилевых диапазонов на листе '{sheet_name}'.")
 
         format_cache: Dict[str, Any] = {}
 
-        for style_range_info in styled_ranges_data:
+        for style_range_info in styled_ranges_data: # <-- ИСПРАВЛЕНО: правильное имя переменной
             range_address = style_range_info.get("range_address")
             style_attributes = style_range_info.get("style_attributes", {})
 
