@@ -1,5 +1,4 @@
 # src/storage/schema.py
-
 """
 Модуль для инициализации схемы базы данных проекта Excel Micro DB.
 
@@ -78,6 +77,7 @@ CREATE TABLE IF NOT EXISTS charts (
 )
 '''
 
+# === ИСПРАВЛЕНО: Имена столбцов и добавлен idx ===
 CREATE_CHART_AXES_TABLE = '''
 CREATE TABLE IF NOT EXISTS chart_axes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,9 +85,9 @@ CREATE TABLE IF NOT EXISTS chart_axes (
     axis_type TEXT NOT NULL, -- 'x_axis', 'y_axis', 'z_axis'
     ax_id INTEGER, -- Идентификатор оси
     ax_pos TEXT, -- Положение оси
-    delete_axis INTEGER, -- Удаление оси (BOOLEAN)
-    title TEXT, -- Заголовок оси
-    num_fmt TEXT, -- Формат чисел
+    delete_axis INTEGER, -- Удаление оси (BOOLEAN) -- ИСПРАВЛЕНО: delete -> delete_axis
+    title TEXT, -- Заголовок оси -- ИСПРАВЛЕНО: axis_title -> title
+    num_fmt TEXT, -- Формат чисел -- ИСПРАВЛЕНО: number_format -> num_fmt
     major_tick_mark TEXT, -- Основная метка делений
     minor_tick_mark TEXT, -- Дополнительная метка делений
     tick_lbl_pos TEXT, -- Положение подписей делений
@@ -105,28 +105,28 @@ CREATE TABLE IF NOT EXISTS chart_axes (
 )
 '''
 
+# === ИСПРАВЛЕНО: Имена столбцов и добавлен idx ===
 CREATE_CHART_SERIES_TABLE = '''
 CREATE TABLE IF NOT EXISTS chart_series (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chart_id INTEGER NOT NULL,
-    series_title TEXT,
-    series_color TEXT,
-    x_data_source_id INTEGER, -- Ссылка на chart_data_sources.id
-    y_data_source_id INTEGER, -- Ссылка на chart_data_sources.id
-    z_data_source_id INTEGER, -- Ссылка на chart_data_sources.id (для 3D)
-    FOREIGN KEY (chart_id) REFERENCES charts (id),
-    FOREIGN KEY (x_data_source_id) REFERENCES chart_data_sources (id),
-    FOREIGN KEY (y_data_source_id) REFERENCES chart_data_sources (id),
-    FOREIGN KEY (z_data_source_id) REFERENCES chart_data_sources (id)
+    idx INTEGER NOT NULL, -- ИСПРАВЛЕНО: Добавлен недостающий столбец idx -- НОВОЕ
+    "order" INTEGER NOT NULL, -- Порядок серии (зарезервированное слово SQL, используем кавычки)
+    tx TEXT, -- Название серии
+    shape TEXT, -- Форма маркера
+    smooth INTEGER, -- Сглаживание линии (BOOLEAN)
+    invert_if_negative INTEGER, -- Инвертировать цвет, если значение отрицательное (BOOLEAN)
+    FOREIGN KEY (chart_id) REFERENCES charts (id)
 )
 '''
 
+# === ИСПРАВЛЕНО: Имена столбцов ===
 CREATE_CHART_DATA_SOURCES_TABLE = '''
 CREATE TABLE IF NOT EXISTS chart_data_sources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sheet_id INTEGER NOT NULL, -- Лист, откуда берутся данные
     data_range TEXT NOT NULL, -- Диапазон ячеек, например, 'Sheet1!$A$1:$A$10'
-    data_type TEXT NOT NULL, -- 'category', 'value', 'size' и т.д.
+    data_type TEXT NOT NULL, -- ИСПРАВЛЕНО: source_type -> data_type ('category', 'value', 'size' и т.д.)
     FOREIGN KEY (sheet_id) REFERENCES sheets (id)
 )
 '''
@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS raw_data_tables_registry (
 
 # === НОВЫЕ ТАБЛИЦЫ ДЛЯ СТИЛЕЙ ===
 
+# === ИСПРАВЛЕНО: Добавлены недостающие столбцы ===
 CREATE_FONTS_TABLE = '''
 CREATE TABLE IF NOT EXISTS fonts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,13 +152,16 @@ CREATE TABLE IF NOT EXISTS fonts (
     sz REAL, -- Размер
     b INTEGER, -- Жирный (BOOLEAN)
     i INTEGER, -- Курсив (BOOLEAN)
+    u TEXT, -- Подчеркивание (например, 'single', 'double') -- НОВОЕ
+    strike INTEGER, -- Зачеркнутый (BOOLEAN) -- НОВОЕ
     color_theme INTEGER,
     color_type TEXT,
     color_rgb TEXT,
-    scheme TEXT,
+    vert_align TEXT, -- Вертикальное выравнивание текста в строке (например, 'superscript', 'subscript') -- НОВОЕ
+    scheme TEXT, -- Схема шрифта -- НОВОЕ
     family INTEGER,
     charset INTEGER,
-    UNIQUE(name, sz, b, i, color_theme, color_type, color_rgb, scheme, family, charset)
+    UNIQUE(name, sz, b, i, u, strike, color_theme, color_type, color_rgb, vert_align, scheme, family, charset) -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE
 )
 '''
 
@@ -226,11 +230,12 @@ CREATE TABLE IF NOT EXISTS alignments (
 )
 '''
 
+# === ИСПРАВЛЕНО: Добавлены значения по умолчанию ===
 CREATE_PROTECTIONS_TABLE = '''
 CREATE TABLE IF NOT EXISTS protections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    locked INTEGER, -- BOOLEAN
-    hidden INTEGER, -- BOOLEAN
+    locked INTEGER DEFAULT 1, -- BOOLEAN, по умолчанию заблокировано -- ИЗМЕНЕНО
+    hidden INTEGER DEFAULT 0, -- BOOLEAN, по умолчанию не скрыто -- ИЗМЕНЕНО
     UNIQUE(locked, hidden)
 )
 '''
@@ -296,25 +301,25 @@ CREATE TABLE IF NOT EXISTS edit_history (
 # ================================================
 
 # Список всех SQL-запросов - ДОБАВЛЕН НОВЫЙ ЗАПРОС В КОНЕЦ СПИСКА
-TABLE_CREATION_QUERIES = [
-    CREATE_PROJECTS_TABLE,
-    CREATE_SHEETS_TABLE,
-    CREATE_FORMULAS_TABLE,
-    CREATE_CROSS_SHEET_REFS_TABLE,
-    CREATE_CHARTS_TABLE,
-    CREATE_CHART_AXES_TABLE,
-    CREATE_CHART_SERIES_TABLE,
-    CREATE_CHART_DATA_SOURCES_TABLE,
-    CREATE_RAW_DATA_TABLES_REGISTRY,
-    CREATE_FONTS_TABLE,
-    CREATE_PATTERN_FILLS_TABLE,
-    CREATE_BORDERS_TABLE,
-    CREATE_ALIGNMENTS_TABLE,
-    CREATE_PROTECTIONS_TABLE,
-    CREATE_CELL_STYLES_TABLE,
-    CREATE_STYLED_RANGES_TABLE,
-    CREATE_MERGED_CELLS_TABLE,
-    CREATE_EDIT_HISTORY_TABLE, # <-- ДОБАВИЛИ СЮДА
+TABLE_CREATION_QUERIES = [\
+    CREATE_PROJECTS_TABLE,\
+    CREATE_SHEETS_TABLE,\
+    CREATE_FORMULAS_TABLE,\
+    CREATE_CROSS_SHEET_REFS_TABLE,\
+    CREATE_CHARTS_TABLE,\
+    CREATE_CHART_AXES_TABLE,\
+    CREATE_CHART_SERIES_TABLE,\
+    CREATE_CHART_DATA_SOURCES_TABLE,\
+    CREATE_RAW_DATA_TABLES_REGISTRY,\
+    CREATE_FONTS_TABLE,\
+    CREATE_PATTERN_FILLS_TABLE,\
+    CREATE_BORDERS_TABLE,\
+    CREATE_ALIGNMENTS_TABLE,\
+    CREATE_PROTECTIONS_TABLE,\
+    CREATE_CELL_STYLES_TABLE,\
+    CREATE_STYLED_RANGES_TABLE,\
+    CREATE_MERGED_CELLS_TABLE,\
+    CREATE_EDIT_HISTORY_TABLE, # <-- ДОБАВИЛИ СЮДА\
 ]
 
 def initialize_schema(cursor: sqlite3.Cursor):
