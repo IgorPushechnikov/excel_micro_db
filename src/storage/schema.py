@@ -154,14 +154,14 @@ CREATE TABLE IF NOT EXISTS fonts (
     i INTEGER, -- Курсив (BOOLEAN)
     u TEXT, -- Подчеркивание (например, 'single', 'double') -- НОВОЕ
     strike INTEGER, -- Зачеркнутый (BOOLEAN) -- НОВОЕ
-    color_theme INTEGER,
-    color_type TEXT,
-    color_rgb TEXT,
+    color_theme INTEGER, -- НОВОЕ
+    color_type TEXT, -- НОВОЕ
+    color_rgb TEXT, -- НОВОЕ
     color_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для цвета -- НОВОЕ
     vert_align TEXT, -- Вертикальное выравнивание текста в строке (например, 'superscript', 'subscript') -- НОВОЕ
     scheme TEXT, -- Схема шрифта -- НОВОЕ
-    family INTEGER,
-    charset INTEGER,
+    family INTEGER, -- НОВОЕ
+    charset INTEGER, -- НОВОЕ
     -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
     UNIQUE(name, sz, b, i, u, strike, color_theme, color_type, color_rgb, color_tint, vert_align, scheme, family, charset)
 )
@@ -172,13 +172,13 @@ CREATE_PATTERN_FILLS_TABLE = '''
 CREATE TABLE IF NOT EXISTS pattern_fills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patternType TEXT,
-    fgColor_theme INTEGER,
-    fgColor_type TEXT,
-    fgColor_rgb TEXT,
+    fgColor_theme INTEGER, -- НОВОЕ
+    fgColor_type TEXT, -- НОВОЕ
+    fgColor_rgb TEXT, -- НОВОЕ
     fgColor_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для fg цвета -- НОВОЕ
-    bgColor_theme INTEGER,
-    bgColor_type TEXT,
-    bgColor_rgb TEXT,
+    bgColor_theme INTEGER, -- НОВОЕ
+    bgColor_type TEXT, -- НОВОЕ
+    bgColor_rgb TEXT, -- НОВОЕ
     bgColor_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для bg цвета -- НОВОЕ
     -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
     UNIQUE(patternType, fgColor_theme, fgColor_type, fgColor_rgb, fgColor_tint, bgColor_theme, bgColor_type, bgColor_rgb, bgColor_tint)
@@ -190,29 +190,29 @@ CREATE_BORDERS_TABLE = '''
 CREATE TABLE IF NOT EXISTS borders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     left_style TEXT,
-    left_color_theme INTEGER,
-    left_color_type TEXT,
-    left_color_rgb TEXT,
+    left_color_theme INTEGER, -- НОВОЕ
+    left_color_type TEXT, -- НОВОЕ
+    left_color_rgb TEXT, -- НОВОЕ
     left_color_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для left цвета -- НОВОЕ
     right_style TEXT,
-    right_color_theme INTEGER,
-    right_color_type TEXT,
-    right_color_rgb TEXT,
+    right_color_theme INTEGER, -- НОВОЕ
+    right_color_type TEXT, -- НОВОЕ
+    right_color_rgb TEXT, -- НОВОЕ
     right_color_tint REAL, -- НОВОЕ
     top_style TEXT,
-    top_color_theme INTEGER,
-    top_color_type TEXT,
-    top_color_rgb TEXT,
+    top_color_theme INTEGER, -- НОВОЕ
+    top_color_type TEXT, -- НОВОЕ
+    top_color_rgb TEXT, -- НОВОЕ
     top_color_tint REAL, -- НОВОЕ
     bottom_style TEXT,
-    bottom_color_theme INTEGER,
-    bottom_color_type TEXT,
-    bottom_color_rgb TEXT,
+    bottom_color_theme INTEGER, -- НОВОЕ
+    bottom_color_type TEXT, -- НОВОЕ
+    bottom_color_rgb TEXT, -- НОВОЕ
     bottom_color_tint REAL, -- НОВОЕ
     diagonal_style TEXT,
-    diagonal_color_theme INTEGER,
-    diagonal_color_type TEXT,
-    diagonal_color_rgb TEXT,
+    diagonal_color_theme INTEGER, -- НОВОЕ
+    diagonal_color_type TEXT, -- НОВОЕ
+    diagonal_color_rgb TEXT, -- НОВОЕ
     diagonal_color_tint REAL, -- НОВОЕ
     diagonalUp INTEGER, -- BOOLEAN
     diagonalDown INTEGER, -- BOOLEAN
@@ -227,19 +227,21 @@ CREATE TABLE IF NOT EXISTS borders (
 )
 '''
 
+# === ИСПРАВЛЕНО: Имя столбца textRotation -> text_rotation ===
 CREATE_ALIGNMENTS_TABLE = '''
 CREATE TABLE IF NOT EXISTS alignments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     horizontal TEXT,
     vertical TEXT,
-    textRotation REAL,
+    text_rotation REAL, -- ИСПРАВЛЕНО: textRotation -> text_rotation для соответствия SQL-запросам в styles.py
     wrapText INTEGER, -- BOOLEAN
     shrinkToFit INTEGER, -- BOOLEAN
     indent REAL,
     relativeIndent REAL,
     justifyLastLine INTEGER, -- BOOLEAN
     readingOrder REAL,
-    UNIQUE(horizontal, vertical, textRotation, wrapText, shrinkToFit, indent, relativeIndent, justifyLastLine, readingOrder)
+    -- ИЗМЕНЕНО: Добавлен text_rotation в UNIQUE constraint
+    UNIQUE(horizontal, vertical, text_rotation, wrapText, shrinkToFit, indent, relativeIndent, justifyLastLine, readingOrder)
 )
 '''
 
@@ -253,6 +255,7 @@ CREATE TABLE IF NOT EXISTS protections (
 )
 '''
 
+# === ИСПРАВЛЕНО: Добавлены недостающие столбцы ===
 CREATE_CELL_STYLES_TABLE = '''
 CREATE TABLE IF NOT EXISTS cell_styles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -261,9 +264,9 @@ CREATE TABLE IF NOT EXISTS cell_styles (
     border_id INTEGER REFERENCES borders(id),
     alignment_id INTEGER REFERENCES alignments(id),
     protection_id INTEGER REFERENCES protections(id),
-    num_fmt_id INTEGER, -- ID формата чисел
-    xf_id INTEGER, -- ID XF
-    quote_prefix INTEGER, -- BOOLEAN
+    num_fmt_id INTEGER, -- ID формата чисел -- НОВОЕ
+    xf_id INTEGER, -- ID XF -- НОВОЕ
+    quote_prefix INTEGER, -- BOOLEAN -- НОВОЕ
     UNIQUE(font_id, fill_id, border_id, alignment_id, protection_id, num_fmt_id, xf_id, quote_prefix)
 )
 '''
