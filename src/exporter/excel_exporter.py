@@ -68,46 +68,31 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
     if 'font_name' in style_attributes and style_attributes['font_name'] is not None:
         format_props['font_name'] = style_attributes['font_name']
     if 'font_sz' in style_attributes and style_attributes['font_sz'] is not None:
-        # XlsxWriter ожидает 'font_size'
         format_props['font_size'] = float(style_attributes['font_sz'])
     if 'font_b' in style_attributes:
-        # XlsxWriter ожидает 'bold'
         format_props['bold'] = bool(style_attributes['font_b'])
     if 'font_i' in style_attributes:
-        # XlsxWriter ожидает 'italic'
         format_props['italic'] = bool(style_attributes['font_i'])
     if 'font_u' in style_attributes and style_attributes['font_u'] is not None:
-        # XlsxWriter ожидает 'underline'
-        format_props['underline'] = style_attributes['font_u'] # 'single', 'double' etc.
+        format_props['underline'] = style_attributes['font_u']
     if 'font_strike' in style_attributes:
-        # XlsxWriter ожидает 'font_strikeout'
         format_props['font_strikeout'] = bool(style_attributes['font_strike'])
-    # Цвет шрифта
-    # XlsxWriter поддерживает 'font_color' в формате '#RRGGBB' или 'color_name'
     if 'font_color_rgb' in style_attributes and style_attributes['font_color_rgb'] is not None:
-        # Добавляем # если его нет
         color_val = style_attributes['font_color_rgb']
         if not color_val.startswith('#'):
-            # Предполагаем, что это hex без #
-            if len(color_val) == 6 or len(color_val) == 8: # RRGGBB or AARRGGBB
-                 format_props['font_color'] = f"#{color_val[-6:]}" # Берем последние 6 символов для RRGGBB
+            if len(color_val) == 6 or len(color_val) == 8:
+                 format_props['font_color'] = f"#{color_val[-6:]}"
             else:
                  logger.warning(f"Неожиданный формат цвета шрифта: {color_val}")
         else:
              format_props['font_color'] = color_val
     # TODO: Обработка других атрибутов шрифта (theme, tint, vert_align, scheme)
-    # Это может потребовать дополнительной логики или игнорирования, если XlsxWriter не поддерживает напрямую.
 
     # --- Заливка ---
-    # XlsxWriter использует 'bg_color' и 'pattern' для заливки.
-    # 'pattern' соответствует 'patternType' из openpyxl (например, 'solid')
-    # 'bg_color' соответствует 'fgColor' из openpyxl, если pattern='solid'
     pattern_type = style_attributes.get('fill_patternType')
     if pattern_type:
-        # XlsxWriter использует немного другие названия паттернов, но 'solid' должен работать.
-        # Другие паттерны могут требовать сопоставления.
-        format_props['pattern'] = 1 if pattern_type == 'solid' else 0 # 1 для solid, 0 для none как стандарт
-        # Цвет заливки
+        # 'solid' в openpyxl -> 1 в XlsxWriter, другие -> 0 или нужно сопоставлять
+        format_props['pattern'] = 1 if pattern_type == 'solid' else 0
         if 'fill_fg_color_rgb' in style_attributes and style_attributes['fill_fg_color_rgb'] is not None:
             color_val = style_attributes['fill_fg_color_rgb']
             if not color_val.startswith('#'):
@@ -117,35 +102,17 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
                      logger.warning(f"Неожиданный формат цвета заливки: {color_val}")
             else:
                  format_props['bg_color'] = color_val
-        # TODO: Обработка bgColor из openpyxl (который используется для других паттернов)
-        # и других атрибутов заливки (theme, tint)
+    # TODO: Обработка bgColor и других атрибутов заливки (theme, tint)
 
     # --- Границы ---
-    # XlsxWriter поддерживает границы через атрибуты 'left', 'right', 'top', 'bottom', 'diag_type', 'diag_border'
-    # Каждая граница определяется словарем {'style': ..., 'color': ...}
     border_props = {}
-    # Пример для левой границы
-    left_style = style_attributes.get('border_left_style')
-    if left_style:
-        border_props['left'] = {'style': left_style}
-        if 'border_left_color_rgb' in style_attributes and style_attributes['border_left_color_rgb'] is not None:
-            color_val = style_attributes['border_left_color_rgb']
-            if not color_val.startswith('#'):
-                if len(color_val) == 6 or len(color_val) == 8:
-                     border_props['left']['color'] = f"#{color_val[-6:]}"
-                else:
-                     logger.warning(f"Неожиданный формат цвета границы (left): {color_val}")
-            else:
-                 border_props['left']['color'] = color_val
-    # Аналогично для других сторон
-    for side in ['right', 'top', 'bottom']: # 'diagonal' требует особой обработки
+    for side in ['left', 'right', 'top', 'bottom']:
         side_style_key = f'border_{side}_style'
         side_color_key = f'border_{side}_color_rgb'
         side_style = style_attributes.get(side_style_key)
         if side_style:
-            if side not in border_props:
-                border_props[side] = {}
-            border_props[side]['style'] = side_style
+            # В XlsxWriter граница определяется словарем {'style': ..., 'color': ...}
+            border_props[side] = {'style': side_style}
             if side_color_key in style_attributes and style_attributes[side_color_key] is not None:
                 color_val = style_attributes[side_color_key]
                 if not color_val.startswith('#'):
@@ -156,11 +123,10 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
                 else:
                      border_props[side]['color'] = color_val
 
-    # Диагональные границы (если используются)
-    # XlsxWriter использует 'diag_type' (0=none, 1=down, 2=up, 3=both) и 'diag_border'
+    # Диагональные границы
     diag_up = style_attributes.get('border_diagonalUp')
     diag_down = style_attributes.get('border_diagonalDown')
-    diag_type = 0
+    diag_type = 0 # 0=none, 1=down, 2=up, 3=both
     if diag_up and diag_down:
         diag_type = 3 # both
     elif diag_down:
@@ -171,44 +137,34 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
         border_props['diag_type'] = diag_type
         diag_style = style_attributes.get('border_diagonal_style')
         if diag_style:
-            border_props['diag_border'] = {'style': diag_style}
-            if 'border_diagonal_color_rgb' in style_attributes and style_attributes['border_diagonal_color_rgb'] is not None:
-                color_val = style_attributes['border_diagonal_color_rgb']
-                if not color_val.startswith('#'):
-                    if len(color_val) == 6 or len(color_val) == 8:
-                         border_props['diag_border']['color'] = f"#{color_val[-6:]}"
-                    else:
-                         logger.warning(f"Неожиданный формат цвета диагональной границы: {color_val}")
-                else:
-                     border_props['diag_border']['color'] = color_val
+             border_props['diag_border'] = {'style': diag_style}
+             if 'border_diagonal_color_rgb' in style_attributes and style_attributes['border_diagonal_color_rgb'] is not None:
+                 color_val = style_attributes['border_diagonal_color_rgb']
+                 if not color_val.startswith('#'):
+                     if len(color_val) == 6 or len(color_val) == 8:
+                          border_props['diag_border']['color'] = f"#{color_val[-6:]}"
+                     else:
+                          logger.warning(f"Неожиданный формат цвета диагональной границы: {color_val}")
+                 else:
+                      border_props['diag_border']['color'] = color_val
 
-    # Если были определены границы, добавляем их в формат
     if border_props:
         format_props.update(border_props)
 
     # --- Выравнивание ---
-    # XlsxWriter использует 'align' (горизонтальное) и 'valign' (вертикальное)
     h_align = style_attributes.get('alignment_horizontal')
     if h_align:
-        # Некоторые значения могут отличаться, например 'centerContinuous' в openpyxl -> 'center_across' в XlsxWriter
-        # Пока используем напрямую, можно добавить сопоставление при необходимости.
-        format_props['align'] = h_align
+        format_props['align'] = h_align # 'left', 'center', 'right' и т.д. должны совпадать
     v_align = style_attributes.get('alignment_vertical')
     if v_align:
-        # 'top', 'center', 'bottom' должны совпадать
-        format_props['valign'] = v_align
-
-    # Другие атрибуты выравнивания
-    if 'alignment_wrapText' in style_attributes: # <-- Исправлено: Имя столбца из БД
-        format_props['text_wrap'] = bool(style_attributes['alignment_wrapText']) # <-- Исправлено: Имя столбца из БД
-    if 'alignment_shrinkToFit' in style_attributes: # <-- Исправлено: Имя столбца из БД
-        # XlsxWriter использует 'shrink'
-        format_props['shrink'] = bool(style_attributes['alignment_shrinkToFit']) # <-- Исправлено: Имя столбца из БД
+        format_props['valign'] = v_align # 'top', 'center', 'bottom' должны совпадать
+    if 'alignment_wrapText' in style_attributes:
+        format_props['text_wrap'] = bool(style_attributes['alignment_wrapText'])
+    if 'alignment_shrinkToFit' in style_attributes:
+        format_props['shrink'] = bool(style_attributes['alignment_shrinkToFit'])
     # TODO: Обработка других атрибутов выравнивания (indent, rotation, reading_order и т.д.)
-    # если они будут использоваться.
 
     # --- Защита ---
-    # XlsxWriter использует 'locked' и 'hidden' напрямую в формате
     if 'protection_locked' in style_attributes:
         format_props['locked'] = bool(style_attributes['protection_locked'])
     if 'protection_hidden' in style_attributes:
@@ -216,12 +172,8 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
 
     # --- Другие атрибуты ---
     # num_format - формат чисел
-    # XlsxWriter использует 'num_format'
-    if 'num_fmt_id' in style_attributes and style_attributes['num_fmt_id'] is not None:
-        # TODO: Нужно сопоставить num_fmt_id с реальным строковым форматом.
-        # Пока оставим заглушку или пропустим, если это не критично на данном этапе.
-        # format_props['num_format'] = ...
-        pass # Пропускаем, так как у нас нет маппинга ID -> строка формата
+    # if 'num_fmt_id' in style_attributes and style_attributes['num_fmt_id'] is not None:
+    #     format_props['num_format'] = ... # TODO: Маппинг ID -> строка
 
     logger.debug(f"Преобразованы атрибуты стиля для XlsxWriter: {format_props}")
     return format_props
@@ -251,10 +203,8 @@ def export_project_from_db(db_path: str, output_path: str) -> bool:
         logger.error(f"Файл БД проекта не найден: {db_path}")
         return False
 
-    # Инициализация workbook вне блока try для корректной обработки в except
     workbook = None
     try:
-        # Импорт внутри блока try, чтобы избежать проблем при импорте модуля
         from src.storage.base import ProjectDBStorage
 
         workbook = xlsxwriter.Workbook(str(output_path_obj))
@@ -295,13 +245,9 @@ def export_project_from_db(db_path: str, output_path: str) -> bool:
             for sheet_id, sheet_name in sheet_list:
                 logger.info(f"Экспорт листа: {sheet_name} (ID: {sheet_id})")
                 worksheet = workbook.add_worksheet(sheet_name)
-                # Передаем экземпляр storage и имя/ID листа
                 _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id, sheet_name)
-                # Объединенные ячейки также экспортируем отдельно, если нужно
-                # (или интегрировать в _export_sheet_content_with_styles)
-                # Для простоты оставим отдельно, как в оригинале каркаса
+                # Объединенные ячейки экспортируем отдельно
                 # _export_sheet_merged_cells(worksheet, storage, sheet_id, sheet_name)
-                # TODO: Реализовать _export_sheet_merged_cells, если они не экспортируются в _export_sheet_content_with_styles
 
         workbook.close()
         logger.info(f"Файл Excel успешно сохранен: {output_path}")
@@ -310,7 +256,6 @@ def export_project_from_db(db_path: str, output_path: str) -> bool:
 
     except Exception as e:
         logger.error(f"Ошибка при экспорте проекта в файл '{output_path}': {e}", exc_info=True)
-        # Пытаемся закрыть workbook, если он был создан, чтобы избежать повреждения файла
         try:
             if workbook is not None:
                 workbook.close()
@@ -322,47 +267,37 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
     """
     Экспортирует данные, формулы и стили листа.
     Сначала собирает данные и стили в промежуточную структуру, затем записывает в worksheet.
-
-    Args:
-        workbook: Экземпляр xlsxwriter.Workbook.
-        worksheet: Экземпляр xlsxwriter.Workbook.add_worksheet.
-        storage: Экземпляр ProjectDBStorage для загрузки данных.
-        sheet_id (int): ID листа в БД.
-        sheet_name (str): Имя листа.
     """
     try:
         logger.debug(f"Начало экспорта содержимого листа '{sheet_name}' с применением стилей.")
 
         # --- 1. Сбор данных ---
         logger.debug(f"Загрузка редактируемых данных для листа '{sheet_name}'...")
-        editable_data_result = storage.load_sheet_editable_data(sheet_name)
-
         # === ИСПРАВЛЕНО: Проверка типа результата ===
+        editable_data_result = storage.load_sheet_editable_data(sheet_name)
         if not isinstance(editable_data_result, dict):
             logger.error(f"load_sheet_editable_data для листа '{sheet_name}' вернула {type(editable_data_result)}, ожидался dict.")
             editable_data_result = {"column_names": [], "rows": []}
-
-        column_names = editable_data_result.get("column_names", [])
         # === ИСПРАВЛЕНО: Обработка rows как списка кортежей ===
+        column_names = editable_data_result.get("column_names", [])
         rows_as_tuples = editable_data_result.get("rows", [])
 
         if not column_names:
             logger.warning(f"Нет данных для экспорта на листе '{sheet_name}'.")
-            return # Возвращаемся, если данных нет
+            return
 
         # Промежуточная структура: {(row, col): (value, formula, format_dict)}
-        # row, col - 0-based индексы
         sheet_content: Dict[Tuple[int, int], Tuple[Any, Optional[str], Optional[Dict[str, Any]]]] = {}
 
         # --- 2. Запись заголовков (строка 0) ---
         for col_idx, col_name in enumerate(column_names):
-            sheet_content[(0, col_idx)] = (col_name, None, None) # Заголовки без формулы и стиля из БД
+            sheet_content[(0, col_idx)] = (col_name, None, None)
 
         # --- 3. Запись данных (начиная со строки 1) ---
         for row_idx, row_tuple in enumerate(rows_as_tuples, start=1):
             for col_idx, value in enumerate(row_tuple):
                  if col_idx < len(column_names):
-                     sheet_content[(row_idx, col_idx)] = (value, None, None) # Пока без формулы и стиля
+                     sheet_content[(row_idx, col_idx)] = (value, None, None)
                  else:
                      logger.warning(f"Строка {row_idx} содержит больше значений, чем ожидаемых столбцов. Лишние значения проигнорированы.")
 
@@ -371,16 +306,12 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
         formulas_data = storage.load_sheet_formulas(sheet_id)
         logger.debug(f"Найдено {len(formulas_data)} формул для экспорта на листе '{sheet_name}'.")
         for formula_info in formulas_data:
-            cell_address = formula_info.get("cell", "")  # Например, "F2"
-            formula = formula_info.get("formula", "")    # Например, "=SUM(B2:E2)"
-
+            cell_address = formula_info.get("cell", "")
+            formula = formula_info.get("formula", "")
             if cell_address and formula:
                 row_idx, col_idx = _parse_cell_address_to_indices(cell_address)
                 if row_idx != -1 and col_idx != -1:
-                    # XlsxWriter позволяет записывать формулы напрямую
-                    # Убедиться, что формула начинается с '='
                     formula_to_write = formula if formula.startswith('=') else f"={formula}"
-                    # Обновляем запись в промежуточной структуре
                     current_value, _, current_format = sheet_content.get((row_idx, col_idx), ("", None, None))
                     sheet_content[(row_idx, col_idx)] = (current_value, formula_to_write, current_format)
                     logger.debug(f"Формула добавлена для ячейки ({row_idx}, {col_idx}): {formula_to_write}")
@@ -392,7 +323,6 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
         styled_ranges_data = storage.load_sheet_styles(sheet_id)
         logger.debug(f"Применение {len(styled_ranges_data)} стилевых диапазонов на листе '{sheet_name}'.")
 
-        # Кэш для преобразованных форматов, чтобы не создавать одинаковые объекты
         format_cache: Dict[str, Any] = {}
 
         for style_range_info in styled_ranges_data:
@@ -404,19 +334,15 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
                 continue
             if not style_attributes:
                 logger.debug(f"Пропущен стиль для диапазона {range_address} из-за отсутствия атрибутов.")
-                continue # Нечего применять
+                continue
 
-            # Преобразуем атрибуты стиля из формата БД в формат XlsxWriter
             format_dict = _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes)
 
             if not format_dict:
                 logger.debug(f"Преобразование стиля для диапазона {range_address} не дало параметров формата. Пропущено.")
-                continue # Нечего применять
+                continue
 
-            # Создаем уникальный ключ для кэша на основе словаря атрибутов
-            # sorted + str для детерминированного ключа
             cache_key = str(sorted(format_dict.items()))
-            # Проверяем кэш
             if cache_key in format_cache:
                 cell_format = format_cache[cache_key]
                 logger.debug(f"Формат для стиля из кэша: {cache_key}")
@@ -427,67 +353,61 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
                     logger.debug(f"Создан новый формат для стиля: {cache_key}")
                 except Exception as format_error:
                     logger.error(f"Ошибка создания формата XlsxWriter: {format_error}")
-                    continue # Пропускаем этот стиль
+                    continue
 
-            # Парсим адрес диапазона
             start_row, start_col, end_row, end_col = _parse_range_address_to_indices(range_address)
 
-            # Проверка на корректность диапазона
             if end_row < start_row or end_col < start_col:
                 logger.warning(f"Некорректный диапазон для стиля: {range_address}. Пропущено.")
                 continue
 
             logger.debug(f"Применение стиля к диапазону {range_address} (строки {start_row}-{end_row}, столбцы {start_col}-{end_col}).")
 
-            # Итерируемся по строкам и столбцам диапазона
             for r in range(start_row, end_row + 1):
                 for c in range(start_col, end_col + 1):
-                    # Получаем текущее значение и формулу из промежуточной структуры
                     current_value, current_formula, _ = sheet_content.get((r, c), ("", None, None))
-                    # Обновляем запись в промежуточной структуре с форматом
-                    sheet_content[(r, c)] = (current_value, current_formula, format_dict) # Сохраняем dict для лога и кэширования
+                    sheet_content[(r, c)] = (current_value, current_formula, format_dict)
                     logger.debug(f"Применен стиль к ячейке ({r}, {c})")
 
         # --- 6. Запись в worksheet из промежуточной структуры ---
         logger.debug(f"Запись содержимого листа '{sheet_name}' в файл Excel. Всего ячеек: {len(sheet_content)}.")
         for (row, col), (value, formula, format_dict) in sheet_content.items():
-            # Получаем формат из кэша, если он был применен
             format_to_use = None
             if format_dict:
                  cache_key = str(sorted(format_dict.items()))
                  format_to_use = format_cache.get(cache_key)
 
-            # XlsxWriter различает запись данных и формул
             if formula:
-                 # Если есть формула, записываем её. Формулы в XlsxWriter перезаписывают значение.
                  worksheet.write_formula(row, col, formula, format_to_use)
                  logger.debug(f"Записана формула в ({row}, {col}): {formula}")
             else:
-                 # Если формулы нет, записываем значение
                  worksheet.write(row, col, value, format_to_use)
                  logger.debug(f"Записано значение в ({row}, {col}): {value}")
 
         # --- 7. Экспорт объединенных ячеек ---
-        logger.debug(f"Загрузка объединенных ячеек для листа '{sheet_name}' (ID: {sheet_id})...")
-        merged_cells_data = storage.load_sheet_merged_cells(sheet_id)
-        logger.debug(f"Экспорт {len(merged_cells_data)} объединенных диапазонов на листе '{sheet_name}'.")
-        for range_address in merged_cells_data:
-            if range_address:
-                start_row, start_col, end_row, end_col = _parse_range_address_to_indices(range_address)
-                if end_row >= start_row and end_col >= start_col:
-                    # merge_range требует значение. Пока используем пустую строку.
-                    # В будущем можно попытаться определить значение из левой верхней ячейки.
-                    worksheet.merge_range(start_row, start_col, end_row, end_col, "", None)
-                    logger.debug(f"Объединен диапазон: {range_address}")
-                else:
-                    logger.warning(f"Некорректный адрес объединенного диапазона: {range_address}")
+        # === ИСПРАВЛЕНО: Закомментирован вызов несуществующего метода ===
+        # logger.debug(f"Загрузка объединенных ячеек для листа '{sheet_name}' (ID: {sheet_id})...")
+        # Проверяем, существует ли метод load_sheet_merged_cells в storage
+        # if hasattr(storage, 'load_sheet_merged_cells'):
+        #     merged_cells_data = storage.load_sheet_merged_cells(sheet_id)
+        #     logger.debug(f"Экспорт {len(merged_cells_data)} объединенных диапазонов на листе '{sheet_name}'.")
+        #     for range_address in merged_cells_data:
+        #         if range_address:
+        #             start_row, start_col, end_row, end_col = _parse_range_address_to_indices(range_address)
+        #             if end_row >= start_row and end_col >= start_col:
+        #                 worksheet.merge_range(start_row, start_col, end_row, end_col, "", None)
+        #                 logger.debug(f"Объединен диапазон: {range_address}")
+        #             else:
+        #                 logger.warning(f"Некорректный адрес объединенного диапазона: {range_address}")
+        # else:
+        #     logger.warning(f"Метод load_sheet_merged_cells не найден в storage. Экспорт объединенных ячеек пропущен для листа '{sheet_name}'.")
+        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
+        logger.debug(f"Экспорт объединенных ячеек временно отключен.")
 
         logger.debug(f"Экспорт содержимого листа '{sheet_name}' с применением стилей завершен.")
 
     except Exception as e:
         logger.error(f"Ошибка при экспорте содержимого/стилей листа '{sheet_name}': {e}", exc_info=True)
-        # Можно выбрасывать исключение выше или продолжать с другими листами
-        # raise # Выбрасываем, чтобы ошибка поднялась в export_project_from_db
 
 # Точка входа для тестирования напрямую
 if __name__ == "__main__":
@@ -505,7 +425,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Настройка логирования для прямого запуска
     log_level = getattr(logging, args.log_level.upper())
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     console_handler = logging.StreamHandler(sys.stdout)
