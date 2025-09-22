@@ -26,7 +26,7 @@ from src.storage.base import ProjectDBStorage    # <-- НОВОЕ
 
 # Импорт для аннотаций типов, избегая циклических импортов
 if TYPE_CHECKING:
-    from src.constructor.widgets.sheet_editor import SheetEditor  # type: ignore
+    from src.constructor.widgets.sheet_editor_widgets import SheetEditor  # type: ignore
 
 # --- ИНТЕГРАЦИЯ ANALYZER: Импорт модуля анализа ---
 from src.analyzer.logic_documentation import analyze_excel_file
@@ -317,7 +317,8 @@ class AppController:
             # на уровне модуля, если exporter когда-нибудь будет импортировать AppController.
             # ИСПРАВЛЕНО: Импорт из правильного модуля и правильной функции
             # from src.exporter.excel_exporter import export_project_to_excel # <-- СТАРОЕ
-            from src.exporter.direct_db_exporter import export_project_from_db # <-- НОВОЕ
+            # from src.exporter.direct_db_exporter import export_project_from_db # <-- НОВОЕ
+            from src.exporter.excel_exporter import export_project_from_db
 
             # Вызываем функцию экспорта, передавая путь к проекту и путь к выходному файлу
             # Определяем путь к БД проекта
