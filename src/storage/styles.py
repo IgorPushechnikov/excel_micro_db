@@ -159,7 +159,7 @@ def save_sheet_styles(connection: sqlite3.Connection, sheet_id: int, styled_rang
                 continue
             # 2. Сохраняем связь стиль-диапазон
             cursor.execute('''
-                INSERT OR IGNORE INTO styled_ranges (sheet_id, style_id, range_address) 
+                INSERT OR IGNORE INTO styled_ranges (sheet_id, style_id, range_address)
                 VALUES (?, ?, ?)
             ''', (sheet_id, style_id, range_addr))
         connection.commit()
@@ -191,15 +191,16 @@ def load_sheet_styles(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
         cursor = connection.cursor()
         # Запрашиваем связанные стили и диапазоны
         # Это сложный JOIN, который собирает всю информацию о стиле
+        # === ИСПРАВЛЕНО: Имена столбцов в SELECT строго соответствуют schema.py ===
         cursor.execute('''
-            SELECT 
+            SELECT
                 sr.range_address,
-                f.name, f.sz, f.b, f.i, f.u, f.strike, f.color, f.color_theme, f.color_tint, f.vert_align, f.scheme,
-                pf.pattern_type, pf.fg_color, pf.fg_color_theme, pf.fg_color_tint, pf.bg_color, pf.bg_color_theme, pf.bg_color_tint,
-                b.left_style, b.left_color, b.right_style, b.right_color, b.top_style, b.top_color,
-                b.bottom_style, b.bottom_color, b.diagonal_style, b.diagonal_color, b.diagonal_up, b.diagonal_down, b.outline,
+                f.name, f.sz, f.b, f.i, f.u, f.strike, f.color_rgb, f.color_theme, f.color_tint, f.vert_align, f.scheme, f.family, f.charset,
+                pf.patternType, pf.fgColor_rgb, pf.fgColor_theme, pf.fgColor_tint, pf.bgColor_rgb, pf.bgColor_theme, pf.bgColor_tint,
+                b.left_style, b.left_color_rgb, b.right_style, b.right_color_rgb, b.top_style, b.top_color_rgb,
+                b.bottom_style, b.bottom_color_rgb, b.diagonal_style, b.diagonal_color_rgb, b.diagonal_up, b.diagonal_down, b.outline,
                 a.horizontal, a.vertical, a.text_rotation, a.wrap_text, a.shrink_to_fit, a.indent,
-                a.relative_indent, a.justify_last_line, a.reading_order, a.text_direction,
+                a.relative_indent, a.justify_last_line, a.reading_order,
                 p.locked, p.hidden,
                 cs.num_fmt_id, cs.xf_id, cs.quote_prefix
             FROM styled_ranges sr
@@ -211,43 +212,44 @@ def load_sheet_styles(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
             LEFT JOIN protections p ON cs.protection_id = p.id
             WHERE sr.sheet_id = ?
         ''', (sheet_id,))
+        # ======================================================================
         rows = cursor.fetchall()
         for row in rows:
             range_addr = row[0]
             # Собираем атрибуты стиля из результата запроса
             style_attrs = {}
-            # Font (индексы 1-11)
-            font_keys = ["name", "sz", "b", "i", "u", "strike", "color", "color_theme", "color_tint", "vert_align", "scheme"]
+            # Font (индексы 1-13)
+            font_keys = ["name", "sz", "b", "i", "u", "strike", "color_rgb", "color_theme", "color_tint", "vert_align", "scheme", "family", "charset"]
             for i, key in enumerate(font_keys):
                 if row[i+1] is not None: # +1 потому что range_address это 0
                     style_attrs[f"font_{key}"] = row[i+1]
-            # Fill (индексы 12-18)
-            fill_keys = ["pattern_type", "fg_color", "fg_color_theme", "fg_color_tint", "bg_color", "bg_color_theme", "bg_color_tint"]
+            # Fill (индексы 14-20)
+            fill_keys = ["patternType", "fgColor_rgb", "fgColor_theme", "fgColor_tint", "bgColor_rgb", "bgColor_theme", "bgColor_tint"]
             for i, key in enumerate(fill_keys):
-                if row[i+12] is not None:
-                    style_attrs[f"fill_{key}"] = row[i+12]
-            # Border (индексы 19-30)
-            border_keys = ["left_style", "left_color", "right_style", "right_color", "top_style", "top_color",
-                           "bottom_style", "bottom_color", "diagonal_style", "diagonal_color", "diagonal_up", "diagonal_down", "outline"]
+                if row[i+14] is not None:
+                    style_attrs[f"fill_{key}"] = row[i+14]
+            # Border (индексы 21-33)
+            border_keys = ["left_style", "left_color_rgb", "right_style", "right_color_rgb", "top_style", "top_color_rgb",
+                           "bottom_style", "bottom_color_rgb", "diagonal_style", "diagonal_color_rgb", "diagonal_up", "diagonal_down", "outline"]
             for i, key in enumerate(border_keys):
-                if row[i+19] is not None:
-                    style_attrs[f"border_{key}"] = row[i+19]
-            # Alignment (индексы 31-41)
+                if row[i+21] is not None:
+                    style_attrs[f"border_{key}"] = row[i+21]
+            # Alignment (индексы 34-43)
             align_keys = ["horizontal", "vertical", "text_rotation", "wrap_text", "shrink_to_fit", "indent",
-                          "relative_indent", "justify_last_line", "reading_order", "text_direction"]
+                          "relative_indent", "justify_last_line", "reading_order"]
             for i, key in enumerate(align_keys):
-                if row[i+31] is not None:
-                    style_attrs[f"alignment_{key}"] = row[i+31]
-            # Protection (индексы 42-43)
+                if row[i+34] is not None:
+                    style_attrs[f"alignment_{key}"] = row[i+34]
+            # Protection (индексы 44-45)
             prot_keys = ["locked", "hidden"]
             for i, key in enumerate(prot_keys):
-                if row[i+42] is not None:
-                    style_attrs[f"protection_{key}"] = row[i+42]
-            # Cell Style main attrs (индексы 44-46)
+                if row[i+44] is not None:
+                    style_attrs[f"protection_{key}"] = row[i+44]
+            # Cell Style main attrs (индексы 46-48)
             cs_keys = ["num_fmt_id", "xf_id", "quote_prefix"]
             for i, key in enumerate(cs_keys):
-                if row[i+44] is not None:
-                    style_attrs[key] = row[i+44]
+                if row[i+46] is not None:
+                    style_attrs[key] = row[i+46]
             styles_data.append({
                 "style_attributes": style_attrs,
                 "range_address": range_addr
