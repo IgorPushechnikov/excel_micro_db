@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS charts (
 )
 '''
 
-# === ИСПРАВЛЕНО: Имена столбцов и добавлен idx ===
+# === ИСПРАВЛЕНО: Имена столбцов и добавлены недостающие ===
 CREATE_CHART_AXES_TABLE = '''
 CREATE TABLE IF NOT EXISTS chart_axes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,14 +157,17 @@ CREATE TABLE IF NOT EXISTS fonts (
     color_theme INTEGER,
     color_type TEXT,
     color_rgb TEXT,
+    color_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для цвета -- НОВОЕ
     vert_align TEXT, -- Вертикальное выравнивание текста в строке (например, 'superscript', 'subscript') -- НОВОЕ
     scheme TEXT, -- Схема шрифта -- НОВОЕ
     family INTEGER,
     charset INTEGER,
-    UNIQUE(name, sz, b, i, u, strike, color_theme, color_type, color_rgb, vert_align, scheme, family, charset) -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE
+    -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
+    UNIQUE(name, sz, b, i, u, strike, color_theme, color_type, color_rgb, color_tint, vert_align, scheme, family, charset)
 )
 '''
 
+# === ИСПРАВЛЕНО: Добавлены недостающие столбцы tint ===
 CREATE_PATTERN_FILLS_TABLE = '''
 CREATE TABLE IF NOT EXISTS pattern_fills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,13 +175,17 @@ CREATE TABLE IF NOT EXISTS pattern_fills (
     fgColor_theme INTEGER,
     fgColor_type TEXT,
     fgColor_rgb TEXT,
+    fgColor_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для fg цвета -- НОВОЕ
     bgColor_theme INTEGER,
     bgColor_type TEXT,
     bgColor_rgb TEXT,
-    UNIQUE(patternType, fgColor_theme, fgColor_type, fgColor_rgb, bgColor_theme, bgColor_type, bgColor_rgb)
+    bgColor_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для bg цвета -- НОВОЕ
+    -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
+    UNIQUE(patternType, fgColor_theme, fgColor_type, fgColor_rgb, fgColor_tint, bgColor_theme, bgColor_type, bgColor_rgb, bgColor_tint)
 )
 '''
 
+# === ИСПРАВЛЕНО: Добавлены недостающие столбцы tint ===
 CREATE_BORDERS_TABLE = '''
 CREATE TABLE IF NOT EXISTS borders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,30 +193,36 @@ CREATE TABLE IF NOT EXISTS borders (
     left_color_theme INTEGER,
     left_color_type TEXT,
     left_color_rgb TEXT,
+    left_color_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для left цвета -- НОВОЕ
     right_style TEXT,
     right_color_theme INTEGER,
     right_color_type TEXT,
     right_color_rgb TEXT,
+    right_color_tint REAL, -- НОВОЕ
     top_style TEXT,
     top_color_theme INTEGER,
     top_color_type TEXT,
     top_color_rgb TEXT,
+    top_color_tint REAL, -- НОВОЕ
     bottom_style TEXT,
     bottom_color_theme INTEGER,
     bottom_color_type TEXT,
     bottom_color_rgb TEXT,
+    bottom_color_tint REAL, -- НОВОЕ
     diagonal_style TEXT,
     diagonal_color_theme INTEGER,
     diagonal_color_type TEXT,
     diagonal_color_rgb TEXT,
+    diagonal_color_tint REAL, -- НОВОЕ
     diagonalUp INTEGER, -- BOOLEAN
     diagonalDown INTEGER, -- BOOLEAN
     outline INTEGER, -- BOOLEAN
-    UNIQUE(left_style, left_color_theme, left_color_type, left_color_rgb,
-           right_style, right_color_theme, right_color_type, right_color_rgb,
-           top_style, top_color_theme, top_color_type, top_color_rgb,
-           bottom_style, bottom_color_theme, bottom_color_type, bottom_color_rgb,
-           diagonal_style, diagonal_color_theme, diagonal_color_type, diagonal_color_rgb,
+    -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
+    UNIQUE(left_style, left_color_theme, left_color_type, left_color_rgb, left_color_tint,
+           right_style, right_color_theme, right_color_type, right_color_rgb, right_color_tint,
+           top_style, top_color_theme, top_color_type, top_color_rgb, top_color_tint,
+           bottom_style, bottom_color_theme, bottom_color_type, bottom_color_rgb, bottom_color_tint,
+           diagonal_style, diagonal_color_theme, diagonal_color_type, diagonal_color_rgb, diagonal_color_tint,
            diagonalUp, diagonalDown, outline)
 )
 '''
