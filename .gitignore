@@ -7,3 +7,4 @@ data/samples/test_sample.xlsx
 *.xlsx
 /test_workspace
 /logs
+logs/excel_micro_db.log.txt
