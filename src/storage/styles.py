@@ -16,22 +16,18 @@ logger = logging.getLogger(__name__)
 def _get_or_create_font(cursor, font_attrs: Dict[str, Any]) -> Optional[int]:
     """
     Получает ID существующего шрифта или создает новый.
-    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (CamelCase).
+    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case).
     """
     if not font_attrs:
         return None
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py (snake_case)
+    # Убираем 'id' из списка, так как он генерируется автоматически
     columns = [
-        'name', 'sz', 'b', 'i', 'u', 'strike', 'colorTheme', 'colorType', 'colorRgb',
-        'vertAlign', 'scheme', 'family', 'charset'
+        'name', 'sz', 'b', 'i', 'u', 'strike', 'color_theme', 'color_type', 'color_rgb', 'color_tint',
+        'vert_align', 'scheme', 'family', 'charset'
     ]
-    # ИСПРАВЛЕНО: Убираем color_tint, так как его нет в fonts schema
-    # columns = [
-    #     'name', 'sz', 'b', 'i', 'u', 'strike', 'colorTheme', 'colorType', 'colorRgb', 'colorTint',
-    #     'vertAlign', 'scheme', 'family', 'charset'
-    # ]
     placeholders = ', '.join(['?' for _ in columns])
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов для условия WHERE
     select_conditions = ' AND '.join([f"{col} IS ?" for col in columns])
     insert_sql = f"INSERT OR IGNORE INTO fonts ({', '.join(columns)}) VALUES ({placeholders})"
     select_sql = f"SELECT id FROM fonts WHERE {select_conditions}"
@@ -45,14 +41,14 @@ def _get_or_create_font(cursor, font_attrs: Dict[str, Any]) -> Optional[int]:
 def _get_or_create_fill(cursor, fill_attrs: Dict[str, Any]) -> Optional[int]:
     """
     Получает ID существующей заливки или создает новую.
-    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (CamelCase).
+    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case).
     """
     if not fill_attrs:
         return None
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py (snake_case)
     columns = [
-        'patternType', 'fgColorTheme', 'fgColorType', 'fgColorRgb', 'fgColorTint',
-        'bgColorTheme', 'bgColorType', 'bgColorRgb', 'bgColorTint'
+        'patternType', 'fg_color_theme', 'fg_color_type', 'fg_color_rgb', 'fg_color_tint',
+        'bg_color_theme', 'bg_color_type', 'bg_color_rgb', 'bg_color_tint'
     ]
     placeholders = ', '.join(['?' for _ in columns])
     select_conditions = ' AND '.join([f"{col} IS ?" for col in columns])
@@ -68,17 +64,17 @@ def _get_or_create_fill(cursor, fill_attrs: Dict[str, Any]) -> Optional[int]:
 def _get_or_create_border(cursor, border_attrs: Dict[str, Any]) -> Optional[int]:
     """
     Получает ID существующих границ или создает новые.
-    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (CamelCase).
+    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case).
     """
     if not border_attrs:
         return None
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py (snake_case)
     columns = [
-        'leftStyle', 'leftColorTheme', 'leftColorType', 'leftColorRgb', 'leftColorTint',
-        'rightStyle', 'rightColorTheme', 'rightColorType', 'rightColorRgb', 'rightColorTint',
-        'topStyle', 'topColorTheme', 'topColorType', 'topColorRgb', 'topColorTint',
-        'bottomStyle', 'bottomColorTheme', 'bottomColorType', 'bottomColorRgb', 'bottomColorTint',
-        'diagonalStyle', 'diagonalColorTheme', 'diagonalColorType', 'diagonalColorRgb', 'diagonalColorTint',
+        'left_style', 'left_color_theme', 'left_color_type', 'left_color_rgb', 'left_color_tint',
+        'right_style', 'right_color_theme', 'right_color_type', 'right_color_rgb', 'right_color_tint',
+        'top_style', 'top_color_theme', 'top_color_type', 'top_color_rgb', 'top_color_tint',
+        'bottom_style', 'bottom_color_theme', 'bottom_color_type', 'bottom_color_rgb', 'bottom_color_tint',
+        'diagonal_style', 'diagonal_color_theme', 'diagonal_color_type', 'diagonal_color_rgb', 'diagonal_color_tint',
         'diagonalUp', 'diagonalDown', 'outline'
     ]
     placeholders = ', '.join(['?' for _ in columns])
@@ -95,14 +91,14 @@ def _get_or_create_border(cursor, border_attrs: Dict[str, Any]) -> Optional[int]
 def _get_or_create_alignment(cursor, align_attrs: Dict[str, Any]) -> Optional[int]:
     """
     Получает ID существующего выравнивания или создает новое.
-    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (CamelCase).
+    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case).
     """
     if not align_attrs:
         return None
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py (snake_case)
     columns = [
-        'horizontal', 'vertical', 'textRotation', 'wrapText', 'shrinkToFit', 'indent',
-        'relativeIndent', 'justifyLastLine', 'readingOrder'
+        'horizontal', 'vertical', 'text_rotation', 'wrap_text', 'shrink_to_fit', 'indent',
+        'relative_indent', 'justify_last_line', 'reading_order'
     ]
     placeholders = ', '.join(['?' for _ in columns])
     select_conditions = ' AND '.join([f"{col} IS ?" for col in columns])
@@ -118,12 +114,12 @@ def _get_or_create_alignment(cursor, align_attrs: Dict[str, Any]) -> Optional[in
 def _get_or_create_protection(cursor, prot_attrs: Dict[str, Any]) -> Optional[int]:
     """
     Получает ID существующей защиты или создает новую.
-    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (CamelCase).
+    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case).
     """
     if not prot_attrs:
         return None
     # Приводим BOOLEAN значения к INTEGER
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py (snake_case)
     prot_attrs_converted = {
         "locked": int(prot_attrs.get("locked", 1)) if prot_attrs.get("locked") is not None else 1,
         "hidden": int(prot_attrs.get("hidden", 0)) if prot_attrs.get("hidden") is not None else 0,
@@ -142,12 +138,12 @@ def _get_or_create_protection(cursor, prot_attrs: Dict[str, Any]) -> Optional[in
 def _get_or_create_cell_style(cursor, style_attrs: Dict[str, Any]) -> Optional[int]:
     """
     Получает ID существующего стиля ячейки или создает новый.
-    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (CamelCase).
+    ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case).
     """
     if not style_attrs:
         return None
     # Извлекаем атрибуты для каждого компонента стиля
-    # ИСПРАВЛЕНО: Используем правильные префиксы ключей
+    # ИСПРАВЛЕНО: Используем правильные префиксы ключей (snake_case)
     font_attrs = {k.split('_', 1)[1]: v for k, v in style_attrs.items() if k.startswith('font_')}
     fill_attrs = {k.split('_', 1)[1]: v for k, v in style_attrs.items() if k.startswith('fill_')}
     border_attrs = {k.split('_', 1)[1]: v for k, v in style_attrs.items() if k.startswith('border_')}
@@ -160,16 +156,16 @@ def _get_or_create_cell_style(cursor, style_attrs: Dict[str, Any]) -> Optional[i
     alignment_id = _get_or_create_alignment(cursor, align_attrs)
     protection_id = _get_or_create_protection(cursor, prot_attrs)
     # Атрибуты самого стиля (те, что не входят в подкомпоненты)
-    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py
+    # ИСПРАВЛЕНО: Используем правильные имена столбцов из schema.py (snake_case)
     style_main_attrs = {
-        "fontId": font_id,
-        "fillId": fill_id,
-        "borderId": border_id,
-        "alignmentId": alignment_id,
-        "protectionId": protection_id,
-        "numFmtId": style_attrs.get("num_fmt_id"),
-        "xfId": style_attrs.get("xf_id"),
-        "quotePrefix": int(style_attrs.get("quote_prefix", 0)) if style_attrs.get("quote_prefix") is not None else None,
+        "font_id": font_id,
+        "fill_id": fill_id,
+        "border_id": border_id,
+        "alignment_id": alignment_id,
+        "protection_id": protection_id,
+        "num_fmt_id": style_attrs.get("num_fmt_id"),
+        "xf_id": style_attrs.get("xf_id"),
+        "quote_prefix": int(style_attrs.get("quote_prefix", 0)) if style_attrs.get("quote_prefix") is not None else None,
     }
     columns = list(style_main_attrs.keys())
     placeholders = ', '.join(['?' for _ in columns])
@@ -212,7 +208,7 @@ def save_sheet_styles(connection: sqlite3.Connection, sheet_id: int, styled_rang
                 logger.error(f"Не удалось получить или создать стиль для: {style_attrs}")
                 continue
             # 2. Сохраняем связь стиль-диапазон
-            # ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py
+            # ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case)
             cursor.execute('''
                 INSERT OR IGNORE INTO styled_ranges (sheet_id, style_id, range_address)
                 VALUES (?, ?, ?)
@@ -246,25 +242,25 @@ def load_sheet_styles(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
         cursor = connection.cursor()
         # Запрашиваем связанные стили и диапазоны
         # Это сложный JOIN, который собирает всю информацию о стиле
-        # === ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py ===
+        # === ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py (snake_case) ===
         cursor.execute('''
             SELECT
                 sr.range_address,
-                f.name, f.sz, f.b, f.i, f.u, f.strike, f.colorRgb, f.colorTheme, f.colorTint, f.vertAlign, f.scheme,
-                pf.patternType, pf.fgColorRgb, pf.fgColorTheme, pf.fgColorTint, pf.bgColorRgb, pf.bgColorTheme, pf.bgColorTint,
-                b.leftStyle, b.leftColorRgb, b.rightStyle, b.rightColorRgb, b.topStyle, b.topColorRgb,
-                b.bottomStyle, b.bottomColorRgb, b.diagonalStyle, b.diagonalColorRgb, b.diagonalUp, b.diagonalDown, b.outline,
-                a.horizontal, a.vertical, a.textRotation, a.wrapText, a.shrinkToFit, a.indent,
-                a.relativeIndent, a.justifyLastLine, a.readingOrder,
+                f.name, f.sz, f.b, f.i, f.u, f.strike, f.color_rgb, f.color_theme, f.color_tint, f.vert_align, f.scheme, f.family, f.charset,
+                pf.patternType, pf.fg_color_rgb, pf.fg_color_theme, pf.fg_color_tint, pf.bg_color_rgb, pf.bg_color_theme, pf.bg_color_tint,
+                b.left_style, b.left_color_rgb, b.right_style, b.right_color_rgb, b.top_style, b.top_color_rgb,
+                b.bottom_style, b.bottom_color_rgb, b.diagonal_style, b.diagonal_color_rgb, b.diagonalUp, b.diagonalDown, b.outline,
+                a.horizontal, a.vertical, a.text_rotation, a.wrap_text, a.shrink_to_fit, a.indent,
+                a.relative_indent, a.justify_last_line, a.reading_order,
                 p.locked, p.hidden,
-                cs.numFmtId, cs.xfId, cs.quotePrefix
+                cs.num_fmt_id, cs.xf_id, cs.quote_prefix
             FROM styled_ranges sr
             LEFT JOIN cell_styles cs ON sr.style_id = cs.id
-            LEFT JOIN fonts f ON cs.fontId = f.id
-            LEFT JOIN pattern_fills pf ON cs.fillId = pf.id
-            LEFT JOIN borders b ON cs.borderId = b.id
-            LEFT JOIN alignments a ON cs.alignmentId = a.id
-            LEFT JOIN protections p ON cs.protectionId = p.id
+            LEFT JOIN fonts f ON cs.font_id = f.id
+            LEFT JOIN pattern_fills pf ON cs.fill_id = pf.id
+            LEFT JOIN borders b ON cs.border_id = b.id
+            LEFT JOIN alignments a ON cs.alignment_id = a.id
+            LEFT JOIN protections p ON cs.protection_id = p.id
             WHERE sr.sheet_id = ?
         ''', (sheet_id,))
         # =================================================
@@ -273,44 +269,44 @@ def load_sheet_styles(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
             range_addr = row[0]
             # Собираем атрибуты стиля из результата запроса
             style_attrs = {}
-            # Font (индексы 1-11)
-            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов шрифта
-            font_keys = ["name", "sz", "b", "i", "u", "strike", "colorRgb", "colorTheme", "colorTint", "vertAlign", "scheme"]
+            # Font (индексы 1-14)
+            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов шрифта (snake_case)
+            font_keys = ["name", "sz", "b", "i", "u", "strike", "color_rgb", "color_theme", "color_tint", "vert_align", "scheme", "family", "charset"]
             for i, key in enumerate(font_keys):
                 if row[i+1] is not None: # +1 потому что range_address это 0
                     style_attrs[f"font_{key}"] = row[i+1]
-            # Fill (индексы 12-18)
-            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов заливки
-            fill_keys = ["patternType", "fgColorRgb", "fgColorTheme", "fgColorTint", "bgColorRgb", "bgColorTheme", "bgColorTint"]
+            # Fill (индексы 15-21)
+            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов заливки (snake_case)
+            fill_keys = ["patternType", "fg_color_rgb", "fg_color_theme", "fg_color_tint", "bg_color_rgb", "bg_color_theme", "bg_color_tint"]
             for i, key in enumerate(fill_keys):
-                if row[i+12] is not None:
-                    style_attrs[f"fill_{key}"] = row[i+12]
-            # Border (индексы 19-30)
-            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов границ
-            border_keys = ["leftStyle", "leftColorRgb", "rightStyle", "rightColorRgb", "topStyle", "topColorRgb",
-                           "bottomStyle", "bottomColorRgb", "diagonalStyle", "diagonalColorRgb", "diagonalUp", "diagonalDown", "outline"]
+                if row[i+15] is not None:
+                    style_attrs[f"fill_{key}"] = row[i+15]
+            # Border (индексы 22-34)
+            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов границ (snake_case)
+            border_keys = ["left_style", "left_color_rgb", "right_style", "right_color_rgb", "top_style", "top_color_rgb",
+                           "bottom_style", "bottom_color_rgb", "diagonal_style", "diagonal_color_rgb", "diagonalUp", "diagonalDown", "outline"]
             for i, key in enumerate(border_keys):
-                if row[i+19] is not None:
-                    style_attrs[f"border_{key}"] = row[i+19]
-            # Alignment (индексы 31-41)
-            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов выравнивания
-            align_keys = ["horizontal", "vertical", "textRotation", "wrapText", "shrinkToFit", "indent",
-                          "relativeIndent", "justifyLastLine", "readingOrder"]
+                if row[i+22] is not None:
+                    style_attrs[f"border_{key}"] = row[i+22]
+            # Alignment (индексы 35-44)
+            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов выравнивания (snake_case)
+            align_keys = ["horizontal", "vertical", "text_rotation", "wrap_text", "shrink_to_fit", "indent",
+                          "relative_indent", "justify_last_line", "reading_order"]
             for i, key in enumerate(align_keys):
-                if row[i+31] is not None:
-                    style_attrs[f"alignment_{key}"] = row[i+31]
-            # Protection (индексы 42-43)
-            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов защиты
+                if row[i+35] is not None:
+                    style_attrs[f"alignment_{key}"] = row[i+35]
+            # Protection (индексы 45-46)
+            # ИСПРАВЛЕНО: Используем правильные ключи для атрибутов защиты (snake_case)
             prot_keys = ["locked", "hidden"]
             for i, key in enumerate(prot_keys):
-                if row[i+42] is not None:
-                    style_attrs[f"protection_{key}"] = row[i+42]
-            # Cell Style main attrs (индексы 44-46)
-            # ИСПРАВЛЕНО: Используем правильные ключи для основных атрибутов стиля
-            cs_keys = ["numFmtId", "xfId", "quotePrefix"]
+                if row[i+45] is not None:
+                    style_attrs[f"protection_{key}"] = row[i+45]
+            # Cell Style main attrs (индексы 47-49)
+            # ИСПРАВЛЕНО: Используем правильные ключи для основных атрибутов стиля (snake_case)
+            cs_keys = ["num_fmt_id", "xf_id", "quote_prefix"]
             for i, key in enumerate(cs_keys):
-                if row[i+44] is not None:
-                    style_attrs[key] = row[i+44]
+                if row[i+47] is not None:
+                    style_attrs[key] = row[i+47]
             styles_data.append({
                 "style_attributes": style_attrs,
                 "range_address": range_addr
