@@ -318,7 +318,7 @@ class AppController:
             # ИСПРАВЛЕНО: Импорт из правильного модуля и правильной функции
             # from src.exporter.excel_exporter import export_project_to_excel # <-- СТАРОЕ
             # from src.exporter.direct_db_exporter import export_project_from_db # <-- НОВОЕ
-            from src.exporter.excel_exporter import export_project_from_db
+            from exporter.excel_exporter import export_project_from_db
 
             # Вызываем функцию экспорта, передавая путь к проекту и путь к выходному файлу
             # Определяем путь к БД проекта
