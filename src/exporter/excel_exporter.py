@@ -282,20 +282,30 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
         logger.debug(f"Загрузка редактируемых данных для листа '{sheet_name}'...")
         editable_data_result = storage.load_sheet_editable_data(sheet_name)
         
+        # === ДОБАВЛЕНО: Расширенное логирование результата загрузки данных ===
+        logger.debug(f"Результат load_sheet_editable_data для '{sheet_name}': {type(editable_data_result)}")
+        if isinstance(editable_data_result, dict):
+            logger.debug(f"  - Ключи в результате: {list(editable_data_result.keys())}")
+            logger.debug(f"  - column_names: {editable_data_result.get('column_names', 'N/A')}")
+            rows_data_log = editable_data_result.get('rows', [])
+            logger.debug(f"  - Количество строк данных: {len(rows_data_log)}")
+            if rows_data_log:
+                logger.debug(f"  - Пример первой строки: {rows_data_log[0] if len(rows_data_log) > 0 else 'N/A'}")
+                logger.debug(f"  - Тип первой строки: {type(rows_data_log[0]) if len(rows_data_log) > 0 else 'N/A'}")
+        # ===================================================================
+        
         # === ИСПРАВЛЕНО: Проверка типа результата ===
-        # Убедимся, что мы получили ожидаемый словарь
         if not isinstance(editable_data_result, dict):
             logger.error(f"load_sheet_editable_data для листа '{sheet_name}' вернула {type(editable_data_result)}, ожидался dict.")
             editable_data_result = {"column_names": [], "rows": []}
         
         column_names = editable_data_result.get("column_names", [])
         # === ИСПРАВЛЕНО: Обработка rows как списка кортежей ===
-        # editable_data.py возвращает rows как список кортежей из cursor.fetchall()
         rows_as_tuples = editable_data_result.get("rows", []) 
         # ================================
 
         if not column_names:
-            logger.warning(f"Нет данных для экспорта на листе '{sheet_name}'.")
+            logger.warning(f"Нет данных (column_names пуст) для экспорта на листе '{sheet_name}'.")
             return # Возвращаемся, если данных нет
 
         # Промежуточная структура: {(row, col): (value, format_dict)}
@@ -308,19 +318,22 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
         # --- 3. Запись данных (начиная со строки 1) ---
         # === ИСПРАВЛЕНО: Обработка rows как списка кортежей ===
         for row_idx, row_tuple in enumerate(rows_as_tuples, start=1):
-            # row_tuple - это кортеж значений, соответствующих column_names
             for col_idx, value in enumerate(row_tuple):
-                 # Проверка на выход за границы, хотя не должна произойти
                  if col_idx < len(column_names):
                      sheet_content[(row_idx, col_idx)] = (value, None)
                  else:
                      logger.warning(f"Строка {row_idx} содержит больше значений, чем ожидаемых столбцов. Лишние значения проигнорированы.")
         # ================================
+        logger.debug(f"Размер sheet_content после загрузки данных: {len(sheet_content)}")
 
         # --- 4. Загрузка и применение формул ---
         logger.debug(f"Загрузка формул для листа '{sheet_name}' (ID: {sheet_id})...")
         formulas_data = storage.load_sheet_formulas(sheet_id) # <-- ИСПРАВЛЕНО: правильное имя переменной
         logger.debug(f"Найдено {len(formulas_data)} формул для экспорта на листе '{sheet_name}'.")
+        # === ДОБАВЛЕНО: Расширенное логирование формул ===
+        if formulas_data:
+            logger.debug(f"  - Пример первой формулы: {formulas_data[0]}")
+        # =============================================
         for formula_info in formulas_data: # <-- ИСПРАВЛЕНО: правильное имя переменной
             cell_address = formula_info.get("cell", "")
             formula = formula_info.get("formula", "")
@@ -332,12 +345,17 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
                     logger.debug(f"Формула добавлена для ячейки ({row_idx}, {col_idx}): {formula_to_write}")
                 else:
                      logger.warning(f"Не удалось распарсить адрес формулы: {cell_address}")
+        logger.debug(f"Размер sheet_content после загрузки формул: {len(sheet_content)}")
 
         # --- 5. Загрузка и применение стилей ---
         logger.debug(f"Загрузка стилей для листа '{sheet_name}' (ID: {sheet_id})...")
         styled_ranges_data = storage.load_sheet_styles(sheet_id) # <-- ИСПРАВЛЕНО: правильное имя переменной
         logger.debug(f"Применение {len(styled_ranges_data)} стилевых диапазонов на листе '{sheet_name}'.")
-
+        # === ДОБАВЛЕНО: Расширенное логирование стилей ===
+        if styled_ranges_data:
+            logger.debug(f"  - Пример первого стиля: {styled_ranges_data[0]}")
+        # =============================================
+        
         format_cache: Dict[str, Any] = {}
 
         for style_range_info in styled_ranges_data: # <-- ИСПРАВЛЕНО: правильное имя переменной
@@ -377,8 +395,9 @@ def _export_sheet_content_with_styles(workbook, worksheet, storage, sheet_id: in
                     sheet_content[(r, c)] = (current_value, format_dict)
                     logger.debug(f"Применен стиль к ячейке ({r}, {c})")
 
+        logger.debug(f"Размер sheet_content после загрузки стилей: {len(sheet_content)}")
         # --- 6. Запись в worksheet из промежуточной структуры ---
-        logger.debug(f"Запись содержимого листа '{sheet_name}' в файл Excel.")
+        logger.debug(f"Запись содержимого листа '{sheet_name}' в файл Excel. Всего ячеек: {len(sheet_content)}")
         for (row, col), (value, format_dict) in sheet_content.items():
             format_to_use = None
             if format_dict:
