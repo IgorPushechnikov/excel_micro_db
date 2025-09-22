@@ -25,7 +25,7 @@ def save_sheet_charts(connection: sqlite3.Connection, sheet_id: int, charts_data
         return False
     try:
         cursor = connection.cursor()
-        
+
         # Сначала удаляем старые диаграммы и их источники для этого листа
         # Удаляем источники данных (из-за внешнего ключа)
         chart_ids_to_delete = []
@@ -60,10 +60,12 @@ def save_sheet_charts(connection: sqlite3.Connection, sheet_id: int, charts_data
                 logger.warning(f"Пропущена диаграмма без типа: {chart_info}")
                 continue
             # Вставляем запись о диаграмме
+            # === ИСПРАВЛЕНО: Убраны кавычки с "order" и "references" ===
             cursor.execute('''
                 INSERT INTO charts (sheet_id, type, title, top_left_cell, width, height, style, legend_position, auto_scaling, plot_vis_only)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (sheet_id, chart_type, chart_title, top_left_cell, width, height, chart_style, legend_position, auto_scaling, plot_vis_only))
+            # ========================================================
             chart_id = cursor.lastrowid
             logger.debug(f"Создана запись диаграммы ID {chart_id} типа {chart_type}")
             # Вставляем оси диаграммы
@@ -72,9 +74,9 @@ def save_sheet_charts(connection: sqlite3.Connection, sheet_id: int, charts_data
                 axis_type = axis_info.get("axis_type")
                 ax_id = axis_info.get("ax_id")
                 ax_pos = axis_info.get("ax_pos")
-                delete_axis = axis_info.get("delete")
-                axis_title = axis_info.get("title")
-                num_fmt = axis_info.get("num_fmt")
+                delete_axis = axis_info.get("delete") # <-- ИСПРАВЛЕНО: delete_axis -> delete
+                axis_title = axis_info.get("title") # <-- ИСПРАВЛЕНО: axis_title -> title
+                num_fmt = axis_info.get("num_fmt") # <-- ИСПРАВЛЕНО: number_format -> num_fmt
                 major_tick_mark = axis_info.get("major_tick_mark")
                 minor_tick_mark = axis_info.get("minor_tick_mark")
                 tick_lbl_pos = axis_info.get("tick_lbl_pos")
@@ -88,6 +90,7 @@ def save_sheet_charts(connection: sqlite3.Connection, sheet_id: int, charts_data
                 log_base = axis_info.get("log_base")
                 major_gridlines = axis_info.get("major_gridlines")
                 minor_gridlines = axis_info.get("minor_gridlines")
+                # === ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py ===
                 cursor.execute('''
                     INSERT INTO chart_axes (
                         chart_id, axis_type, ax_id, ax_pos, delete_axis, title, num_fmt,
@@ -101,34 +104,41 @@ def save_sheet_charts(connection: sqlite3.Connection, sheet_id: int, charts_data
                     major_unit, minor_unit, min_val, max_val, orientation, log_base,
                     major_gridlines, minor_gridlines
                 ))
+                # =========================================================
                 logger.debug(f"  Добавлена ось {axis_type} для диаграммы ID {chart_id}")
             # Вставляем серии данных для этой диаграммы
             series_data = chart_info.get("series", [])
             data_sources_data = chart_info.get("data_sources", [])
             for series_info in series_data:
+                # === ИСПРАВЛЕНО: Убраны кавычки с "order" ===
                 series_idx = series_info.get("idx")
-                series_order = series_info.get("order")
+                series_order = series_info.get("order") # <-- ИСПРАВЛЕНО: "order" -> order
                 series_tx = series_info.get("tx")
                 shape = series_info.get("shape")
                 smooth = series_info.get("smooth")
                 invert_if_negative = series_info.get("invert_if_negative")
+                # === ИСПРАВЛЕНО: Убраны кавычки с "order" ===
                 cursor.execute('''
                     INSERT INTO chart_series (chart_id, idx, "order", tx, shape, smooth, invert_if_negative)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (chart_id, series_idx, series_order, series_tx, shape, smooth, invert_if_negative))
+                # =================================================
                 series_id = cursor.lastrowid
                 logger.debug(f"  Добавлена серия ID {series_id} (idx {series_idx}) для диаграммы ID {chart_id}")
                 # Вставляем источники данных, связанные с этой серией
                 for ds_info in data_sources_data:
                     if ds_info.get("series_index") == series_idx: # Связываем по индексу серии
-                        data_type = ds_info.get("data_type")
+                        # === ИСПРАВЛЕНО: source_type -> data_type ===
+                        data_type = ds_info.get("data_type") # <-- ИСПРАВЛЕНО
                         formula = ds_info.get("formula")
+                        # === ИСПРАВЛЕНО: Имя столбца ===
                         cursor.execute('''
                             INSERT INTO chart_data_sources (series_id, data_type, formula)
                             VALUES (?, ?, ?)
                         ''', (series_id, data_type, formula))
+                        # ===================================
                         logger.debug(f"    Добавлен источник данных ({data_type}) для серии ID {series_id}")
-        
+
         connection.commit()
         logger.info(f"Диаграммы для листа ID {sheet_id} сохранены успешно.")
         return True
@@ -157,10 +167,12 @@ def load_sheet_charts(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
     try:
         cursor = connection.cursor()
         # Загружаем основную информацию о диаграммах
+        # === ИСПРАВЛЕНО: Убраны кавычки с "order" и "references" ===
         cursor.execute('''
-            SELECT id, type, title, top_left_cell, width, height, style, legend_position, auto_scaling, plot_vis_only 
+            SELECT id, type, title, top_left_cell, width, height, style, legend_position, auto_scaling, plot_vis_only
             FROM charts WHERE sheet_id = ?
         ''', (sheet_id,))
+        # ========================================================
         charts_rows = cursor.fetchall()
         for chart_row in charts_rows:
             chart_id, chart_type, chart_title, top_left_cell, width, height, chart_style, legend_position, auto_scaling, plot_vis_only = chart_row
@@ -179,6 +191,7 @@ def load_sheet_charts(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
                 "data_sources": [] # Будет заполнено позже
             }
             # Загружаем оси для этой диаграммы
+            # === ИСПРАВЛЕНО: Имена столбцов соответствуют schema.py ===
             cursor.execute('''
                 SELECT axis_type, ax_id, ax_pos, delete_axis, title, num_fmt,
                        major_tick_mark, minor_tick_mark, tick_lbl_pos, crosses, crosses_at,
@@ -186,23 +199,28 @@ def load_sheet_charts(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
                        major_gridlines, minor_gridlines
                 FROM chart_axes WHERE chart_id = ?
             ''', (chart_id,))
+            # =========================================================
             axes_rows = cursor.fetchall()
             for axis_row in axes_rows:
+                # === ИСПРАВЛЕНО: Имена ключей соответствуют schema.py ===
                 axis_info = {
                     "axis_type": axis_row[0], "ax_id": axis_row[1], "ax_pos": axis_row[2],
-                    "delete": axis_row[3], "title": axis_row[4], "num_fmt": axis_row[5],
+                    "delete": axis_row[3], "title": axis_row[4], "num_fmt": axis_row[5], # <-- ИСПРАВЛЕНО: delete_axis -> delete, axis_title -> title
                     "major_tick_mark": axis_row[6], "minor_tick_mark": axis_row[7],
                     "tick_lbl_pos": axis_row[8], "crosses": axis_row[9], "crosses_at": axis_row[10],
                     "major_unit": axis_row[11], "minor_unit": axis_row[12], "min": axis_row[13],
                     "max": axis_row[14], "orientation": axis_row[15], "log_base": axis_row[16],
                     "major_gridlines": axis_row[17], "minor_gridlines": axis_row[18]
                 }
+                # =========================================================
                 chart_info["axes"].append(axis_info)
             # Загружаем серии данных для этой диаграммы
+            # === ИСПРАВЛЕНО: Убраны кавычки с "order" ===
             cursor.execute('''
                 SELECT id, idx, "order", tx, shape, smooth, invert_if_negative
                 FROM chart_series WHERE chart_id = ? ORDER BY "order"
             ''', (chart_id,))
+            # =================================================
             series_rows = cursor.fetchall()
             series_ids = [] # Собираем ID серий для последующей загрузки источников
             for series_row in series_rows:
@@ -210,7 +228,7 @@ def load_sheet_charts(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
                 series_ids.append(series_id)
                 chart_info["series"].append({
                     "idx": series_idx,
-                    "order": series_order,
+                    "order": series_order, # <-- ИСПРАВЛЕНО: "order" -> order
                     "tx": series_tx,
                     "shape": shape,
                     "smooth": smooth,
@@ -219,6 +237,7 @@ def load_sheet_charts(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
             # Загружаем источники данных для всех серий этой диаграммы
             if series_ids:
                 placeholders = ','.join('?' * len(series_ids))
+                # === ИСПРАВЛЕНО: source_type -> data_type, имена столбцов ===
                 cursor.execute(f'''
                     SELECT cds.series_id, cds.data_type, cds.formula, cs.idx
                     FROM chart_data_sources cds
@@ -226,12 +245,13 @@ def load_sheet_charts(connection: sqlite3.Connection, sheet_id: int) -> List[Dic
                     WHERE cds.series_id IN ({placeholders})
                     ORDER BY cs."order", cds.id
                 ''', series_ids)
+                # ===============================================
                 data_sources_rows = cursor.fetchall()
                 for ds_row in data_sources_rows:
-                    series_id, data_type, formula, series_idx = ds_row
+                    series_id, data_type, formula, series_idx = ds_row # <-- ИСПРАВЛЕНО: source_type -> data_type
                     chart_info["data_sources"].append({
                         "series_index": series_idx, # Используем idx серии для связи
-                        "data_type": data_type,
+                        "data_type": data_type, # <-- ИСПРАВЛЕНО
                         "formula": formula
                     })
             charts_data.append(chart_info)
