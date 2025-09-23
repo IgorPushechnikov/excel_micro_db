@@ -2,7 +2,7 @@
 
 import sqlite3
 import logging
- from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional
 import json
 
 # Получаем логгер для этого модуля
