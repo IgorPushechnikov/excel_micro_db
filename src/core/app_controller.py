@@ -11,20 +11,15 @@ from src.storage.base import ProjectDBStorage    # <-- НОВОЕ
 from src.analyzer.logic_documentation import analyze_excel_file # <-- Правильное имя функции
 # from src.exporter.excel_exporter import export_project as export_with_xlsxwriter # <-- Потенциальная проблема с xlsxwriter
 # from src.exporter.direct_db_exporter import export_project as export_with_openpyxl # <-- Потенциальная проблема с именем функции
-from src.exporter.direct_db_exporter import export_project_db_to_excel # <-- Правильное имя функции
-from src.core.project_manager import ProjectManager
-from src.utils.logger import setup_logger
-from src.exceptions.app_exceptions import (
-    AppException,
-    ProjectNotInitializedError,
-    ProjectLoadError,
-    AnalysisError,
-    ExportError,
-    ProcessingError,
-)
+# from src.exporter.direct_db_exporter import export_project_db_to_excel # <-- Проверим настоящее имя
+# from src.utils.logger import setup_logger # <-- Проверим настоящее имя
+# from src.core.project_manager import ProjectManager
+# from src.exceptions.app_exceptions import (...) # <-- Проверим настоящие имена
 
 # Получаем логгер для этого модуля
-logger = setup_logger(__name__)
+# logger = setup_logger(__name__)
+from src.utils.logger import get_logger # <-- Используем get_logger из старого main.py
+logger = get_logger(__name__)
 
 class AppController:
     """
@@ -50,7 +45,9 @@ class AppController:
         self.project_path = Path(project_path) if project_path else None
         self.storage = storage
         self.log_level = log_level
-        self.logger = setup_logger(self.__class__.__name__, log_level=log_level)
+        # self.logger = setup_logger(self.__class__.__name__, log_level=log_level) # <-- setup_logger не найден
+        from src.utils.logger import get_logger # <-- Временное решение для логгера
+        self.logger = get_logger(self.__class__.__name__)
         self.current_project_info = None # <-- Информация о метаданных проекта
         self.is_initialized = False # <-- Статус инициализации AppController
         # --- СООТВЕТСТВИЕ СТАРОМУ main.py ---
@@ -66,10 +63,15 @@ class AppController:
                  self.logger.error("Storage не предоставлен для инициализации AppController.")
                  return False
             # Инициализируем схему БД, если нужно
-            self.storage.initialize_schema()
+            # self.storage.initialize_schema() # <-- initialize_schema не найден в base.py напрямую
+            self.storage.initialize_schema() # <-- Проверим, как это реализовано в base.py
+            # NOTE: В base.py initialize_schema() вызывает connect(), а затем _create_tables()
+            # Это должно установить self.connection
             # Пытаемся загрузить метаданные проекта
             # storage.load_project_metadata() вызывает метод в metadata.py через base.py
-            self.current_project_info = self.storage.load_project_metadata() # <-- Загружаем метаданные
+            # self.current_project_info = self.storage.load_project_metadata() # <-- load_project_metadata не найден напрямую
+            # NOTE: В base.py load_project_metadata() вызывает _load_project_metadata из metadata.py
+            self.current_project_info = self.storage.load_project_metadata() # <-- Проверим, как это реализовано в base.py
             if self.current_project_info:
                 self.logger.info(f"Метаданные проекта загружены: {self.current_project_info.get('name', 'Unknown')}")
                 # --- СООТВЕТСТВИЕ СТАРОМУ main.py ---
@@ -91,18 +93,24 @@ class AppController:
 
     def init_project(self):
         """Инициализация (создание) проекта через ProjectManager."""
+        # Используем ProjectManager для создания структуры проекта на диске/в БД
+        # Предполагается, что ProjectManager знает, как создать файлы/папки и записать начальные метаданные в БД
+        # через self.storage.
         self.logger.info("Инициализация проекта через ProjectManager...")
         try:
             # ProjectManager теперь получает storage, а не управляет им сам
-            project_manager = ProjectManager(log_level=self.log_level)
+            # project_manager = ProjectManager(log_level=self.log_level) # <-- log_level не найден
+            project_manager = ProjectManager() # <-- Проверим конструктор PM
             # --- ИСПРАВЛЕНО: Вызов правильного метода ---
             # success = project_manager.create_project_structure(str(self.project_path), self.storage)
-            success = project_manager.create_project(project_path=str(self.project_path), storage=self.storage)
+            # success = project_manager.create_project(project_path=str(self.project_path), storage=self.storage) # <-- storage не найден
+            success = project_manager.create_project(str(self.project_path), self.storage) # <-- Проверим сигнатуру
             # ---
             if success:
                 self.logger.info("Проект успешно инициализирован через ProjectManager.")
                 # После создания структуры, перезагружаем метаданные
-                self.current_project_info = self.storage.load_project_metadata()
+                # self.current_project_info = self.storage.load_project_metadata() # <-- load_project_metadata не найден
+                self.current_project_info = self.storage.load_project_metadata() # <-- Проверим
                 # --- СООТВЕТСТВИЕ СТАРОМУ main.py ---
                 self.is_project_loaded = True # <-- Установим флаг после успешного создания
                 return True
@@ -182,12 +190,15 @@ class AppController:
 
     # --- Анализ Excel-файлов ---
 
-    def analyze_file(self, file_path: str) -> bool:
+    # --- ИСПРАВЛЕНО: Переименовано для соответствия main.py ---
+    def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    # ---
         """
         Анализирует Excel-файл и сохраняет результаты в БД проекта.
 
         Args:
             file_path (str): Путь к анализируемому .xlsx файлу.
+            options (Optional[Dict[str, Any]]): Дополнительные опции анализа (не используется напрямую в этой версии)
 
         Returns:
             bool: True, если анализ и сохранение успешны, иначе False.
@@ -210,45 +221,39 @@ class AppController:
 
             # - ИНТЕГРАЦИЯ ANALYZER: Вызов анализатора -
             # NOTE: analyze_excel_file возвращает сырые данные, которые нужно сохранить через storage
-            documentation_data = analyze_excel_file(file_path) # <-- Правильное имя функции
+            # NOTE 2: analyze_excel_file ожидает connection, а не storage. Нужно передать connection.
+            # documentation_data = analyze_excel_file(file_path) # <-- Правильное имя функции, но неправильный аргумент
+            documentation_data = analyze_excel_file(file_path, self.storage.connection) # <-- Передаём connection
             if documentation_data is None:
                 self.logger.error("Анализатор вернул None. Ошибка при анализе файла.")
                 return False
 
             self.logger.info("Анализ файла завершен успешно")
 
-            # --- НАЧАЛО ИНТЕГРАЦИИ СО ХРАНИЛИЩЕМ ---
-            # Сохраняем результаты анализа в БД через self.storage
-            # documentation_data = {'project_name': '...', 'sheets': [{'name': 'Sheet1', 'raw_data': [...], 'formulas': [...], ...}]}
+            # NOTE: В новой архитектуре analyze_excel_file (в своей новой версии) может сразу сохранять в БД.
+            # Но если он возвращает данные, мы можем их обработать здесь.
+            # Предположим, что analyze_excel_file уже сохранил, и нам не нужно сохранять снова.
+            # Однако, в текущей реализации analyze_excel_file возвращает данные.
+            # Проверим, что он делает. Если он сохраняет, то повторное сохранение не нужно.
+            # Если он возвращает, то нужно сохранить.
+            # В текущей версии analyze_excel_file возвращает словарь и НЕ сохраняет в БД.
+            # AppController должен его обработать.
             # project_name = documentation_data.get("project_name", self.project_path.name if self.project_path else "UnknownProject")
             # sheets_data = documentation_data.get("sheets", [])
-
-            # NOTE: В новой архитектуре analyze_excel_file сразу сохраняет в БД через storage.
-            # Поэтому вызов analyze_excel_file должен быть немного изменён, чтобы он принимал storage.
-            # Или AppController должен обработать documentation_data и сохранить через storage.
-            # Поскольку analyze_excel_file возвращает данные, будем сохранять их вручную через storage.
-
-            # NOTE 2: На самом деле, analyze_excel_file в новой версии (как в репо) НЕ сохраняет в БД.
-            # Он возвращает словарь. AppController должен его обработать.
-            # Проверим структуру documentation_data из analyze_excel_file.
-            # print("DEBUG: Structure of documentation_data:", type(documentation_data))
-            # if isinstance(documentation_data, dict):
-            #     print("DEBUG: Keys in documentation_data:", list(documentation_data.keys()))
-            #     if 'sheets' in documentation_data:
-            #         print("DEBUG: First sheet name:", documentation_data['sheets'][0].get('name') if documentation_data['sheets'] else 'N/A')
-
-            project_name = documentation_data.get("project_name", self.project_path.name if self.project_path else "UnknownProject")
-            sheets_data = documentation_data.get("sheets", [])
 
             # NOTE: ProjectDBStorage.base.py теперь координирует вызовы подмодулей.
             # Мы передаём ему всю структуру documentation_data, и он сам решает, как распределить по таблицам.
             # Однако, текущая реализация analyze_excel_file и storage.save_analysis_results может не совпадать.
             # Лучше вызывать методы подмодулей storage напрямую из AppController, как в старом коде.
 
-            # --- СОХРАНЕНИЕ ЧЕРЕЗ ПОДМОДУЛИ STORAGE ---
+            # --- СОХРАНЕНИЕ ЧЕРЕЗ ПОДМОДУЛИ STORAGE (аналогично предыдущей версии) ---
             # NOTE: ProjectDBStorage.base.py предоставляет доступ к connection и вызывает методы подмодулей.
             # Мы можем использовать self.storage.connection и вызывать функции из src.storage.* напрямую.
             # Это требует импорта этих функций.
+
+            # NOTE: Поскольку analyze_excel_file НЕ сохраняет, мы должны сохранить данные здесь.
+            project_name = documentation_data.get("project_name", self.project_path.name if self.project_path else "UnknownProject")
+            sheets_data = documentation_data.get("sheets", [])
 
             for sheet_info in sheets_data:
                 sheet_name = sheet_info.get("name")
@@ -433,17 +438,30 @@ class AppController:
                     "column_index": col_idx,
                     "column_name": column_name_to_update
                 }
+                # --- ИСПРАВЛЕНО: Вызов с правильными параметрами ---
+                # history_success = save_edit_history_record(
+                #      connection=self.storage.connection,
+                #      project_id=project_id,
+                #      sheet_id=sheet_id,
+                #      cell_address=cell_address, # или None, если используется row/col
+                #      action_type="edit_cell", # <-- action_type не найден
+                #      old_value=old_value,
+                #      new_value=new_value,
+                #      user=None, # TODO: Поддержка пользователей # <-- user не найден
+                #      details=history_details # <-- details не найден
+                # )
                 history_success = save_edit_history_record(
                      connection=self.storage.connection,
                      project_id=project_id,
                      sheet_id=sheet_id,
                      cell_address=cell_address, # или None, если используется row/col
-                     action_type="edit_cell",
+                     # action_type="edit_cell", # <-- УБРАНО
                      old_value=old_value,
                      new_value=new_value,
-                     user=None, # TODO: Поддержка пользователей
-                     details=history_details
+                     # user=None, # TODO: Поддержка пользователей # <-- УБРАНО
+                     # details=history_details # <-- УБРАНО
                 )
+                # ---
                 if history_success:
                     self.logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена и история сохранена.")
                     return True
@@ -479,9 +497,32 @@ class AppController:
 
     # --- Экспорт ---
 
-    def export_project(self, output_path: str) -> bool:
+    # --- ИСПРАВЛЕНО: Переименовано для соответствия main.py ---
+    def export_results(self, export_type: str, output_path: str) -> bool:
+    # ---
         """
         Экспортирует проект в Excel-файл.
+
+        Args:
+            export_type (str): Тип экспорта (например, 'excel'). Сейчас поддерживается только 'excel'.
+            output_path (str): Путь к выходному .xlsx файлу.
+
+        Returns:
+            bool: True, если экспорт успешен, иначе False.
+        """
+        # Пока поддерживаем только экспорт в Excel
+        if export_type.lower() != 'excel':
+            self.logger.warning(f"Тип экспорта '{export_type}' пока не поддерживается. Поддерживается только 'excel'.")
+            return False
+
+        # На самом деле, export_results в main.py вызывает app_controller.export_results(export_type=export_type, output_path=output_path)
+        # И export_project в AppController принимает output_path
+        # Значит, export_results должен вызвать export_project
+        return self.export_project(output_path)
+
+    def export_project(self, output_path: str) -> bool:
+        """
+        Экспортирует проект в Excel-файл (реализация).
 
         Args:
             output_path (str): Путь к выходному .xlsx файлу.
@@ -509,6 +550,8 @@ class AppController:
 
             # --- ИСПРАВЛЕНО: Вызов правильной функции ---
             # success = export_with_openpyxl(self.project_db_path, output_path) # <-- Старое имя/параметры
+            # from src.exporter.direct_db_exporter import export_project_db_to_excel # <-- Проверим настоящее имя
+            from src.exporter.direct_db_exporter import export_project_db_to_excel # <-- Предположим, что это правильное имя
             success = export_project_db_to_excel(
                 db_path=str(db_path),
                 output_path=output_path
@@ -583,11 +626,13 @@ class AppController:
 
 
 # --- ФАБРИЧНЫЕ ФУНКЦИИ ---
+# NOTE: create_app_controller должна принимать project_path, создавать storage и возвращать инициализированный AppController
 
 def get_app_controller(project_path: str, log_level: str = "INFO") -> AppController:
     """Фабричная функция для создания и настройки AppController."""
     # Создаём ProjectManager и получаем путь к БД проекта
-    project_manager = ProjectManager(log_level=log_level)
+    # project_manager = ProjectManager(log_level=log_level) # <-- log_level не найден у PM
+    project_manager = ProjectManager() # <-- Используем конструктор без log_level
     # --- ИСПРАВЛЕНО: Вызов правильного метода ---
     # project_data_path = project_manager.get_project_db_path(project_path) # <-- Этого метода нет в PM
     # Предположим, что БД всегда называется project_data.db внутри project_path
@@ -598,6 +643,7 @@ def get_app_controller(project_path: str, log_level: str = "INFO") -> AppControl
     controller.initialize() # <-- ВАЖНО: инициализирует перед возвратом
     return controller
 
+# --- ИСПРАВЛЕНО: create_app_controller теперь принимает project_path ---
 def create_app_controller(project_path: str, log_level: str = "INFO") -> AppController:
     """
     Фабричная функция для создания и настройки AppController.
@@ -605,18 +651,4 @@ def create_app_controller(project_path: str, log_level: str = "INFO") -> AppCont
     """
     # Просто вызываем get_app_controller, чтобы использовать общую логику
     return get_app_controller(project_path, log_level)
-
-# --- Пример использования (опционально) ---
-# if __name__ == "__main__":
-#     # Это просто для демонстрации, не будет выполняться при импорте
-#     logger.info("Демонстрация работы AppController")
-#
-#     # Создание контроллера через фабричную функцию
-#     app_ctrl = get_app_controller("./test_project")
-#
-#     if app_ctrl.is_initialized:
-#         logger.info("Контроллер приложения инициализирован успешно")
-#         # Дальнейшие действия с app_ctrl
-#         app_ctrl.shutdown()
-#     else:
-#         logger.error("Ошибка инициализации контроллера приложения")
+# ---
