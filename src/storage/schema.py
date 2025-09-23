@@ -1,359 +1,200 @@
 # src/storage/schema.py
-"""
-Модуль для инициализации схемы базы данных проекта Excel Micro DB.
-
-Содержит SQL-запросы для создания таблиц и функцию для их выполнения.
-"""
 
 import sqlite3
 import logging
 
+# Получаем логгер для этого модуля
 logger = logging.getLogger(__name__)
 
-# === ИЗМЕНЕНО: Экранирование имени столбца "references" ===
-# SQL-запросы для создания таблиц
-
-CREATE_PROJECTS_TABLE = '''
+# SQL-запросы для создания таблиц проекта
+# --- Таблицы для управления проектами ---
+SQL_CREATE_PROJECTS_TABLE = """
 CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL, -- Храним как текст
-    description TEXT
-)
-'''
+    description TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_opened_at TEXT
+);
+"""
 
-CREATE_SHEETS_TABLE = '''
+# --- Таблицы для хранения информации о листах ---
+SQL_CREATE_SHEETS_TABLE = """
 CREATE TABLE IF NOT EXISTS sheets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sheet_id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    sheet_index INTEGER NOT NULL, -- Порядковый номер листа
-    structure TEXT, -- JSON-строка с описанием структуры
-    raw_data_info TEXT, -- НОВОЕ: JSON-строка с информацией о сырых данных (имена столбцов)
-    FOREIGN KEY (project_id) REFERENCES projects (id)
-)
-'''
+    max_row INTEGER,
+    max_column INTEGER,
+    FOREIGN KEY (project_id) REFERENCES projects (project_id) ON DELETE CASCADE
+);
+"""
 
-CREATE_FORMULAS_TABLE = '''
+# --- Таблицы для хранения "сырых" данных ---
+# Таблица для хранения "сырых" данных будет создаваться динамически для каждого листа
+# как raw_data_<sanitized_sheet_name>
+
+# --- Таблицы для хранения редактируемых данных ---
+# Таблица для хранения редактируемых данных будет создаваться динамически для каждого листа
+# как editable_data_<sanitized_sheet_name>
+
+# --- Таблицы для хранения формул ---
+SQL_CREATE_FORMULAS_TABLE = """
 CREATE TABLE IF NOT EXISTS formulas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    formula_id INTEGER PRIMARY KEY AUTOINCREMENT,
     sheet_id INTEGER NOT NULL,
-    cell TEXT NOT NULL,
+    cell_address TEXT NOT NULL,
     formula TEXT NOT NULL,
-    "references" TEXT, -- Имя столбца в кавычках, так как 'references' является ключевым словом SQL
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
+    FOREIGN KEY (sheet_id) REFERENCES sheets (sheet_id) ON DELETE CASCADE,
+    UNIQUE(sheet_id, cell_address)
+);
+"""
 
-CREATE_CROSS_SHEET_REFS_TABLE = '''
-CREATE TABLE IF NOT EXISTS cross_sheet_references (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_id INTEGER NOT NULL, -- ID листа, где находится формула
-    from_cell TEXT NOT NULL,
-    from_formula TEXT NOT NULL,
-    to_sheet TEXT NOT NULL,
-    reference_type TEXT NOT NULL,
-    reference_address TEXT NOT NULL,
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
+# --- Таблицы для хранения стилей ---
+# Таблица для хранения определений уникальных стилей
+SQL_CREATE_STYLES_TABLE = """
+CREATE TABLE IF NOT EXISTS styles (
+    style_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- Можно добавить общие атрибуты стиля, если нужно для поиска/индексации
+    -- Например: name TEXT UNIQUE 
+    -- Пока храним всё в sheet_styles
+);
+"""
 
-# === ИЗМЕНЕНО: Структурированное хранение диаграмм ===
-
-CREATE_CHARTS_TABLE = '''
-CREATE TABLE IF NOT EXISTS charts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+# Таблица для связывания стилей с диапазонами на листах
+# Хранит сериализованные атрибуты стиля (например, JSON)
+SQL_CREATE_SHEET_STYLES_TABLE = """
+CREATE TABLE IF NOT EXISTS sheet_styles (
     sheet_id INTEGER NOT NULL,
-    type TEXT NOT NULL, -- Тип диаграммы, например, 'BarChart'
-    title TEXT, -- Заголовок диаграммы
-    top_left_cell TEXT, -- Адрес верхней левой ячейки (например, 'A1')
-    width REAL, -- Ширина диаграммы
-    height REAL, -- Высота диаграммы
-    style INTEGER, -- Стиль диаграммы openpyxl
-    legend_position TEXT, -- Положение легенды
-    auto_scaling INTEGER, -- Автоматическое масштабирование (BOOLEAN)
-    plot_vis_only INTEGER, -- Отображать только видимые ячейки (BOOLEAN)
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
+    range_address TEXT NOT NULL, -- Адрес диапазона, например, "A1:B10"
+    style_attributes TEXT NOT NULL, -- Сериализованные атрибуты стиля (например, JSON)
+    -- Если style_id используется, можно добавить FOREIGN KEY
+    -- style_id INTEGER,
+    -- FOREIGN KEY (sheet_id) REFERENCES sheets (sheet_id) ON DELETE CASCADE,
+    -- FOREIGN KEY (style_id) REFERENCES styles (style_id) ON DELETE CASCADE,
+    PRIMARY KEY (sheet_id, range_address)
+    -- Если один диапазон может иметь несколько стилей, нужно убрать PRIMARY KEY
+    -- и сделать отдельную таблицу связей.
+);
+"""
 
-# === ИСПРАВЛЕНО: Имена столбцов и добавлены недостающие ===
-CREATE_CHART_AXES_TABLE = '''
-CREATE TABLE IF NOT EXISTS chart_axes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chart_id INTEGER NOT NULL,
-    axis_type TEXT NOT NULL, -- 'x_axis', 'y_axis', 'z_axis'
-    ax_id INTEGER, -- Идентификатор оси
-    ax_pos TEXT, -- Положение оси
-    delete_axis INTEGER, -- Удаление оси (BOOLEAN) -- ИСПРАВЛЕНО: delete -> delete_axis
-    title TEXT, -- Заголовок оси -- ИСПРАВЛЕНО: axis_title -> title
-    num_fmt TEXT, -- Формат чисел -- ИСПРАВЛЕНО: number_format -> num_fmt
-    major_tick_mark TEXT, -- Основная метка делений
-    minor_tick_mark TEXT, -- Дополнительная метка делений
-    tick_lbl_pos TEXT, -- Положение подписей делений
-    crosses TEXT, -- Тип пересечения
-    crosses_at REAL, -- Значение пересечения
-    major_unit REAL, -- Основная единица
-    minor_unit REAL, -- Дополнительная единица
-    min REAL, -- Минимальное значение
-    max REAL, -- Максимальное значение
-    orientation TEXT, -- Ориентация
-    log_base REAL, -- Основание логарифма
-    major_gridlines INTEGER, -- Наличие основной сетки (BOOLEAN)
-    minor_gridlines INTEGER, -- Наличие дополнительной сетки (BOOLEAN)
-    FOREIGN KEY (chart_id) REFERENCES charts (id)
-)
-'''
-
-# === ИСПРАВЛЕНО: Имена столбцов и добавлен idx ===
-CREATE_CHART_SERIES_TABLE = '''
-CREATE TABLE IF NOT EXISTS chart_series (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chart_id INTEGER NOT NULL,
-    idx INTEGER NOT NULL, -- ИСПРАВЛЕНО: Добавлен недостающий столбец idx -- НОВОЕ
-    "order" INTEGER NOT NULL, -- Порядок серии (зарезервированное слово SQL, используем кавычки)
-    tx TEXT, -- Название серии
-    shape TEXT, -- Форма маркера
-    smooth INTEGER, -- Сглаживание линии (BOOLEAN)
-    invert_if_negative INTEGER, -- Инвертировать цвет, если значение отрицательное (BOOLEAN)
-    FOREIGN KEY (chart_id) REFERENCES charts (id)
-)
-'''
-
-# === ИСПРАВЛЕНО: Имена столбцов ===
-CREATE_CHART_DATA_SOURCES_TABLE = '''
-CREATE TABLE IF NOT EXISTS chart_data_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_id INTEGER NOT NULL, -- Лист, откуда берутся данные
-    data_range TEXT NOT NULL, -- Диапазон ячеек, например, 'Sheet1!$A$1:$A$10'
-    data_type TEXT NOT NULL, -- ИСПРАВЛЕНО: source_type -> data_type ('category', 'value', 'size' и т.д.)
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
-
-# === НОВАЯ ТАБЛИЦА ДЛЯ РЕГИСТРАЦИИ СЫРЫХ ДАННЫХ ===
-
-CREATE_RAW_DATA_TABLES_REGISTRY = '''
-CREATE TABLE IF NOT EXISTS raw_data_tables_registry (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_id INTEGER NOT NULL UNIQUE, -- Связь с листом
-    table_name TEXT NOT NULL UNIQUE, -- Имя таблицы с сырыми данными
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
-
-# === НОВЫЕ ТАБЛИЦЫ ДЛЯ СТИЛЕЙ ===
-
-# === ИСПРАВЛЕНО: Добавлены недостающие столбцы ===
-CREATE_FONTS_TABLE = '''
-CREATE TABLE IF NOT EXISTS fonts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    sz REAL, -- Размер
-    b INTEGER, -- Жирный (BOOLEAN)
-    i INTEGER, -- Курсив (BOOLEAN)
-    u TEXT, -- Подчеркивание (например, 'single', 'double') -- НОВОЕ
-    strike INTEGER, -- Зачеркнутый (BOOLEAN) -- НОВОЕ
-    color_theme INTEGER, -- НОВОЕ
-    color_type TEXT, -- НОВОЕ
-    color_rgb TEXT, -- НОВОЕ
-    color_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для цвета -- НОВОЕ
-    vert_align TEXT, -- Вертикальное выравнивание текста в строке (например, 'superscript', 'subscript') -- НОВОЕ
-    scheme TEXT, -- Схема шрифта -- НОВОЕ
-    family INTEGER, -- НОВОЕ
-    charset INTEGER, -- НОВОЕ
-    -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
-    UNIQUE(name, sz, b, i, u, strike, color_theme, color_type, color_rgb, color_tint, vert_align, scheme, family, charset)
-)
-'''
-
-# === ИСПРАВЛЕНО: Добавлены недостающие столбцы tint ===
-CREATE_PATTERN_FILLS_TABLE = '''
-CREATE TABLE IF NOT EXISTS pattern_fills (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    patternType TEXT,
-    fgColor_theme INTEGER, -- НОВОЕ
-    fgColor_type TEXT, -- НОВОЕ
-    fgColor_rgb TEXT, -- НОВОЕ
-    fgColor_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для fg цвета -- НОВОЕ
-    bgColor_theme INTEGER, -- НОВОЕ
-    bgColor_type TEXT, -- НОВОЕ
-    bgColor_rgb TEXT, -- НОВОЕ
-    bgColor_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для bg цвета -- НОВОЕ
-    -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
-    UNIQUE(patternType, fgColor_theme, fgColor_type, fgColor_rgb, fgColor_tint, bgColor_theme, bgColor_type, bgColor_rgb, bgColor_tint)
-)
-'''
-
-# === ИСПРАВЛЕНО: Добавлены недостающие столбцы tint ===
-CREATE_BORDERS_TABLE = '''
-CREATE TABLE IF NOT EXISTS borders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    left_style TEXT,
-    left_color_theme INTEGER, -- НОВОЕ
-    left_color_type TEXT, -- НОВОЕ
-    left_color_rgb TEXT, -- НОВОЕ
-    left_color_tint REAL, -- НОВОЕ: Добавлен недостающий столбец tint для left цвета -- НОВОЕ
-    right_style TEXT,
-    right_color_theme INTEGER, -- НОВОЕ
-    right_color_type TEXT, -- НОВОЕ
-    right_color_rgb TEXT, -- НОВОЕ
-    right_color_tint REAL, -- НОВОЕ
-    top_style TEXT,
-    top_color_theme INTEGER, -- НОВОЕ
-    top_color_type TEXT, -- НОВОЕ
-    top_color_rgb TEXT, -- НОВОЕ
-    top_color_tint REAL, -- НОВОЕ
-    bottom_style TEXT,
-    bottom_color_theme INTEGER, -- НОВОЕ
-    bottom_color_type TEXT, -- НОВОЕ
-    bottom_color_rgb TEXT, -- НОВОЕ
-    bottom_color_tint REAL, -- НОВОЕ
-    diagonal_style TEXT,
-    diagonal_color_theme INTEGER, -- НОВОЕ
-    diagonal_color_type TEXT, -- НОВОЕ
-    diagonal_color_rgb TEXT, -- НОВОЕ
-    diagonal_color_tint REAL, -- НОВОЕ
-    diagonalUp INTEGER, -- BOOLEAN
-    diagonalDown INTEGER, -- BOOLEAN
-    outline INTEGER, -- BOOLEAN
-    -- ИЗМЕНЕНО: Добавлены новые столбцы в UNIQUE constraint
-    UNIQUE(left_style, left_color_theme, left_color_type, left_color_rgb, left_color_tint,
-           right_style, right_color_theme, right_color_type, right_color_rgb, right_color_tint,
-           top_style, top_color_theme, top_color_type, top_color_rgb, top_color_tint,
-           bottom_style, bottom_color_theme, bottom_color_type, bottom_color_rgb, bottom_color_tint,
-           diagonal_style, diagonal_color_theme, diagonal_color_type, diagonal_color_rgb, diagonal_color_tint,
-           diagonalUp, diagonalDown, outline)
-)
-'''
-
-# === ИСПРАВЛЕНО: Имя столбца textRotation -> text_rotation ===
-CREATE_ALIGNMENTS_TABLE = '''
-CREATE TABLE IF NOT EXISTS alignments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    horizontal TEXT,
-    vertical TEXT,
-    text_rotation REAL, -- ИСПРАВЛЕНО: textRotation -> text_rotation для соответствия SQL-запросам в styles.py
-    wrapText INTEGER, -- BOOLEAN
-    shrinkToFit INTEGER, -- BOOLEAN
-    indent REAL,
-    relativeIndent REAL,
-    justifyLastLine INTEGER, -- BOOLEAN
-    readingOrder REAL,
-    -- ИЗМЕНЕНО: Добавлен text_rotation в UNIQUE constraint
-    UNIQUE(horizontal, vertical, text_rotation, wrapText, shrinkToFit, indent, relativeIndent, justifyLastLine, readingOrder)
-)
-'''
-
-# === ИСПРАВЛЕНО: Добавлены значения по умолчанию ===
-CREATE_PROTECTIONS_TABLE = '''
-CREATE TABLE IF NOT EXISTS protections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    locked INTEGER DEFAULT 1, -- BOOLEAN, по умолчанию заблокировано -- ИЗМЕНЕНО
-    hidden INTEGER DEFAULT 0, -- BOOLEAN, по умолчанию не скрыто -- ИЗМЕНЕНО
-    UNIQUE(locked, hidden)
-)
-'''
-
-# === ИСПРАВЛЕНО: Добавлены недостающие столбцы ===
-CREATE_CELL_STYLES_TABLE = '''
-CREATE TABLE IF NOT EXISTS cell_styles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    font_id INTEGER REFERENCES fonts(id),
-    fill_id INTEGER REFERENCES pattern_fills(id),
-    border_id INTEGER REFERENCES borders(id),
-    alignment_id INTEGER REFERENCES alignments(id),
-    protection_id INTEGER REFERENCES protections(id),
-    num_fmt_id INTEGER, -- ID формата чисел -- НОВОЕ
-    xf_id INTEGER, -- ID XF -- НОВОЕ
-    quote_prefix INTEGER, -- BOOLEAN -- НОВОЕ
-    UNIQUE(font_id, fill_id, border_id, alignment_id, protection_id, num_fmt_id, xf_id, quote_prefix)
-)
-'''
-
-CREATE_STYLED_RANGES_TABLE = '''
-CREATE TABLE IF NOT EXISTS styled_ranges (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+# --- Таблицы для хранения диаграмм ---
+# Таблица для хранения данных диаграмм
+# Хранит сериализованные данные диаграммы (например, JSON или XML)
+SQL_CREATE_SHEET_CHARTS_TABLE = """
+CREATE TABLE IF NOT EXISTS sheet_charts (
+    -- chart_id INTEGER PRIMARY KEY AUTOINCREMENT, -- Можно генерировать ID в БД
     sheet_id INTEGER NOT NULL,
-    style_id INTEGER NOT NULL, -- Ссылка на cell_styles.id
-    range_address TEXT NOT NULL, -- Адрес диапазона (например, 'A1:B10')
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id),
-    FOREIGN KEY (style_id) REFERENCES cell_styles (id)
-)
-'''
+    -- Другие метаданные диаграммы
+    -- chart_type TEXT,
+    -- position TEXT, -- JSON с позицией и размером
+    chart_data TEXT NOT NULL, -- Сериализованные данные диаграммы (JSON/XML/BLOB)
+    FOREIGN KEY (sheet_id) REFERENCES sheets (sheet_id) ON DELETE CASCADE
+    -- PRIMARY KEY (sheet_id, chart_data) -- Или другой уникальный ключ
+);
+"""
 
-# === КОНЕЦ НОВЫХ ТАБЛИЦ ДЛЯ СТИЛЕЙ ===
-
-# === НОВАЯ ТАБЛИЦА ДЛЯ ОБЪЕДИНЕННЫХ ЯЧЕЕК ===
-
-CREATE_MERGED_CELLS_TABLE = '''
-CREATE TABLE IF NOT EXISTS merged_cells_ranges (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_id INTEGER NOT NULL,
-    range_address TEXT NOT NULL, -- Адрес объединенного диапазона (например, 'A1:C3')
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
-
-# === НОВАЯ ТАБЛИЦА ДЛЯ ИСТОРИИ РЕДАКТИРОВАНИЯ ===
-
-CREATE_EDIT_HISTORY_TABLE = '''
+# --- Таблицы для хранения истории редактирования ---
+# Исправленный SQL-запрос для создания таблицы истории редактирования
+# Включает все необходимые поля
+SQL_CREATE_EDIT_HISTORY_TABLE = """
 CREATE TABLE IF NOT EXISTS edit_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
-    sheet_id INTEGER,
-    cell_address TEXT, -- Можно также хранить row_index и column_name отдельно
-    action_type TEXT NOT NULL, -- 'edit_cell', 'add_row', 'delete_row', 'apply_style' и т.д.
-    old_value TEXT, -- Старое значение ячейки
-    new_value TEXT, -- Новое значение ячейки
-    timestamp TEXT NOT NULL, -- Время изменения в ISO формате
-    user TEXT, -- Имя пользователя (если есть система пользователей)
-    details TEXT, -- Дополнительная информация в формате JSON
-    FOREIGN KEY (project_id) REFERENCES projects (id),
-    FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-)
-'''
+    sheet_id INTEGER NOT NULL,
+    cell_address TEXT NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    edited_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (project_id) REFERENCES projects (project_id) ON DELETE CASCADE,
+    FOREIGN KEY (sheet_id) REFERENCES sheets (sheet_id) ON DELETE CASCADE
+);
+"""
 
-# ================================================
+# --- Таблицы для хранения метаданных проекта ---
+# Для хранения произвольных пар ключ-значение для проекта
+SQL_CREATE_PROJECT_METADATA_TABLE = """
+CREATE TABLE IF NOT EXISTS project_metadata (
+    project_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects (project_id) ON DELETE CASCADE,
+    PRIMARY KEY (project_id, key)
+);
+"""
 
-# Список всех SQL-запросов - ДОБАВЛЕН НОВЫЙ ЗАПРОС В КОНЕЦ СПИСКА
-TABLE_CREATION_QUERIES = [\
-    CREATE_PROJECTS_TABLE,\
-    CREATE_SHEETS_TABLE,\
-    CREATE_FORMULAS_TABLE,\
-    CREATE_CROSS_SHEET_REFS_TABLE,\
-    CREATE_CHARTS_TABLE,\
-    CREATE_CHART_AXES_TABLE,\
-    CREATE_CHART_SERIES_TABLE,\
-    CREATE_CHART_DATA_SOURCES_TABLE,\
-    CREATE_RAW_DATA_TABLES_REGISTRY,\
-    CREATE_FONTS_TABLE,\
-    CREATE_PATTERN_FILLS_TABLE,\
-    CREATE_BORDERS_TABLE,\
-    CREATE_ALIGNMENTS_TABLE,\
-    CREATE_PROTECTIONS_TABLE,\
-    CREATE_CELL_STYLES_TABLE,\
-    CREATE_STYLED_RANGES_TABLE,\
-    CREATE_MERGED_CELLS_TABLE,\
-    CREATE_EDIT_HISTORY_TABLE, # <-- ДОБАВИЛИ СЮДА\
-]
 
-def initialize_schema(cursor: sqlite3.Cursor):
+def initialize_project_schema(connection: sqlite3.Connection):
     """
-    Инициализирует схему базы данных, создавая необходимые таблицы,
-    если они еще не существуют.
+    Инициализирует схему таблиц проекта в БД.
 
     Args:
-        cursor (sqlite3.Cursor): Курсор для выполнения SQL-запросов.
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
     """
-    if not cursor:
-        logger.error("Получен пустой курсор для инициализации схемы.")
+    if not connection:
+        logger.error("Нет активного соединения с БД для инициализации схемы.")
         return
 
     try:
-        for query in TABLE_CREATION_QUERIES:
-            cursor.execute(query)
-        logger.info("Схема базы данных инициализирована успешно.")
+        cursor = connection.cursor()
+
+        # --- Создание таблиц ---
+        logger.debug("Создание таблицы 'projects'...")
+        cursor.execute(SQL_CREATE_PROJECTS_TABLE)
+
+        logger.debug("Создание таблицы 'sheets'...")
+        cursor.execute(SQL_CREATE_SHEETS_TABLE)
+
+        logger.debug("Создание таблицы 'formulas'...")
+        cursor.execute(SQL_CREATE_FORMULAS_TABLE)
+
+        logger.debug("Создание таблицы 'styles'...")
+        cursor.execute(SQL_CREATE_STYLES_TABLE)
+
+        logger.debug("Создание таблицы 'sheet_styles'...")
+        cursor.execute(SQL_CREATE_SHEET_STYLES_TABLE)
+
+        logger.debug("Создание таблицы 'sheet_charts'...")
+        cursor.execute(SQL_CREATE_SHEET_CHARTS_TABLE)
+
+        # --- Исправление: Создание таблицы 'edit_history' ---
+        logger.debug("Создание таблицы 'edit_history'...")
+        cursor.execute(SQL_CREATE_EDIT_HISTORY_TABLE)
+
+        logger.debug("Создание таблицы 'project_metadata'...")
+        cursor.execute(SQL_CREATE_PROJECT_METADATA_TABLE)
+
+        # --- Создание индексов для оптимизации ---
+        # Индекс для быстрого поиска листов по project_id
+        logger.debug("Создание индекса для 'sheets.project_id'...")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sheets_project_id ON sheets(project_id);")
+
+        # Индекс для быстрого поиска формул по sheet_id
+        logger.debug("Создание индекса для 'formulas.sheet_id'...")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_formulas_sheet_id ON formulas(sheet_id);")
+
+        # Индекс для быстрого поиска стилей по sheet_id
+        logger.debug("Создание индекса для 'sheet_styles.sheet_id'...")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sheet_styles_sheet_id ON sheet_styles(sheet_id);")
+
+        # Индекс для быстрого поиска диаграмм по sheet_id
+        logger.debug("Создание индекса для 'sheet_charts.sheet_id'...")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sheet_charts_sheet_id ON sheet_charts(sheet_id);")
+
+        # Индекс для быстрого поиска истории по project_id и sheet_id
+        logger.debug("Создание индекса для 'edit_history.project_id'...")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_edit_history_project_id ON edit_history(project_id);")
+        logger.debug("Создание индекса для 'edit_history.sheet_id'...")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_edit_history_sheet_id ON edit_history(sheet_id);")
+
+        connection.commit()
+        logger.info("Схема таблиц проекта успешно инициализирована.")
+
     except sqlite3.Error as e:
         logger.error(f"Ошибка SQLite при инициализации схемы: {e}")
-        raise  # Повторно вызываем исключение, чтобы его мог обработать вызывающий код
+        raise # Повторно вызываем исключение, чтобы ошибка передалась выше
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при инициализации схемы: {e}", exc_info=True)
+        raise # Повторно вызываем исключение
+
+# Дополнительные функции для работы со схемой (если потребуются) могут быть добавлены здесь
