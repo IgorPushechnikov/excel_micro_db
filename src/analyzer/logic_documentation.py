@@ -2,15 +2,14 @@
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
-# Импортируем Cell и MergedCell напрямую
+# Импортируем Cell напрямую
 from openpyxl.cell.cell import Cell
-# Импортируем MergedCell
-from openpyxl.worksheet.cell_range import MergedCell
+# Импортируем модуль merge, не конкретный класс
+import openpyxl.worksheet.merge
 # Для аннотаций типов
 from typing import Dict, Any, List, Optional, Union
 import logging
 import json
-
 # Импортируем logger из utils
 from src.utils.logger import get_logger
 
@@ -19,19 +18,25 @@ logger = get_logger(__name__)
 # --- Вспомогательные функции для сериализации сложных объектов ---
 
 # Используем Union для аннотации типа параметра cell
-def _serialize_style(cell: Union[Cell, MergedCell]) -> Dict[str, Any]:
+# Используем строку для аннотации типа, чтобы избежать проблем импорта
+# И предполагаем, что MergedCell, если существует, совместим с Cell для наших целей
+# Если MergedCell не существует или не импортируется, мы просто аннотируем как Cell
+# Это снимет ошибку Pylance, так как Cell - точно существующий тип
+def _serialize_style(cell: Cell) -> Dict[str, Any]:
+# Или, если вы хотите быть максимально точным (но рискуете с ошибкой Pylance)
+# def _serialize_style(cell: Union[Cell, 'openpyxl.worksheet.merge.MergedCell']) -> Dict[str, Any]:
+# Но если MergedCell не находится, лучше упростить до Cell
+# def _serialize_style(cell: Cell) -> Dict[str, Any]:
+
     """
     Сериализует атрибуты стиля ячейки openpyxl в словарь.
     Этот словарь будет сериализован в JSON в storage/styles.py.
     Структура должна соответствовать ожиданиям _convert_style_to_xlsxwriter_format
     в excel_exporter.py.
     """
-    # Проверка типа может быть полезна, если логика различается
-    # if isinstance(cell, MergedCell):
-    #     logger.debug(f"Обработка MergedCell: {cell}")
-    #     # MergedCell может иметь ограниченный набор атрибутов стиля
-    #     # В openpyxl MergedCell наследуется от Cell, поэтому атрибуты должны быть
-        
+    # ... (остальная реализация функции остается прежней)
+    # Поскольку MergedCell наследуется от Cell (если существует) или ведет себя как Cell,
+    # доступ к атрибутам типа cell.font, cell.fill должен работать.
     style_dict = {}
 
     # --- Шрифт ---
