@@ -62,26 +62,48 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
     """
     Преобразует атрибуты стиля из формата БД в словарь атрибутов для workbook.add_format().
     """
+    # === ДОБАВЛЕНО: Лог входных атрибутов ===
+    logger.debug(f"Входные атрибуты стиля для преобразования: {style_attributes}")
+    # ========================================
+    
     format_props = {}
 
     # --- Шрифт ---
     if 'font_name' in style_attributes and style_attributes['font_name'] is not None:
         format_props['font_name'] = style_attributes['font_name']
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут шрифта: font_name = {style_attributes['font_name']}")
+        # =========================================
     if 'font_sz' in style_attributes and style_attributes['font_sz'] is not None:
         # XlsxWriter ожидает 'font_size'
         format_props['font_size'] = float(style_attributes['font_sz'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут шрифта: font_size = {float(style_attributes['font_sz'])}")
+        # =========================================
     if 'font_b' in style_attributes:
         # XlsxWriter ожидает 'bold'
         format_props['bold'] = bool(style_attributes['font_b'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут шрифта: bold = {bool(style_attributes['font_b'])}")
+        # =========================================
     if 'font_i' in style_attributes:
         # XlsxWriter ожидает 'italic'
         format_props['italic'] = bool(style_attributes['font_i'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут шрифта: italic = {bool(style_attributes['font_i'])}")
+        # =========================================
     if 'font_u' in style_attributes and style_attributes['font_u'] is not None:
         # XlsxWriter ожидает 'underline'
         format_props['underline'] = style_attributes['font_u'] # 'single', 'double' etc.
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут шрифта: underline = {style_attributes['font_u']}")
+        # =========================================
     if 'font_strike' in style_attributes:
         # XlsxWriter ожидает 'font_strikeout'
         format_props['font_strikeout'] = bool(style_attributes['font_strike'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут шрифта: font_strikeout = {bool(style_attributes['font_strike'])}")
+        # =========================================
     # Цвет шрифта
     # XlsxWriter поддерживает 'font_color' в формате '#RRGGBB' или 'color_name'
     if 'font_color_rgb' in style_attributes and style_attributes['font_color_rgb'] is not None:
@@ -91,10 +113,16 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
             # Предполагаем, что это hex без #
             if len(color_val) == 6 or len(color_val) == 8: # RRGGBB or AARRGGBB
                  format_props['font_color'] = f"#{color_val[-6:]}" # Берем последние 6 символов для RRGGBB
+                 # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                 logger.debug(f"Добавлен атрибут шрифта: font_color = #{color_val[-6:]}")
+                 # =========================================
             else:
                  logger.warning(f"Неожиданный формат цвета шрифта: {color_val}")
         else:
              format_props['font_color'] = color_val
+             # === ДОБАВЛЕНО: Лог добавления атрибута ===
+             logger.debug(f"Добавлен атрибут шрифта: font_color = {color_val}")
+             # =========================================
     # TODO: Обработка других атрибутов шрифта (theme, tint, vert_align, scheme)
     # Это может потребовать дополнительной логики или игнорирования, если XlsxWriter не поддерживает напрямую.
 
@@ -107,16 +135,25 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
         # XlsxWriter использует немного другие названия паттернов, но 'solid' должен работать.
         # Другие паттерны могут требовать сопоставления.
         format_props['pattern'] = 1 if pattern_type == 'solid' else 0 # 1 для solid, 0 для none как стандарт
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут заливки: pattern = {1 if pattern_type == 'solid' else 0} (patternType: {pattern_type})")
+        # =========================================
         # Цвет заливки
         if 'fill_fg_color_rgb' in style_attributes and style_attributes['fill_fg_color_rgb'] is not None:
             color_val = style_attributes['fill_fg_color_rgb']
             if not color_val.startswith('#'):
                 if len(color_val) == 6 or len(color_val) == 8:
                      format_props['bg_color'] = f"#{color_val[-6:]}"
+                     # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                     logger.debug(f"Добавлен атрибут заливки: bg_color = #{color_val[-6:]}")
+                     # =========================================
                 else:
                      logger.warning(f"Неожиданный формат цвета заливки: {color_val}")
             else:
                  format_props['bg_color'] = color_val
+                 # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                 logger.debug(f"Добавлен атрибут заливки: bg_color = {color_val}")
+                 # =========================================
         # TODO: Обработка bgColor из openpyxl (который используется для других паттернов)
         # и других атрибутов заливки (theme, tint)
 
@@ -128,15 +165,24 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
     left_style = style_attributes.get('border_left_style')
     if left_style:
         border_props['left'] = {'style': left_style}
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут границы: left.style = {left_style}")
+        # =========================================
         if 'border_left_color_rgb' in style_attributes and style_attributes['border_left_color_rgb'] is not None:
             color_val = style_attributes['border_left_color_rgb']
             if not color_val.startswith('#'):
                 if len(color_val) == 6 or len(color_val) == 8:
                      border_props['left']['color'] = f"#{color_val[-6:]}"
+                     # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                     logger.debug(f"Добавлен атрибут границы: left.color = #{color_val[-6:]}")
+                     # =========================================
                 else:
                      logger.warning(f"Неожиданный формат цвета границы (left): {color_val}")
             else:
                  border_props['left']['color'] = color_val
+                 # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                 logger.debug(f"Добавлен атрибут границы: left.color = {color_val}")
+                 # =========================================
     # Аналогично для других сторон
     for side in ['right', 'top', 'bottom']: # 'diagonal' требует особой обработки
         side_style_key = f'border_{side}_style'
@@ -146,15 +192,24 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
             if side not in border_props:
                 border_props[side] = {}
             border_props[side]['style'] = side_style
+            # === ДОБАВЛЕНО: Лог добавления атрибута ===
+            logger.debug(f"Добавлен атрибут границы: {side}.style = {side_style}")
+            # =========================================
             if side_color_key in style_attributes and style_attributes[side_color_key] is not None:
                 color_val = style_attributes[side_color_key]
                 if not color_val.startswith('#'):
                     if len(color_val) == 6 or len(color_val) == 8:
                          border_props[side]['color'] = f"#{color_val[-6:]}"
+                         # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                         logger.debug(f"Добавлен атрибут границы: {side}.color = #{color_val[-6:]}")
+                         # =========================================
                     else:
                          logger.warning(f"Неожиданный формат цвета границы ({side}): {color_val}")
                 else:
                      border_props[side]['color'] = color_val
+                     # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                     logger.debug(f"Добавлен атрибут границы: {side}.color = {color_val}")
+                     # =========================================
 
     # Диагональные границы (если используются)
     # XlsxWriter использует 'diag_type' (0=none, 1=down, 2=up, 3=both) и 'diag_border'
@@ -163,27 +218,48 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
     diag_type = 0
     if diag_up and diag_down:
         diag_type = 3 # both
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут границы: diag_type = {diag_type} (both)")
+        # =========================================
     elif diag_down:
         diag_type = 1 # down
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут границы: diag_type = {diag_type} (down)")
+        # =========================================
     elif diag_up:
         diag_type = 2 # up
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут границы: diag_type = {diag_type} (up)")
+        # =========================================
     if diag_type != 0:
         border_props['diag_type'] = diag_type
         diag_style = style_attributes.get('border_diagonal_style')
         if diag_style:
             border_props['diag_border'] = {'style': diag_style}
+            # === ДОБАВЛЕНО: Лог добавления атрибута ===
+            logger.debug(f"Добавлен атрибут границы: diag_border.style = {diag_style}")
+            # =========================================
             if 'border_diagonal_color_rgb' in style_attributes and style_attributes['border_diagonal_color_rgb'] is not None:
                 color_val = style_attributes['border_diagonal_color_rgb']
                 if not color_val.startswith('#'):
                     if len(color_val) == 6 or len(color_val) == 8:
                          border_props['diag_border']['color'] = f"#{color_val[-6:]}"
+                         # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                         logger.debug(f"Добавлен атрибут границы: diag_border.color = #{color_val[-6:]}")
+                         # =========================================
                     else:
                          logger.warning(f"Неожиданный формат цвета диагональной границы: {color_val}")
                 else:
                      border_props['diag_border']['color'] = color_val
+                     # === ДОБАВЛЕНО: Лог добавления атрибута ===
+                     logger.debug(f"Добавлен атрибут границы: diag_border.color = {color_val}")
+                     # =========================================
 
     if border_props:
         format_props.update(border_props)
+        # === ДОБАВЛЕНО: Лог добавления атрибутов границ ===
+        logger.debug(f"Добавлены атрибуты границ: {border_props}")
+        # =========================================
 
     # --- Выравнивание ---
     # XlsxWriter использует 'align' (горизонтальное) и 'valign' (вертикальное)
@@ -192,15 +268,27 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
         # Некоторые значения могут отличаться, например 'centerContinuous' в openpyxl -> 'center_across' в XlsxWriter
         # Пока используем напрямую, можно добавить сопоставление при необходимости.
         format_props['align'] = h_align
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут выравнивания: align = {h_align}")
+        # =========================================
     v_align = style_attributes.get('alignment_vertical')
     if v_align:
         # 'top', 'center', 'bottom' должны совпадать
         format_props['valign'] = v_align
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут выравнивания: valign = {v_align}")
+        # =========================================
     if 'alignment_wrap_text' in style_attributes:
         format_props['text_wrap'] = bool(style_attributes['alignment_wrap_text'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут выравнивания: text_wrap = {bool(style_attributes['alignment_wrap_text'])}")
+        # =========================================
     if 'alignment_shrink_to_fit' in style_attributes:
         # XlsxWriter использует 'shrink'
         format_props['shrink'] = bool(style_attributes['alignment_shrink_to_fit'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут выравнивания: shrink = {bool(style_attributes['alignment_shrink_to_fit'])}")
+        # =========================================
     # TODO: Обработка других атрибутов выравнивания (indent, rotation, reading_order и т.д.)
     # если они будут использоваться.
 
@@ -208,8 +296,14 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
     # XlsxWriter использует 'locked' и 'hidden' напрямую в формате
     if 'protection_locked' in style_attributes:
         format_props['locked'] = bool(style_attributes['protection_locked'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут защиты: locked = {bool(style_attributes['protection_locked'])}")
+        # =========================================
     if 'protection_hidden' in style_attributes:
         format_props['hidden'] = bool(style_attributes['protection_hidden'])
+        # === ДОБАВЛЕНО: Лог добавления атрибута ===
+        logger.debug(f"Добавлен атрибут защиты: hidden = {bool(style_attributes['protection_hidden'])}")
+        # =========================================
 
     # --- Другие атрибуты ---
     # num_format - формат чисел
@@ -219,8 +313,13 @@ def _convert_style_attributes_to_xlsxwriter_format_dict(style_attributes: Dict[s
         # Пока оставим заглушку или пропустим, если это не критично на данном этапе.
         # format_props['num_format'] = ...
         pass # Пропускаем, так как у нас нет маппинга ID -> строка формата
+        # === ДОБАВЛЕНО: Лог пропущенного атрибута ===
+        logger.debug(f"Пропущен атрибут: num_fmt_id = {style_attributes['num_fmt_id']} (не реализовано)")
+        # =========================================
 
+    # === ДОБАВЛЕНО: Лог итогового словаря ===
     logger.debug(f"Преобразованы атрибуты стиля для XlsxWriter: {format_props}")
+    # =========================================
     return format_props # Всегда возвращаем словарь, даже если он пустой
 
 # --- Основные функции экспорта ---
