@@ -5,8 +5,6 @@ from openpyxl.worksheet.worksheet import Worksheet
 # --- ИСПРАВЛЕНИЕ: Импортируем Cell напрямую с псевдонимом ---
 # Это должно помочь Pylance понять тип, совместимый с _CellOrMergedCell
 from openpyxl.cell.cell import Cell as OpenPyxlCell
-# --- КОНЕЦ ИМПОРТА ---
-
 # Для аннотаций типов
 from typing import Dict, Any, List, Optional
 import logging
@@ -19,17 +17,18 @@ logger = get_logger(__name__)
 
 # --- Вспомогательные функции для сериализации сложных объектов ---
 
-# --- ИСПРАВЛЕНИЕ: Аннотируем параметр как OpenPyxlCell ---
+# --- ИСПРАВЛЕНИЕ: Используем новый синтаксис объединения типов ---
+# В Python 3.10+ можно использовать X | Y для объединения типов
 # iter_rows() возвращает _CellOrMergedCell, который должен быть совместим с OpenPyxlCell.
-# Pylance теперь должен принять эту аннотацию.
-def _serialize_style(cell: OpenPyxlCell) -> Dict[str, Any]:
+# В новых версиях Python Pylance должен принять эту аннотацию.
+def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
     """
     Сериализует атрибуты стиля ячейки openpyxl в словарь.
     Этот словарь будет сериализован в JSON в storage/styles.py.
     Структура должна соответствовать ожиданиям _convert_style_to_xlsxwriter_format
     в excel_exporter.py.
     """
-    # --- ИСПРАВЛЕНИЕ: Pylance теперь должен понимать, что у cell (OpenPyxlCell) есть атрибуты font, fill и т.д.
+    # --- ИСПРАВЛЕНИЕ: Pylance теперь должен понимать, что у cell (OpenPyxlCell | Any) есть атрибуты font, fill и т.д.
     # Проверки hasattr остаются для безопасности во время выполнения.
     style_dict = {}
 
@@ -237,8 +236,8 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
                     # Это можно сделать, сравнивая с дефолтным стилем, но проще сериализовать всегда
                     # и потом в storage/styles.py решать, нужно ли его сохранять.
 
-                    # --- ИСПРАВЛЕНИЕ: Передаем cell в _serialize_style, аннотированную как OpenPyxlCell ---
-                    # iter_rows возвращает _CellOrMergedCell. Pylance должен принять OpenPyxlCell.
+                    # --- ИСПРАВЛЕНИЕ: Передаем cell в _serialize_style, аннотированную как OpenPyxlCell | Any ---
+                    # iter_rows возвращает _CellOrMergedCell. Pylance должен принять OpenPyxlCell | Any.
                     style_dict = _serialize_style(cell)
                     # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                     if style_dict: # Если стиль не пустой
