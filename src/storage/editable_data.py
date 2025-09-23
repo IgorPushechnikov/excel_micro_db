@@ -1,344 +1,120 @@
 # src/storage/editable_data.py
-"""
-Модуль для работы с редактируемыми данными в хранилище проекта Excel Micro DB.
-"""
 
 import sqlite3
 import logging
-from typing import Optional, Any, Dict, List
-# from src.storage.base import sanitize_table_name # Если потребуется
-# from src.storage.schema import ... # Если потребуются какие-либо константы
-# ИМПОРТ sanitize_column_name БУДЕТ ВНУТРИ ФУНКЦИЙ, ГДЕ ОН ИСПОЛЬЗУЕТСЯ
+from typing import List, Dict, Any, Optional
 
-# Импортируем datetime для проверки типов значений в create_and_populate_editable_table
-from datetime import datetime as dt_datetime # Переименовываем во избежание конфликта с именем переменной
-
+# Получаем логгер для этого модуля
 logger = logging.getLogger(__name__)
 
-# --- Вспомогательные функции ---
-
-def sanitize_editable_table_name(name: str) -> str:
+def _get_editable_table_name(sheet_name: str) -> str:
     """
-    Санитизирует имя для использования в качестве имени таблицы для редактируемых данных.
-
+    Генерирует имя таблицы для редактируемых данных листа.
     Args:
-        name (str): Исходное имя.
-
+        sheet_name (str): Имя листа Excel.
     Returns:
-        str: Санитизированное имя.
+        str: Имя таблицы в БД.
     """
-    # Пока используем ту же функцию. Можно адаптировать при необходимости.
-    # Импортируем здесь, чтобы избежать циклического импорта
-    from src.storage.base import sanitize_table_name
-    sanitized = sanitize_table_name(name)
-    return f"editable_data_{sanitized}"
+    # Санитизация имени таблицы для безопасности
+    sanitized_sheet_name = "".join(c for c in sheet_name if c.isalnum() or c in (' ', '_')).rstrip()
+    sanitized_sheet_name = sanitized_sheet_name.replace(' ', '_')
+    return f"editable_data_{sanitized_sheet_name}"
 
-# --- Основные функции работы с редактируемыми данными ---
-
-def load_sheet_editable_data(connection: sqlite3.Connection, sheet_name: str) -> Dict[str, Any]:
+def load_sheet_editable_data(connection: sqlite3.Connection, sheet_id: int, sheet_name: str) -> List[Dict[str, Any]]:
     """
-    Загружает редактируемые данные для конкретного листа из его таблицы.
-
+    Загружает редактируемые данные для указанного листа.
     Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
-        sheet_name (str): Имя листа.
-
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
+        sheet_id (int): ID листа в БД.
+        sheet_name (str): Имя листа Excel.
     Returns:
-        Dict[str, Any]: Словарь с ключами 'column_names' и 'rows'.
-                        Возвращает пустые списки, если таблица не найдена.
+        List[Dict[str, Any]]: Список словарей с ключами 'cell_address' и 'value'.
+                              Возвращает пустой список в случае ошибки или отсутствия данных.
     """
     if not connection:
-        logger.error("Получено пустое соединение для загрузки редактируемых данных.")
-        return {"column_names": [], "rows": []}
+        logger.error("Нет активного соединения с БД для загрузки редактируемых данных.")
+        return []
 
-    editable_table_name = sanitize_editable_table_name(sheet_name)
-    
     try:
         cursor = connection.cursor()
-        
-        # Проверим, существует ли таблица
+        table_name = _get_editable_table_name(sheet_name)
+
+        # Проверяем, существует ли таблица
         cursor.execute("""
             SELECT name FROM sqlite_master 
             WHERE type='table' AND name=?
-        """, (editable_table_name,))
-        
+        """, (table_name,))
         if not cursor.fetchone():
-            logger.warning(f"Таблица редактируемых данных '{editable_table_name}' не найдена.")
-            return {"column_names": [], "rows": []}
+            logger.info(f"Таблица редактируемых данных '{table_name}' не найдена. Возвращается пустой список.")
+            return []
 
-        # Получаем имена столбцов
-        cursor.execute(f"PRAGMA table_info({editable_table_name})")
-        columns_info = cursor.fetchall()
-        # Пропускаем столбец 'id', который является служебным
-        column_names = [col[1] for col in columns_info if col[1] != 'id']
+        # Загружаем данные
+        cursor.execute(f"SELECT cell_address, value FROM {table_name}")
+        rows = cursor.fetchall()
         
-        # Получаем все строки
-        # Экранируем имена столбцов на случай, если они зарезервированы
-        if column_names:
-            placeholders = ', '.join([f'"{col}"' for col in column_names])
-            cursor.execute(f"SELECT {placeholders} FROM {editable_table_name}")
-            rows = cursor.fetchall()
-        else:
-            rows = []
-        
-        logger.debug(f"Загружено {len(rows)} строк из таблицы '{editable_table_name}'.")
-        return {
-            "column_names": column_names,
-            "rows": rows
-        }
-        
+        editable_data = [{"cell_address": row[0], "value": row[1]} for row in rows]
+        logger.debug(f"Загружено {len(editable_data)} записей редактируемых данных для листа '{sheet_name}' (ID: {sheet_id}).")
+        return editable_data
+
     except sqlite3.Error as e:
-        logger.error(f"Ошибка SQLite при загрузке редактируемых данных для листа '{sheet_name}': {e}")
-        return {"column_names": [], "rows": []}
+        logger.error(f"Ошибка SQLite при загрузке редактируемых данных для листа '{sheet_name}' (ID: {sheet_id}): {e}")
+        return []
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при загрузке редактируемых данных для листа '{sheet_name}': {e}")
-        return {"column_names": [], "rows": []}
+        logger.error(f"Неожиданная ошибка при загрузке редактируемых данных для листа '{sheet_name}' (ID: {sheet_id}): {e}", exc_info=True)
+        return []
 
-
-def update_editable_cell(
-    connection: sqlite3.Connection, 
-    sheet_name: str, 
-    row_index: int, 
-    column_name: str, 
-    new_value: Any
-) -> bool:
+def update_editable_cell(connection: sqlite3.Connection, sheet_id: int, sheet_name: str, cell_address: str, new_value: Any) -> bool:
     """
-    Обновляет значение отдельной ячейки в таблице редактируемых данных конкретного листа.
-
+    Обновляет значение редактируемой ячейки в таблице editable_data_<имя_листа>.
+    Если запись для ячейки не существует, она создается.
     Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
-        sheet_name (str): Имя листа.
-        row_index (int): 0-базовый индекс строки.
-        column_name (str): Имя столбца.
-        new_value (Any): Новое значение ячейки.
-
-    Returns:
-        bool: True, если обновление прошло успешно, False в случае ошибки.
-    """
-    if not connection:
-        logger.error("Получено пустое соединение для обновления редактируемой ячейки.")
-        return False
-
-    try:
-        cursor = connection.cursor()
-        
-        # Санитизируем имя таблицы
-        editable_table_name = sanitize_editable_table_name(sheet_name)
-        
-        # Санитизируем имя столбца
-        # ИМПОРТ ВНУТРИ ФУНКЦИИ
-        from src.storage.base import sanitize_column_name
-        sanitized_col_name = sanitize_column_name(column_name)
-        # Защита от конфликта с зарезервированным словом 'id'
-        if sanitized_col_name.lower() == 'id':
-             sanitized_col_name = f"data_{sanitized_col_name}"
-             
-        # row_index в Python (0-based) -> id в БД (1-based)
-        db_row_id = row_index + 1 
-
-        # --- ДОБАВЛЕННЫЕ ЛОГИ ДЛЯ ОТЛАДКИ ---
-        logger.debug(f"DEBUG_UPDATE: sheet_name='{sheet_name}', row_index={row_index}, column_name='{column_name}'")
-        logger.debug(f"DEBUG_UPDATE: editable_table_name='{editable_table_name}', sanitized_col_name='{sanitized_col_name}', db_row_id={db_row_id}")
-        logger.debug(f"DEBUG_UPDATE: new_value='{new_value}' (type: {type(new_value)})")
-        # ------------------------------------
-
-        # Обновляем значение в таблице
-        # Экранируем имя столбца
-        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
-        update_sql = f'''
-            UPDATE {editable_table_name} 
-            SET "{sanitized_col_name}" = ?
-            WHERE id = ?
-        '''
-        update_params = (str(new_value), db_row_id)
-        logger.debug(f"DEBUG_UPDATE: Выполняется SQL: {update_sql.strip()}, Параметры: {update_params}")
-        # ------------------------------------
-        cursor.execute(update_sql, update_params)
-        
-        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
-        logger.debug(f"DEBUG_UPDATE: cursor.rowcount после UPDATE: {cursor.rowcount}")
-        affected_rows = cursor.rowcount
-        # ------------------------------------
-
-        if affected_rows == 0:
-            logger.warning(f"Ячейка [{sheet_name}][{row_index}, {column_name}] не найдена для обновления (id={db_row_id} в таблице {editable_table_name}).")
-            # Можно здесь создать новую строку, если она отсутствует, но обычно она должна быть.
-            # Для MVP предполагаем, что строка существует.
-            connection.commit() # На всякий случай коммитим, даже если ничего не изменилось
-            # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
-            logger.debug(f"DEBUG_UPDATE: connection.commit() вызван из-за rowcount=0")
-            # ------------------------------------
-            return False
-        else:
-            connection.commit()
-            logger.info(f"Обновлена ячейка [{sheet_name}][{row_index}, {column_name}] (id={db_row_id}). Новое значение: {new_value}")
-            # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
-            logger.debug(f"DEBUG_UPDATE: connection.commit() вызван из-за rowcount>0")
-            # ------------------------------------
-            return True
-            
-    except sqlite3.Error as e:
-        logger.error(f"Ошибка SQLite при обновлении ячейки [{sheet_name}][{row_index}, {column_name}]: {e}")
-        connection.rollback()
-        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
-        logger.debug(f"DEBUG_UPDATE: connection.rollback() вызван из-за sqlite3.Error")
-        # ------------------------------------
-        return False
-    except Exception as e:
-        logger.error(f"Неожиданная ошибка при обновлении ячейки [{sheet_name}][{row_index}, {column_name}]: {e}")
-        connection.rollback()
-        # --- ДОБАВЛЕННЫЙ ЛОГ ДЛЯ ОТЛАДКИ ---
-        logger.debug(f"DEBUG_UPDATE: connection.rollback() вызван из-за Exception")
-        # ------------------------------------
-        return False
-
-# === НОВОЕ: Функция для создания и инициализации таблицы редактируемых данных ===
-
-def create_and_populate_editable_table(
-    connection: sqlite3.Connection, 
-    sheet_id: int, 
-    sheet_name: str, 
-    raw_data_info: Dict[str, Any]
-) -> bool:
-    """
-    Создает таблицу editable_data_<sheet_name> и копирует в неё данные из raw_data_info.
-    Если таблица уже существует, она не пересоздается.
-
-    Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
         sheet_id (int): ID листа в БД.
         sheet_name (str): Имя листа Excel.
-        raw_data_info (Dict[str, Any]): Словарь с ключами 'column_names' и 'rows', 
-                                        содержащий сырые данные для копирования.
-
+        cell_address (str): Адрес ячейки (например, 'A1').
+        new_value (Any): Новое значение ячейки.
     Returns:
-        bool: True, если таблица создана/заполнена успешно или уже существовала, False в случае ошибки.
+        bool: True, если операция прошла успешно, иначе False.
     """
-    # Инициализируем переменную заранее, чтобы Pylance был доволен
-    editable_table_name = ""
     if not connection:
-        logger.error("Получено пустое соединение для создания таблицы редактируемых данных.")
+        logger.error("Нет активного соединения с БД для обновления редактируемой ячейки.")
         return False
 
     try:
         cursor = connection.cursor()
-        editable_table_name = sanitize_editable_table_name(sheet_name) # Определяем имя таблицы
-        
-        # 1. Проверить, существует ли таблица
+        table_name = _get_editable_table_name(sheet_name)
+
+        # Проверяем, существует ли таблица, и создаем её, если нет
         cursor.execute("""
-            SELECT name FROM sqlite_master
+            SELECT name FROM sqlite_master 
             WHERE type='table' AND name=?
-        """, (editable_table_name,))
-        
-        if cursor.fetchone():
-            logger.debug(f"Таблица редактируемых данных '{editable_table_name}' уже существует.")
-            return True # Таблица уже есть, ничего не делаем
-        
-        logger.debug(f"Создание таблицы редактируемых данных '{editable_table_name}' для листа '{sheet_name}'.")
-
-        # 2. Создать таблицу на основе raw_data_info
-        column_names = raw_data_info.get("column_names", [])
-        if not column_names:
-             logger.warning(f"Нет имен столбцов в raw_data_info для листа '{sheet_name}'. Таблица не будет создана.")
-             return True # Нечего создавать, но это не ошибка
-
-        # Начинаем с обязательных служебных столбцов
-        columns_sql_parts = ["id INTEGER PRIMARY KEY AUTOINCREMENT"] # Уникальный ID строки
-
-        # Добавляем столбцы для данных, используя ту же логику санитизации
-        for col_name in column_names:
-            # Санитизируем имя столбца
-            # ИМПОРТ ВНУТРИ ЦИКЛА
-            from src.storage.base import sanitize_column_name
-            sanitized_col_name = sanitize_column_name(col_name)
-            # - ИСПРАВЛЕНО: Проверка на конфликт имён -
-            # Проверяем, не совпадает ли санитизированное имя с зарезервированными
-            if sanitized_col_name.lower() in ['id']:
-                # Если совпадает, добавляем префикс
-                sanitized_col_name = f"data_{sanitized_col_name}"
-                logger.debug(f"Зарезервированное имя столбца '{col_name}' переименовано в '{sanitized_col_name}' для таблицы '{editable_table_name}'.")
-            # - КОНЕЦ ИСПРАВЛЕНИЯ -
-            # Добавляем столбец (в SQLite все значения TEXT, можно уточнить тип позже)
-            columns_sql_parts.append(f"{sanitized_col_name} TEXT")
-
-        create_table_sql = f"CREATE TABLE {editable_table_name} ({', '.join(columns_sql_parts)})"
-        logger.debug(f"SQL-запрос создания таблицы: {create_table_sql}")
-        cursor.execute(create_table_sql)
-        
-        # 3. Скопировать данные из raw_data_info
-        logger.debug(f"Начало копирования данных в '{editable_table_name}' из переданного raw_data_info.")
-        rows_data = raw_data_info.get("rows", [])
-        if not rows_data:
-             logger.debug(f"Нет строк данных в raw_data_info для листа '{sheet_name}'. Таблица создана пустая.")
-             connection.commit()
-             return True # Таблица создана, данных нет
-        
-        # Подготавливаем имена столбцов для вставки (санитизированные)
-        sanitized_col_names = []
-        for cn in column_names:
-            # ИМПОРТ ВНУТРИ ЦИКЛА
-            from src.storage.base import sanitize_column_name
-            s_cn = sanitize_column_name(cn)
-            # Применяем ту же логику переименования, что и при создании
-            if s_cn.lower() == 'id': 
-                s_cn = f"data_{s_cn}"
-            sanitized_col_names.append(s_cn)
-
-        logger.debug(f"Санитизированные имена столбцов для вставки: {sanitized_col_names}")
-
-        if not sanitized_col_names:
-            logger.warning(f"Нет санитизированных имен столбцов для вставки в '{editable_table_name}'.")
+        """, (table_name,))
+        if not cursor.fetchone():
+            logger.info(f"Таблица '{table_name}' не найдена, создаем новую.")
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    cell_address TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
             connection.commit()
-            return True # Таблица создана, но не заполнена
+            logger.debug(f"Таблица '{table_name}' создана.")
+
+        # Вставляем или обновляем запись
+        cursor.execute(f"""
+            INSERT OR REPLACE INTO {table_name} (cell_address, value)
+            VALUES (?, ?)
+        """, (cell_address, str(new_value) if new_value is not None else None))
         
-        # Формируем SQL-запрос для вставки
-        placeholders = ', '.join(['?' for _ in sanitized_col_names])
-        columns_str = ', '.join(sanitized_col_names)
-        insert_sql = f"INSERT INTO {editable_table_name} ({columns_str}) VALUES ({placeholders})"
-        logger.debug(f"SQL-запрос вставки данных: {insert_sql}")
-
-        # Подготавливаем данные для вставки
-        data_to_insert = []
-        for row_dict in rows_data:
-            # Для каждой строки создаем кортеж значений в порядке sanitized_col_names
-            row_values = []
-            for orig_col_name in column_names: # Итерируемся по оригинальным именам
-                # ИМПОРТ ВНУТРИ ЦИКЛА
-                from src.storage.base import sanitize_column_name
-                sanitized_name = sanitize_column_name(orig_col_name)
-                if sanitized_name.lower() == 'id':
-                    sanitized_name = f"data_{sanitized_name}"
-                # Получаем значение из row_dict по оригинальному имени
-                value = row_dict.get(orig_col_name, None)
-                # Убедимся, что значение является строкой или None для SQLite
-                if value is not None and not isinstance(value, (str, int, float, type(None))):
-                    # Если это datetime, преобразуем в ISO строку
-                    # ИСПРАВЛЕНО: Импорт datetime и проверка типа
-                    if isinstance(value, dt_datetime): # <-- ИСПРАВЛЕНО
-                        value = value.isoformat()
-                    else:
-                        # Для остальных типов - преобразуем в строку
-                        value = str(value)
-                row_values.append(value)
-            data_to_insert.append(tuple(row_values))
-
-        logger.debug(f"Подготовлено {len(data_to_insert)} строк для вставки.")
-
-        # Выполняем массовую вставку
-        if data_to_insert: # Проверяем, есть ли данные для вставки
-            cursor.executemany(insert_sql, data_to_insert)
-            
         connection.commit()
-        logger.info(f"Таблица редактируемых данных '{editable_table_name}' успешно создана и заполнена {len(data_to_insert)} строками.")
+        logger.debug(f"Обновлено значение ячейки {cell_address} в таблице '{table_name}' для листа '{sheet_name}' (ID: {sheet_id}). Новое значение: {new_value}")
         return True
 
     except sqlite3.Error as e:
-        logger.error(f"Ошибка SQLite при создании/заполнении таблицы '{editable_table_name}': {e}") # <-- ИСПРАВЛЕНО: использование переменной
-        connection.rollback()
+        logger.error(f"Ошибка SQLite при обновлении ячейки {cell_address} для листа '{sheet_name}' (ID: {sheet_id}): {e}")
         return False
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при создании/заполнении таблицы '{editable_table_name}': {e}") # <-- ИСПРАВЛЕНО: использование переменной
-        connection.rollback()
+        logger.error(f"Неожиданная ошибка при обновлении ячейки {cell_address} для листа '{sheet_name}' (ID: {sheet_id}): {e}", exc_info=True)
         return False
 
-# =========================================================
+# Дополнительные функции для работы с редактируемыми данными (если потребуются) могут быть добавлены здесь
