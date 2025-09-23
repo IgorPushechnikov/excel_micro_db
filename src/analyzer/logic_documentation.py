@@ -2,11 +2,13 @@
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
+# Импортируем Cell напрямую
 from openpyxl.cell.cell import Cell
+# Импортируем RichText
+from openpyxl.drawing.text import RichText
 import logging
 from typing import Dict, Any, List, Tuple, Optional
 import json
-# import base64 # Если потребуется кодировать двоичные данные диаграмм
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -140,7 +142,7 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
              if hasattr(chart_obj.title, 'tx') and chart_obj.title.tx:
                  if hasattr(chart_obj.title.tx, 'rich') and chart_obj.title.tx.rich:
                      # Получить текст из rich text
-                     from openpyxl.drawing.text import RichText
+                     # from openpyxl.drawing.text import RichText - уже импортирован
                      if isinstance(chart_obj.title.tx.rich, RichText):
                          # chart_data['title'] = chart_obj.title.tx.rich ... (нужно извлечь текст)
                          # Упрощение: берем первый run
@@ -208,7 +210,7 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
             logger.debug(f"Извлечение сырых данных с листа '{sheet_name}'...")
             for row in sheet.iter_rows(values_only=False): # values_only=False, чтобы получить объекты Cell
                 for cell in row:
-                    if cell.value is not None or cell.formula: # Сохраняем и данные, и формулы
+                    if cell.value is not None or cell.data_type == 'f': # Сохраняем и данные, и формулы
                         data_item = {
                             "cell_address": cell.coordinate,
                             "value": cell.value,
@@ -220,11 +222,6 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
             logger.debug(f"Извлечение формул с листа '{sheet_name}'...")
             for row in sheet.iter_rows(values_only=False):
                 for cell in row:
-                    # Проверяем атрибуты formula и value
-                    # formula_attr = getattr(cell, 'formula', None)
-                    # if formula_attr:
-                    #     logger.warning(f"Найден атрибут formula у {cell.coordinate}: {formula_attr}")
-                    
                     # Правильный способ получения формулы в openpyxl - через .value, если оно начинается с '='
                     # Или через data_only=False и проверку типа cell.value
                     # Но так как мы загрузили с data_only=False, cell.value для ячейки с формулой
@@ -234,9 +231,6 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
                     # НО! При data_only=False, cell.value ДОЛЖЕН содержать формулу как строку, начинающуюся с '='
                     # если в ячейке формула.
                     
-                    # Альтернатива: использовать sheet.formula_attributes
-                    # Но проще и надежнее проверить значение.
-                    
                     # Проверим, является ли значение строкой, начинающейся с '='
                     # Это будет работать при data_only=False
                     if isinstance(cell.value, str) and cell.value.startswith('='):
@@ -244,8 +238,7 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
                              "cell_address": cell.coordinate,
                              "formula": cell.value # Сохраняем формулу как есть, включая '='
                          })
-                    # ВАЖНО: openpyxl также имеет cell.formula, но это может быть не то же самое.
-                    # Уточнение: cell.value при data_only=False содержит формулу.
+                    # УДАЛЕННО: cell.formula - это неправильный способ и вызывает ошибку.
 
             # --- 3. Извлечение стилей ---
             logger.debug(f"Извлечение и группировка стилей с листа '{sheet_name}'...")
@@ -291,15 +284,21 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
             # --- 4. Извлечение диаграмм ---
             logger.debug(f"Извлечение диаграмм с листа '{sheet_name}'...")
             # Диаграммы находятся в sheet._charts
-            for chart_obj in sheet._charts:
-                 chart_data = _serialize_chart(chart_obj)
-                 if chart_data:
-                     # storage ожидает 'chart_data' как сериализованный объект
-                     sheet_data["charts"].append({
-                         "chart_data": chart_data # Это будет словарь, storage должен его сериализовать при сохранении
-                         # Если нужно сохранить как JSON сразу:
-                         # "chart_data": json.dumps(chart_data, ensure_ascii=False)
-                     })
+            # Оборачиваем в try...except, так как доступ к _charts может быть ненадежным
+            try:
+                for chart_obj in sheet._charts:
+                     chart_data = _serialize_chart(chart_obj)
+                     if chart_data:
+                         # storage ожидает 'chart_data' как сериализованный объект
+                         sheet_data["charts"].append({
+                             "chart_data": chart_data # Это будет словарь, storage должен его сериализовать при сохранении
+                             # Если нужно сохранить как JSON сразу:
+                             # "chart_data": json.dumps(chart_data, ensure_ascii=False)
+                         })
+            except AttributeError as ae:
+                logger.warning(f"Не удалось получить доступ к диаграммам листа '{sheet_name}': {ae}")
+            except Exception as e:
+                logger.error(f"Ошибка при извлечении диаграмм с листа '{sheet_name}': {e}", exc_info=True)
 
             # --- 5. Извлечение объединенных ячеек ---
             logger.debug(f"Извлечение объединенных ячеек с листа '{sheet_name}'...")
