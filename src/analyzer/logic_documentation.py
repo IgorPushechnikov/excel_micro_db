@@ -1,858 +1,354 @@
 # src/analyzer/logic_documentation.py
-"""Анализатор логики Excel файлов для Excel Micro DB.
-Извлекает структуру данных, формулы, зависимости, стили и диаграммы из Excel файлов.
-"""
-import sys
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, Union
-import pandas as pd
-import numpy as np
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter, column_index_from_string
-# === ИСПРАВЛЕНО: Импорт coordinate_from_string из правильного модуля ===
-from openpyxl.utils.cell import coordinate_from_string
-# ========================================================================
-# === ИМПОРТЫ ДЛЯ РАБОТЫ СО СТИЛЯМИ ===
-from openpyxl.styles import Font, Fill, Border, PatternFill, Side, Alignment, Protection
-# === КОНЕЦ ИМПОРТОВ ДЛЯ СТИЛЕЙ ===
-# === ИМПОРТЫ ДЛЯ СОЗДАНИЯ ДИАГРАММ С ДАННЫМИ ===
-from openpyxl.chart import BarChart, PieChart, LineChart, ScatterChart, AreaChart, PieChart3D
-from openpyxl.chart.title import Title
-from openpyxl.chart.layout import Layout
-from openpyxl.chart.text import RichText
-from openpyxl.drawing.text import Paragraph, RegularTextRun
-# === КОНЕЦ ИМПОРТОВ ===
-from openpyxl.chart.series import Series
-import yaml
-from datetime import datetime
-import re
+
+import openpyxl
+from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.cell.cell import Cell
 import logging
+from typing import Dict, Any, List, Tuple, Optional
+import json
+# import base64 # Если потребуется кодировать двоичные данные диаграмм
 
-# Добавляем корень проекта в путь поиска модулей если нужно
-project_root = Path(__file__).parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
+# Импортируем logger из utils
 from src.utils.logger import get_logger
 
-# Получаем логгер для этого модуля
 logger = get_logger(__name__)
 
-# - ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ -
+# --- Вспомогательные функции для сериализации сложных объектов ---
 
-def load_documentation_template(template_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+def _serialize_style(cell: Cell) -> Dict[str, Any]:
     """
-    Загружает шаблон документации из YAML файла.
-    Если путь не указан, использует путь по умолчанию.
-    Args:
-        template_path (str, optional): Путь к файлу шаблона. Defaults to None.
-    Returns:
-        Dict[str, Any]: Загруженный шаблон документации.
+    Сериализует атрибуты стиля ячейки openpyxl в словарь.
+    Этот словарь будет сериализован в JSON в storage/styles.py.
+    Структура должна соответствовать ожиданиям _convert_style_to_xlsxwriter_format
+    в excel_exporter.py.
     """
-    # === ИСПРАВЛЕНО: Проверка и преобразование template_path ===
-    # Решает ошибку Pylance: "Тип "Path" не может быть назначен объявленному типу "str | None""
-    # и ошибки, связанные с open()
-    if template_path is None:
-        # Определяем путь к шаблону по умолчанию относительно этого файла
-        template_path_obj = project_root / "templates" / "documentation_template.yaml"
-    else:
-        template_path_obj = Path(template_path) if isinstance(template_path, str) else template_path
+    style_dict = {}
 
-    logger.debug(f"Загрузка шаблона документации из: {template_path_obj}")
-    try:
-        # === ИСПРАВЛЕНО: Преобразование Path в str для open() ===
-        # Решает ошибки Pylance: "Не существует перегрузок для "open"..." и
-        # "Аргумент типа "str | None" нельзя присвоить параметру "file"..."
-        with open(str(template_path_obj), 'r', encoding='utf-8') as f:
-            template = yaml.safe_load(f)
-        logger.debug("Шаблон документации успешно загружен")
-        return template
-    except FileNotFoundError:
-        logger.error(f"Файл шаблона документации не найден: {template_path_obj}")
-        raise
-    except yaml.YAMLError as e:
-        logger.error(f"Ошибка форматирования YAML в файле шаблона: {e}")
-        raise
+    # --- Шрифт ---
+    if cell.font:
+        font_dict = {}
+        if cell.font.name: font_dict['name'] = cell.font.name
+        if cell.font.sz: font_dict['sz'] = cell.font.sz # Размер
+        if cell.font.b: font_dict['b'] = cell.font.b # Жирный
+        if cell.font.i: font_dict['i'] = cell.font.i # Курсив
+        if cell.font.color and cell.font.color.rgb:
+            font_dict['color'] = {'rgb': cell.font.color.rgb}
+        # ... другие атрибуты шрифта (underline, vertAlign и т.д.)
+        if font_dict:
+            style_dict['font'] = font_dict
 
-def get_cell_address(row: int, col: int) -> str:
-    """
-    Преобразует числовые координаты ячейки в адрес Excel (например, 1,1 -> A1).
-    Args:
-        row (int): Номер строки (начиная с 1)
-        col (int): Номер столбца (начиная с 1)
-    Returns:
-        str: Адрес ячейки в формате Excel (например, 'A1')
-    """
-    try:
-        column_letter = get_column_letter(col)
-        return f"{column_letter}{row}"
-    except Exception as e:
-        logger.error(f"Ошибка при преобразовании координат ({row}, {col}) в адрес ячейки: {e}")
-        return f"ERR_{row}_{col}"
+    # --- Заливка ---
+    if cell.fill:
+        fill_dict = {}
+        # openpyxl.fill.PatternFill или openpyxl.fill.GradientFill
+        if hasattr(cell.fill, 'patternType'):
+             fill_dict['patternType'] = cell.fill.patternType
+        if hasattr(cell.fill, 'fgColor') and cell.fill.fgColor and cell.fill.fgColor.rgb:
+             fill_dict['fgColor'] = {'rgb': cell.fill.fgColor.rgb}
+        if hasattr(cell.fill, 'bgColor') and cell.fill.bgColor and cell.fill.bgColor.rgb:
+             fill_dict['bgColor'] = {'rgb': cell.fill.bgColor.rgb}
+        # ... обработка GradientFill
+        if fill_dict:
+             style_dict['fill'] = fill_dict
 
-# === НОВОЕ: Функция для извлечения текста из объекта Title openpyxl ===
-def _extract_title_text(title_obj: Optional[Title]) -> str:
-    """
-    Извлекает текст из объекта Title openpyxl.
-    Args:
-        title_obj (openpyxl.chart.title.Title, optional): Объект заголовка.
-    Returns:
-        str: Извлеченный текст или пустая строка.
-    """
-    if not title_obj:
-        return ""
-    try:
-        # Попытка получить текст из tx.rich.paragraphs (наиболее распространенный случай)
-        if hasattr(title_obj, 'tx') and title_obj.tx:
-            if hasattr(title_obj.tx, 'rich') and title_obj.tx.rich:
-                text_parts = []
-                for paragraph in title_obj.tx.rich.paragraphs:
-                    if hasattr(paragraph, 'runs'):
-                        for run in paragraph.runs:
-                            if hasattr(run, 'text'):
-                                text_parts.append(run.text)
-                return "".join(text_parts).strip()
-            # Если rich нет, попробуем получить текст напрямую из tx (например, strRef)
-            # elif hasattr(title_obj.tx, 'strRef') and title_obj.tx.strRef:
-            #     # strRef.f содержит формулу, strRef.strCache содержит кэшированные значения
-            #     # Для простоты можно вернуть формулу или первое значение из кэша
-            #     if hasattr(title_obj.tx.strRef, 'strCache') and title_obj.tx.strRef.strCache:
-            #         pt_list = getattr(title_obj.tx.strRef.strCache, 'pt', [])
-            #         if pt_list:
-            #             first_pt = pt_list[0]
-            #             if hasattr(first_pt, 'v'):
-            #                 return str(first_pt.v).strip()
-    except Exception as e:
-        logger.warning(f"Ошибка при извлечении текста из Title: {e}")
-    # Если стандартные методы не сработали, попробуем str()
-    try:
-        return str(title_obj).strip()
-    except:
-        pass
-    return ""
+    # --- Границы ---
+    if cell.border:
+        border_dict = {}
+        # openpyxl.styles.borders.Border
+        for side_name in ['left', 'right', 'top', 'bottom']: # 'diagonal' ?
+            side_obj = getattr(cell.border, side_name, None)
+            if side_obj and (side_obj.style or (side_obj.color and side_obj.color.rgb)):
+                side_dict = {}
+                if side_obj.style: side_dict['style'] = side_obj.style
+                if side_obj.color and side_obj.color.rgb:
+                    side_dict['color'] = {'rgb': side_obj.color.rgb}
+                border_dict[side_name] = side_dict
+        if border_dict:
+            style_dict['border'] = border_dict
 
-# === НОВОЕ: Функция для извлечения атрибутов стиля ячейки ===
-def _extract_style_attributes(cell) -> Dict[str, Any]:
-    """
-    Извлекает атрибуты стиля ячейки в структурированном виде.
-    Args:
-        cell (openpyxl.cell.Cell): Объект ячейки.
-    Returns:
-        Dict[str, Any]: Словарь с атрибутами стиля.
-    """
-    # === ИСПРАВЛЕНО: Явная аннотация типа для style_attrs ===
-    # Решает множество ошибок Pylance вида:
-    # "Аргумент типа "int" нельзя присвоить параметру "value" типа "None""
-    # Используем Dict[str, Any] для максимальной гибкости
-    style_attrs: Dict[str, Any] = {
-        # Font
-        "font_name": None, "font_sz": None, "font_b": None, "font_i": None,
-        "font_u": None, "font_strike": None, "font_color": None,
-        "font_color_theme": None, "font_color_tint": None,
-        "font_vert_align": None, "font_scheme": None,
-        # PatternFill
-        "fill_pattern_type": None, "fill_fg_color": None,
-        "fill_fg_color_theme": None, "fill_fg_color_tint": None,
-        "fill_bg_color": None, "fill_bg_color_theme": None, "fill_bg_color_tint": None,
-        # Border (основные стороны)
-        "border_left_style": None, "border_left_color": None,
-        "border_right_style": None, "border_right_color": None,
-        "border_top_style": None, "border_top_color": None,
-        "border_bottom_style": None, "border_bottom_color": None,
-        # Alignment
-        "alignment_horizontal": None, "alignment_vertical": None,
-        "alignment_text_rotation": None, "alignment_wrap_text": None,
-        "alignment_shrink_to_fit": None, "alignment_indent": None,
-        # Protection
-        "protection_locked": None, "protection_hidden": None,
-    }
+    # --- Выравнивание ---
+    if cell.alignment:
+        alignment_dict = {}
+        # openpyxl.styles.alignment.Alignment
+        if cell.alignment.horizontal: alignment_dict['horizontal'] = cell.alignment.horizontal
+        if cell.alignment.vertical: alignment_dict['vertical'] = cell.alignment.vertical
+        if cell.alignment.wrapText is not None: alignment_dict['wrapText'] = cell.alignment.wrapText
+        if cell.alignment.textRotation is not None: alignment_dict['textRotation'] = cell.alignment.textRotation
+        # ... другие атрибуты (shrinkToFit, indent и т.д.)
+        if alignment_dict:
+            style_dict['alignment'] = alignment_dict
 
-    try:
-        if cell.font:
-            style_attrs["font_name"] = getattr(cell.font, 'name', None)
-            sz_val = getattr(cell.font, 'sz', 0)
-            style_attrs["font_sz"] = float(sz_val) if sz_val is not None else None
-            style_attrs["font_b"] = int(bool(getattr(cell.font, 'b', False)))
-            style_attrs["font_i"] = int(bool(getattr(cell.font, 'i', False)))
-            style_attrs["font_u"] = getattr(cell.font, 'u', None)
-            style_attrs["font_strike"] = int(bool(getattr(cell.font, 'strike', False)))
-            if getattr(cell.font, 'color', None):
-                if getattr(cell.font.color, 'type', None) == 'rgb':
-                    style_attrs["font_color"] = getattr(cell.font.color, 'rgb', None)
-                elif getattr(cell.font.color, 'type', None) == 'theme':
-                    theme_val = getattr(cell.font.color, 'theme', 0)
-                    style_attrs["font_color_theme"] = int(theme_val) if theme_val is not None else None
-                    tint_val = getattr(cell.font.color, 'tint', 0.0)
-                    style_attrs["font_color_tint"] = float(tint_val) if tint_val is not None else None
-            style_attrs["font_vert_align"] = getattr(cell.font, 'vertAlign', None)
-            style_attrs["font_scheme"] = getattr(cell.font, 'scheme', None)
+    # --- Числовой формат ---
+    if cell.number_format:
+        style_dict['number_format'] = cell.number_format
 
-        if cell.fill:
-            if isinstance(cell.fill, PatternFill):
-                style_attrs["fill_pattern_type"] = getattr(cell.fill, 'patternType', None)
-                if getattr(cell.fill, 'fgColor', None):
-                    if getattr(cell.fill.fgColor, 'type', None) == 'rgb':
-                        style_attrs["fill_fg_color"] = getattr(cell.fill.fgColor, 'rgb', None)
-                    elif getattr(cell.fill.fgColor, 'type', None) == 'theme':
-                        theme_val = getattr(cell.fill.fgColor, 'theme', 0)
-                        style_attrs["fill_fg_color_theme"] = int(theme_val) if theme_val is not None else None
-                        tint_val = getattr(cell.fill.fgColor, 'tint', 0.0)
-                        style_attrs["fill_fg_color_tint"] = float(tint_val) if tint_val is not None else None
-                if getattr(cell.fill, 'bgColor', None):
-                    if getattr(cell.fill.bgColor, 'type', None) == 'rgb':
-                        style_attrs["fill_bg_color"] = getattr(cell.fill.bgColor, 'rgb', None)
-                    elif getattr(cell.fill.bgColor, 'type', None) == 'theme':
-                        theme_val = getattr(cell.fill.bgColor, 'theme', 0)
-                        style_attrs["fill_bg_color_theme"] = int(theme_val) if theme_val is not None else None
-                        tint_val = getattr(cell.fill.bgColor, 'tint', 0.0)
-                        style_attrs["fill_bg_color_tint"] = float(tint_val) if tint_val is not None else None
-
-        if cell.border:
-             # Извлекаем основные стороны
-             for side_name in ['left', 'right', 'top', 'bottom']:
-                 side_obj = getattr(cell.border, side_name, None)
-                 if side_obj and hasattr(side_obj, 'style'):
-                     style_attrs[f"border_{side_name}_style"] = getattr(side_obj, 'style', None)
-                     if getattr(side_obj, 'color', None):
-                         if getattr(side_obj.color, 'type', None) == 'rgb':
-                             style_attrs[f"border_{side_name}_color"] = getattr(side_obj.color, 'rgb', None)
-
-        if cell.alignment:
-            style_attrs["alignment_horizontal"] = getattr(cell.alignment, 'horizontal', None)
-            style_attrs["alignment_vertical"] = getattr(cell.alignment, 'vertical', None)
-            rotation_val = getattr(cell.alignment, 'textRotation', 0)
-            style_attrs["alignment_text_rotation"] = int(rotation_val) if rotation_val is not None else None
-            style_attrs["alignment_wrap_text"] = int(bool(getattr(cell.alignment, 'wrapText', False)))
-            style_attrs["alignment_shrink_to_fit"] = int(bool(getattr(cell.alignment, 'shrinkToFit', False)))
-            indent_val = getattr(cell.alignment, 'indent', 0)
-            style_attrs["alignment_indent"] = int(indent_val) if indent_val is not None else None
-
-        if cell.protection:
-            style_attrs["protection_locked"] = int(bool(getattr(cell.protection, 'locked', True))) # locked по умолчанию True
-            style_attrs["protection_hidden"] = int(bool(getattr(cell.protection, 'hidden', False)))
-
-    except Exception as e:
-        logger.error(f"Ошибка при извлечении атрибутов стиля для ячейки {cell.coordinate}: {e}")
-
-    # Убираем ключи со значениями None для компактности
-    return {k: v for k, v in style_attrs.items() if v is not None}
-
-
-# - ОСНОВНЫЕ ФУНКЦИИ АНАЛИЗА -
-
-def analyze_sheet_structure(sheet) -> List[Dict[str, Any]]:
-    """
-    Анализирует структуру листа Excel: извлекает заголовки столбцов.
-    Args:
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Объект листа Excel.
-    Returns:
-        List[Dict[str, Any]]: Список словарей с информацией о каждом столбце.
-    """
-    logger.debug(f"Начало анализа структуры листа '{sheet.title}'")
-    structure_info = []
-    try:
-        header_row = 1
-        max_col = sheet.max_column
-        logger.debug(f"Анализируется строка заголовков {header_row}, макс. столбец: {max_col}")
-
-        for col in range(1, max_col + 1):
-            cell = sheet.cell(row=header_row, column=col)
-            column_name = str(cell.value) if cell.value is not None else f"Столбец_{col}"
+    # --- Защита ---
+    if cell.protection:
+        protection_dict = {}
+        # openpyxl.styles.protection.Protection
+        if cell.protection.locked is not None: protection_dict['locked'] = cell.protection.locked
+        if cell.protection.hidden is not None: protection_dict['hidden'] = cell.protection.hidden
+        if protection_dict:
+            style_dict['protection'] = protection_dict
             
-            sample_values = []
-            for sample_row in range(header_row + 1, min(header_row + 4, sheet.max_row + 1)):
-                sample_cell = sheet.cell(row=sample_row, column=col)
-                sample_values.append(str(sample_cell.value) if sample_cell.value is not None else None)
-            
-            column_info = {
-                "column_name": column_name,
-                "column_index": col,
-                "data_type": "unknown",
-                "sample_values": sample_values,
-                "unique_count": 0,
-                "null_count": 0,
-                "description": ""
-            }
-            structure_info.append(column_info)
-        
-        logger.debug(f"Структура листа '{sheet.title}' проанализирована. Найдено {len(structure_info)} столбцов.")
-        return structure_info
-    except Exception as e:
-        logger.error(f"Ошибка при анализе структуры листа '{sheet.title}': {e}", exc_info=True)
-        return []
+    # logger.debug(f"Сериализован стиль для ячейки {cell.coordinate}: {list(style_dict.keys())}")
+    return style_dict
 
-def analyze_sheet_raw_data(sheet) -> Dict[str, Any]:
+def _serialize_chart(chart_obj) -> Dict[str, Any]:
     """
-    Извлекает "сырые" данные листа, начиная со второй строки.
-    Args:
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Объект листа Excel.
-    Returns:
-        Dict[str, Any]: Словарь с ключами 'column_names' (список имен) и 'rows' (список словарей {'col_name': value}).
+    Сериализует объект диаграммы openpyxl.
+    В данном примере мы будем сохранять XML-представление диаграммы,
+    которое можно будет использовать при экспорте.
     """
-    logger.debug(f"[СЫРЫЕ ДАННЫЕ] Начало извлечения сырых данных для листа '{sheet.title}'")
-    raw_data_info = {"column_names": [], "rows": []}
+    # openpyxl.chart.chart.ChartBase и его подклассы имеют атрибут _chart_space
+    # который содержит XML-элемент.
+    # Также можно попробовать chart_obj.to_tree() или chart_obj._write()
+    # Но самый надежный способ - получить XML напрямую.
+    
     try:
-        if sheet.max_row < 2:
-            logger.debug(f"[СЫРЫЕ ДАННЫЕ] Лист '{sheet.title}' пуст или содержит только заголовки.")
-            return raw_data_info
-
-        header_row = 1
-        column_names = []
-        for col in range(1, sheet.max_column + 1):
-            cell = sheet.cell(row=header_row, column=col)
-            col_name = str(cell.value) if cell.value is not None else f"Столбец_{col}"
-            column_names.append(col_name)
+        # Получаем XML-элемент диаграммы
+        # chart_space = chart_obj._chart_space
+        # if chart_space is not None:
+        #     # Сериализуем XML в строку
+        #     from openpyxl.xml.functions import tostring
+        #     chart_xml_str = tostring(chart_space.to_tree(), encoding='unicode')
+        #     return {'chart_xml': chart_xml_str}
         
-        raw_data_info["column_names"] = column_names
-        logger.debug(f"[СЫРЫЕ ДАННЫЕ] Имена столбцов: {column_names}")
-
-        data_rows = []
-        for row_num in range(2, sheet.max_row + 1):
-            row_data = {}
-            is_row_empty = True
-            for col_idx, col_name in enumerate(column_names, start=1):
-                cell = sheet.cell(row=row_num, column=col_idx)
-                cell_value = cell.value
-                
-                if isinstance(cell_value, datetime):
-                    processed_value = cell_value.isoformat()
-                elif pd.isna(cell_value):
-                    processed_value = None
-                else:
-                    processed_value = str(cell_value)
-                
-                if processed_value is not None:
-                    is_row_empty = False
-                
-                row_data[col_name] = processed_value
+        # Альтернатива: сохранить как словарь с ключевыми атрибутами
+        # Это может быть проще для десериализации, но сложнее для точного воссоздания
+        chart_data = {}
+        chart_data['type'] = type(chart_obj).__name__ # 'BarChart', 'LineChart' и т.д.
+        
+        # Пример: сохранение ссылок на данные
+        if hasattr(chart_obj, 'ser') and chart_obj.ser:
+            series_data = []
+            for idx, s in enumerate(chart_obj.ser):
+                ser_dict = {}
+                # Сохраняем адреса диапазонов данных
+                if hasattr(s, 'val') and s.val and hasattr(s.val, 'numRef') and s.val.numRef:
+                    ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
+                if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
+                    ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
+                elif hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'numRef') and s.cat.numRef:
+                    ser_dict['cat_range'] = s.cat.numRef.f
+                # ... другие атрибуты серии (название, цвета и т.д.)
+                series_data.append(ser_dict)
+            chart_data['series'] = series_data
             
-            if not is_row_empty:
-                data_rows.append(row_data)
+        # Пример: сохранение заголовка
+        if hasattr(chart_obj, 'title') and chart_obj.title:
+             if hasattr(chart_obj.title, 'tx') and chart_obj.title.tx:
+                 if hasattr(chart_obj.title.tx, 'rich') and chart_obj.title.tx.rich:
+                     # Получить текст из rich text
+                     from openpyxl.drawing.text import RichText
+                     if isinstance(chart_obj.title.tx.rich, RichText):
+                         # chart_data['title'] = chart_obj.title.tx.rich ... (нужно извлечь текст)
+                         # Упрощение: берем первый run
+                         if chart_obj.title.tx.rich.p and len(chart_obj.title.tx.rich.p) > 0:
+                             first_p = chart_obj.title.tx.rich.p[0]
+                             if first_p and first_p.r and len(first_p.r) > 0:
+                                 chart_data['title'] = first_p.r[0].t
+                 elif hasattr(chart_obj.title.tx, 'strRef') and chart_obj.title.tx.strRef:
+                     chart_data['title_ref'] = chart_obj.title.tx.strRef.f # Ссылка на ячейку с заголовком
+                     
+        # ... другие атрибуты диаграммы (legend, axId, plotArea и т.д.)
         
-        raw_data_info["rows"] = data_rows
-        logger.debug(f"[СЫРЫЕ ДАННЫЕ] Извлечено {len(data_rows)} строк данных для листа '{sheet.title}'.")
-        return raw_data_info
-
+        logger.debug(f"Сериализована диаграмма типа {chart_data.get('type', 'Unknown')}")
+        return chart_data
+        
     except Exception as e:
-        logger.error(f"[СЫРЫЕ ДАННЫЕ] Ошибка при извлечении сырых данных для листа '{sheet.title}': {e}", exc_info=True)
-        return {"column_names": [], "rows": []}
+        logger.error(f"Ошибка при сериализации диаграммы: {e}", exc_info=True)
+        # Возвращаем пустой словарь или None в случае ошибки
+        return {}
 
-# === НОВОЕ: Функция для анализа стилей ===
-def analyze_sheet_styles(sheet) -> List[Dict[str, Any]]:
+# --- Основная функция анализа ---
+
+def analyze_excel_file(file_path: str) -> Dict[str, Any]:
     """
-    Анализирует стили ячеек на листе и группирует их по уникальным определениям.
+    Основная функция для анализа Excel-файла.
+    Извлекает структуру, данные, формулы, стили, диаграммы и другую информацию.
+    Возвращает словарь с результатами анализа, готовый для передачи в storage.
+
     Args:
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Объект листа Excel.
+        file_path (str): Путь к анализируемому .xlsx файлу.
+
     Returns:
-        List[Dict[str, Any]]: Список словарей, где каждый словарь содержит
-                              'style_attributes' (dict) и 'range_address' (str).
+        Dict[str, Any]: Словарь с результатами анализа.
     """
-    logger.debug(f"[СТИЛИ] Начало анализа стилей для листа '{sheet.title}'")
-    styled_ranges = []
+    logger.info(f"Начало анализа Excel-файла: {file_path}")
+
     try:
-        if sheet.max_row < 1 or sheet.max_column < 1:
-            logger.debug(f"[СТИЛИ] Лист '{sheet.title}' пуст.")
-            return styled_ranges
+        # Открываем книгу Excel
+        workbook = openpyxl.load_workbook(file_path, data_only=False) # data_only=False для получения формул
+        logger.debug(f"Книга '{file_path}' успешно открыта.")
 
-        # Карта для хранения стилей и соответствующих им ячеек
-        # Для простоты каждая ячейка с уникальным стилем -> отдельная запись.
-        # В реальном проекте стоит группировать смежные ячейки с одинаковым стилем.
-        
-        for row in sheet.iter_rows():
-            for cell in row:
-                # Получаем структурированные атрибуты стиля
-                style_attrs = _extract_style_attributes(cell)
-                
-                # Если стиль не пустой
-                if style_attrs:
-                    cell_address = cell.coordinate
-                    styled_ranges.append({
-                        "style_attributes": style_attrs,
-                        "range_address": cell_address # Можно улучшить до диапазонов A1:A1
-                    })
-        
-        logger.debug(f"[СТИЛИ] Анализ стилей для листа '{sheet.title}' завершен. Найдено {len(styled_ranges)} записей о стилях.")
-        return styled_ranges
-
-    except Exception as e:
-        logger.error(f"[СТИЛИ] Ошибка при анализе стилей для листа '{sheet.title}': {e}", exc_info=True)
-        return []
-# === КОНЕЦ НОВОГО ===
-
-def parse_formula_references(formula: str, current_sheet_name: str) -> List[Dict[str, Any]]:
-    """
-    Парсит формулу и извлекает ссылки на ячейки/диапазоны.
-    Args:
-        formula (str): Строка формулы Excel.
-        current_sheet_name (str): Имя текущего листа.
-    Returns:
-        List[Dict[str, Any]]: Список словарей с информацией о ссылках.
-    """
-    references = []
-    if not formula or not isinstance(formula, str) or not formula.startswith('='):
-        return references
-
-    ref_pattern = re.compile(
-        r"(?<!\w)"
-        r"(?:"
-        r"'?([^'!\s]+?)'?"
-        r"!"
-        r")?"
-        r"(\$?[A-Z]+\$?\d+)(?::(\$?[A-Z]+\$?\d+))?"
-        r"(?!\w)"
-    )
-
-    matches = ref_pattern.finditer(formula)
-    for match in matches:
-        sheet_part = match.group(1)
-        ref_start = match.group(2)
-        ref_end = match.group(3)
-        
-        if sheet_part:
-            ref_sheet_name = sheet_part.strip("'")
-        else:
-            ref_sheet_name = current_sheet_name
-
-        if ref_end:
-            reference_type = "range"
-            reference_address = f"{ref_start}:{ref_end}"
-        else:
-            reference_type = "cell"
-            reference_address = ref_start
-
-        ref_info = {
-            "sheet": ref_sheet_name,
-            "type": reference_type,
-            "address": reference_address
+        analysis_results = {
+            "project_name": file_path.split("/")[-1].split(".")[0], # Имя проекта из имени файла
+            "file_path": file_path,
+            "sheets": []
         }
-        references.append(ref_info)
-        
-    return references
 
-def analyze_sheet_formulas(sheet) -> List[Dict[str, Any]]:
-    """
-    Анализирует формулы на листе.
-    Args:
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Объект листа Excel.
-    Returns:
-        List[Dict[str, Any]]: Список словарей с информацией о формулах.
-    """
-    logger.debug(f"Начало анализа формул на листе '{sheet.title}'")
-    formulas_info = []
-    try:
-        for row in sheet.iter_rows():
-            for cell in row:
-                if cell.data_type == 'f' and cell.value:
-                    formula_string = cell.value
-                    cell_address = get_cell_address(cell.row, cell.column)
-                    
-                    references = parse_formula_references(formula_string, sheet.title)
-                    
-                    formula_info = {
-                        "cell": cell_address,
-                        "formula": formula_string,
-                        "references": references
-                    }
-                    formulas_info.append(formula_info)
-        logger.debug(f"Анализ формул на листе '{sheet.title}' завершен. Найдено {len(formulas_info)} формул.")
-        return formulas_info
-    except Exception as e:
-        logger.error(f"Ошибка при анализе формул на листе '{sheet.title}': {e}", exc_info=True)
-        return []
+        # Итерируемся по всем листам в книге
+        for sheet_name in workbook.sheetnames:
+            logger.info(f"Анализ листа: {sheet_name}")
+            sheet: Worksheet = workbook[sheet_name]
 
-def analyze_cross_sheet_references(formulas_info: List[Dict[str, Any]], current_sheet_name: str) -> List[Dict[str, Any]]:
-    """
-    Анализирует формулы для выявления межлистовых ссылок.
-    Args:
-        formulas_info (List[Dict[str, Any]]): Список информации о формулах.
-        current_sheet_name (str): Имя текущего листа.
-    Returns:
-        List[Dict[str, Any]]: Список словарей с информацией о межлистовых ссылках.
-    """
-    logger.debug(f"Начало анализа межлистовых ссылок для листа '{current_sheet_name}'")
-    cross_sheet_refs = []
-    try:
-        for formula_info in formulas_info:
-            formula_cell = formula_info["cell"]
-            formula_string = formula_info["formula"]
-            references = formula_info.get("references", [])
-            
-            for ref in references:
-                ref_sheet = ref["sheet"]
-                ref_type = ref["type"]
-                ref_address = ref["address"]
-                
-                if ref_sheet and ref_sheet != current_sheet_name:
-                    cross_ref_info = {
-                        "from_sheet": current_sheet_name,
-                        "from_cell": formula_cell,
-                        "from_formula": formula_string,
-                        "to_sheet": ref_sheet,
-                        "reference_type": ref_type,
-                        "reference_address": ref_address
-                    }
-                    cross_sheet_refs.append(cross_ref_info)
-        logger.debug(f"Анализ межлистовых ссылок для листа '{current_sheet_name}' завершен. Найдено {len(cross_sheet_refs)} ссылок.")
-        return cross_sheet_refs
-    except Exception as e:
-        logger.error(f"Ошибка при анализе межлистовых ссылок для листа '{current_sheet_name}': {e}", exc_info=True)
-        return []
-
-# === ИЗМЕНЕНО: Улучшенная функция извлечения данных диаграммы ===
-def extract_chart_data(chart, sheet) -> Dict[str, Any]:
-    """
-    Извлекает информацию о диаграмме в структурированном виде.
-    Args:
-        chart (openpyxl.chart.*): Объект диаграммы openpyxl.
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Лист, на котором находится диаграмма.
-    Returns:
-        Dict[str, Any]: Словарь с информацией о диаграмме.
-    """
-    logger.debug(f"[ДИАГРАММЫ] Начало извлечения данных диаграммы типа {type(chart).__name__}")
-    # === ИСПРАВЛЕНО: Явная аннотация типа для chart_data ===
-    # Решает ошибки Pylance при заполнении словаря
-    # Используем Dict[str, Any] для максимальной гибкости
-    chart_data: Dict[str, Any] = {
-        "type": type(chart).__name__,
-        "title": "",
-        # Chart attributes
-        "top_left_cell": "",
-        "width": None,
-        "height": None,
-        "style": None,
-        "legend_position": None,
-        "auto_scaling": None,
-        "plot_vis_only": None,
-        # Axes
-        "axes": [],
-        # Series
-        "series": [],
-        # Data Sources (will be populated from series)
-        "data_sources": []
-    }
-    try:
-        # 1. Извлечение заголовка
-        chart_data["title"] = _extract_title_text(getattr(chart, 'title', None))
-
-        # 2. Извлечение позиции и размеров (привязки)
-        anchor = chart.anchor
-        if anchor:
-            logger.debug(f"[ДИАГРАММЫ] Тип anchor: {type(anchor)}")
-            if hasattr(anchor, '_from'):
-                from_marker = anchor._from
-                if from_marker:
-                    try:
-                        top_left_col_letter = get_column_letter(from_marker.col + 1) # openpyxl использует 0-based
-                        top_left_row = from_marker.row + 1 # openpyxl использует 0-based
-                        chart_data["top_left_cell"] = f"{top_left_col_letter}{top_left_row}"
-                    except Exception as e:
-                        logger.warning(f"[ДИАГРАММЫ] Ошибка при определении top_left_cell: {e}")
-            
-            # Извлечение размеров (если доступны)
-            if hasattr(anchor, 'ext'):
-                 ext = anchor.ext
-                 if ext and hasattr(ext, 'cx') and hasattr(ext, 'cy'):
-                     # cx, cy в EMU (English Metric Units). 1 inch = 914400 EMU
-                     # Примерный перевод в см или пункты может потребоваться, но для БД храним как есть (REAL)
-                     chart_data["width"] = float(ext.cx) if ext.cx is not None else None
-                     chart_data["height"] = float(ext.cy) if ext.cy is not None else None
-
-        # 3. Извлечение атрибутов Chart
-        style_val = getattr(chart, 'style', 2)
-        chart_data["style"] = int(style_val) if style_val is not None else None
-        if getattr(chart, 'legend', None) and getattr(chart.legend, 'position', None):
-             chart_data["legend_position"] = str(getattr(chart.legend, 'position', ''))
-        chart_data["auto_scaling"] = int(bool(getattr(chart, 'auto_scaling', False)))
-        chart_data["plot_vis_only"] = int(bool(getattr(chart, 'plotVisOnly', True))) # По умолчанию True
-        # dispBlanksAs и showHiddenData можно добавить аналогично
-
-        # 4. Извлечение осей
-        # chart.x_axis, chart.y_axis, chart.z_axis
-        axes_list: List[Dict[str, Any]] = [] # Явная аннотация для axes_list, используем Any для значений
-        for axis_attr_name in ['x_axis', 'y_axis', 'z_axis']:
-             axis_obj = getattr(chart, axis_attr_name, None)
-             if axis_obj:
-                 # === ИСПРАВЛЕНО: Явная аннотация типа для axis_info ===
-                 # Используем Dict[str, Any] для максимальной гибкости
-                 axis_info: Dict[str, Any] = {
-                     "axis_type": axis_attr_name,
-                     "ax_id": None,
-                     "ax_pos": '',
-                     "delete": None,
-                     "title": '',
-                     # Scaling
-                     "min": None, "max": None, "orientation": None, "major_unit": None, "minor_unit": None, "log_base": None,
-                     # Ticks and Labels
-                     "major_tick_mark": '',
-                     "minor_tick_mark": '',
-                     "tick_lbl_pos": '',
-                     # Number Format
-                     "num_fmt": '',
-                     # Crosses
-                     "crosses": '',
-                     "crosses_at": None,
-                     # Gridlines
-                     "major_gridlines": None,
-                     "minor_gridlines": None,
-                 }
-                 ax_id_val = getattr(axis_obj, 'axId', 0)
-                 axis_info["ax_id"] = int(ax_id_val) if ax_id_val is not None else None
-                 axis_info["ax_pos"] = str(getattr(axis_obj, 'axPos', ''))
-                 axis_info["delete"] = int(bool(getattr(axis_obj, 'delete', False)))
-                 axis_info["title"] = _extract_title_text(getattr(axis_obj, 'title', None))
-                 # Scaling
-                 axis_info["min"] = None
-                 axis_info["max"] = None
-                 axis_info["orientation"] = None
-                 axis_info["major_unit"] = None
-                 axis_info["minor_unit"] = None
-                 axis_info["log_base"] = None
-                 # Ticks and Labels
-                 axis_info["major_tick_mark"] = str(getattr(axis_obj, 'majorTickMark', ''))
-                 axis_info["minor_tick_mark"] = str(getattr(axis_obj, 'minorTickMark', ''))
-                 axis_info["tick_lbl_pos"] = str(getattr(axis_obj, 'tickLblPos', ''))
-                 # Number Format
-                 num_fmt_obj = getattr(axis_obj, 'numFmt', None)
-                 axis_info["num_fmt"] = str(getattr(num_fmt_obj, 'formatCode', '')) if num_fmt_obj else ''
-                 # Crosses
-                 axis_info["crosses"] = str(getattr(axis_obj, 'crosses', ''))
-                 crosses_at_val = getattr(axis_obj, 'crossesAt', 0.0)
-                 axis_info["crosses_at"] = float(crosses_at_val) if crosses_at_val is not None else None
-                 # Gridlines
-                 axis_info["major_gridlines"] = int(bool(getattr(axis_obj, 'majorGridlines', None)))
-                 axis_info["minor_gridlines"] = int(bool(getattr(axis_obj, 'minorGridlines', None)))
-                 
-                 # Извлечение scaling
-                 scaling = getattr(axis_obj, 'scaling', None)
-                 if scaling:
-                     min_val = getattr(scaling, 'min', 0.0)
-                     axis_info["min"] = float(min_val) if min_val is not None else None
-                     max_val = getattr(scaling, 'max', 0.0)
-                     axis_info["max"] = float(max_val) if max_val is not None else None
-                     axis_info["orientation"] = str(getattr(scaling, 'orientation', 'minMax'))
-                     major_unit_val = getattr(scaling, 'majorUnit', 0.0)
-                     axis_info["major_unit"] = float(major_unit_val) if major_unit_val is not None else None
-                     minor_unit_val = getattr(scaling, 'minorUnit', 0.0)
-                     axis_info["minor_unit"] = float(minor_unit_val) if minor_unit_val is not None else None
-                     log_base_val = getattr(scaling, 'logBase', 0.0)
-                     axis_info["log_base"] = float(log_base_val) if log_base_val is not None else None
-                 
-                 axes_list.append(axis_info)
-        chart_data["axes"] = axes_list # Присваиваем список
-
-        # 5. Извлечение серий данных
-        series_list: List[Dict[str, Any]] = [] # Явная аннотация для series_list, используем Any для значений
-        for i, series in enumerate(getattr(chart, 'series', [])):
-            logger.debug(f"[ДИАГРАММЫ] Обработка серии {i+1}")
-            # === ИСПРАВЛЕНО: Явная аннотация типа для series_info ===
-            # Используем Dict[str, Any] для максимальной гибкости
-            series_info: Dict[str, Any] = {
-                "idx": None,
-                "order": None,
-                "tx": '',
-                "shape": '',
-                "smooth": None,
-                "invert_if_negative": None,
-                # Data Sources for this series
-                "data_points": [] # Можно добавить при необходимости
+            sheet_data = {
+                "name": sheet_name,
+                "max_row": sheet.max_row,
+                "max_column": sheet.max_column,
+                "raw_data": [],
+                "formulas": [],
+                "styles": [], # Будет содержать {'range_address': str, 'style_attributes': str (JSON)}
+                "charts": [], # Будет содержать {'chart_data': dict или str}
+                "merged_cells": [] # Список строк адресов объединенных ячеек
             }
-            idx_val = getattr(series, 'idx', i)
-            series_info["idx"] = int(idx_val) if idx_val is not None else i
-            order_val = getattr(series, 'order', i)
-            series_info["order"] = int(order_val) if order_val is not None else i
-            series_info["tx"] = _extract_title_text(getattr(series, 'tx', None))
-            series_info["shape"] = str(getattr(series, 'shape', ''))
-            series_info["smooth"] = int(bool(getattr(series, 'smooth', False)))
-            series_info["invert_if_negative"] = int(bool(getattr(series, 'invertIfNegative', False)))
-            # Data Sources for this series
-            series_info["data_points"] = [] # Можно добавить при необходимости
+
+            # --- 1. Извлечение "сырых данных" ---
+            logger.debug(f"Извлечение сырых данных с листа '{sheet_name}'...")
+            for row in sheet.iter_rows(values_only=False): # values_only=False, чтобы получить объекты Cell
+                for cell in row:
+                    if cell.value is not None or cell.formula: # Сохраняем и данные, и формулы
+                        data_item = {
+                            "cell_address": cell.coordinate,
+                            "value": cell.value,
+                            # "value_type": type(cell.value).__name__ # Может быть полезно
+                        }
+                        sheet_data["raw_data"].append(data_item)
+
+            # --- 2. Извлечение формул ---
+            logger.debug(f"Извлечение формул с листа '{sheet_name}'...")
+            for row in sheet.iter_rows(values_only=False):
+                for cell in row:
+                    # Проверяем атрибуты formula и value
+                    # formula_attr = getattr(cell, 'formula', None)
+                    # if formula_attr:
+                    #     logger.warning(f"Найден атрибут formula у {cell.coordinate}: {formula_attr}")
+                    
+                    # Правильный способ получения формулы в openpyxl - через .value, если оно начинается с '='
+                    # Или через data_only=False и проверку типа cell.value
+                    # Но так как мы загрузили с data_only=False, cell.value для ячейки с формулой
+                    # будет содержать значение формулы, а не саму формулу.
+                    # Нужно использовать cell.data_type и cell.value для формулы.
+                    # Или просто проверить, начинается ли значение с '='.
+                    # НО! При data_only=False, cell.value ДОЛЖЕН содержать формулу как строку, начинающуюся с '='
+                    # если в ячейке формула.
+                    
+                    # Альтернатива: использовать sheet.formula_attributes
+                    # Но проще и надежнее проверить значение.
+                    
+                    # Проверим, является ли значение строкой, начинающейся с '='
+                    # Это будет работать при data_only=False
+                    if isinstance(cell.value, str) and cell.value.startswith('='):
+                         sheet_data["formulas"].append({
+                             "cell_address": cell.coordinate,
+                             "formula": cell.value # Сохраняем формулу как есть, включая '='
+                         })
+                    # ВАЖНО: openpyxl также имеет cell.formula, но это может быть не то же самое.
+                    # Уточнение: cell.value при data_only=False содержит формулу.
+
+            # --- 3. Извлечение стилей ---
+            logger.debug(f"Извлечение и группировка стилей с листа '{sheet_name}'...")
+            # Простой подход: для каждой ячейки сохраняем её стиль.
+            # Более сложный (эффективный): группировать ячейки с одинаковыми стилями в диапазоны.
+            # Пока используем простой подход для MVP.
             
-            series_list.append(series_info)
+            # Словарь для хранения уникальных стилей и их диапазонов
+            style_ranges_map: Dict[str, List[str]] = {} # ключ - сериализованный стиль, значение - список адресов
             
-            # Извлечение источников данных для этой серии
-            # Values (Y)
-            if hasattr(series, 'val') and series.val:
-                 if hasattr(series.val, 'numRef') and series.val.numRef and hasattr(series.val.numRef, 'f'):
-                    values_formula = series.val.numRef.f
-                    chart_data["data_sources"].append({
-                        "series_index": i,
-                        "data_type": "values",
-                        "formula": values_formula
-                    })
+            for row in sheet.iter_rows(values_only=False):
+                for cell in row:
+                    # Проверяем, есть ли у ячейки не-дефолтный стиль
+                    # Это можно сделать, сравнивая с дефолтным стилем, но проще сериализовать всегда
+                    # и потом в storage/styles.py решать, нужно ли его сохранять.
+                    
+                    style_dict = _serialize_style(cell)
+                    if style_dict: # Если стиль не пустой
+                        style_json = json.dumps(style_dict, sort_keys=True) # Сериализуем в JSON и сортируем ключи для надежного хеширования
+                        coord = cell.coordinate
+                        
+                        if style_json in style_ranges_map:
+                            style_ranges_map[style_json].append(coord)
+                        else:
+                            style_ranges_map[style_json] = [coord]
             
-            # Categories (X)
-            if hasattr(series, 'cat') and series.cat:
-                if hasattr(series.cat, 'strRef') and series.cat.strRef and hasattr(series.cat.strRef, 'f'):
-                    categories_formula = series.cat.strRef.f
-                    chart_data["data_sources"].append({
-                        "series_index": i,
-                        "data_type": "categories",
-                        "formula": categories_formula
-                    })
-                elif hasattr(series.cat, 'numRef') and series.cat.numRef and hasattr(series.cat.numRef, 'f'):
-                     categories_formula = series.cat.numRef.f
-                     chart_data["data_sources"].append({
-                         "series_index": i,
-                         "data_type": "categories",
-                         "formula": categories_formula
+            # Преобразуем карту стилей в формат, ожидаемый storage
+            for style_json, cell_addresses in style_ranges_map.items():
+                # Для упрощения, будем создавать отдельную запись для каждой ячейки
+                # В будущем можно реализовать группировку в диапазоны (A1:A10, B1:D1 и т.д.)
+                # Это требует сложной логики группировки.
+                for address in cell_addresses:
+                     sheet_data["styles"].append({
+                         "range_address": address, # Пока каждая ячейка отдельно
+                         "style_attributes": style_json # Строка JSON
+                     })
+                # TODO: Реализовать группировку адресов в диапазоны
+                # sheet_data["styles"].append({
+                #     "range_address": _group_addresses(cell_addresses), # Функция группировки
+                #     "style_attributes": style_json # Строка JSON
+                # })
+
+            # --- 4. Извлечение диаграмм ---
+            logger.debug(f"Извлечение диаграмм с листа '{sheet_name}'...")
+            # Диаграммы находятся в sheet._charts
+            for chart_obj in sheet._charts:
+                 chart_data = _serialize_chart(chart_obj)
+                 if chart_data:
+                     # storage ожидает 'chart_data' как сериализованный объект
+                     sheet_data["charts"].append({
+                         "chart_data": chart_data # Это будет словарь, storage должен его сериализовать при сохранении
+                         # Если нужно сохранить как JSON сразу:
+                         # "chart_data": json.dumps(chart_data, ensure_ascii=False)
                      })
 
-        chart_data["series"] = series_list # Присваиваем список
-        
-        logger.debug(f"[ДИАГРАММЫ] Извлечено {len(chart_data['series'])} серий и {len(chart_data['data_sources'])} источников данных для диаграммы.")
-        logger.debug(f"[ДИАГРАММЫ] Завершено извлечение данных диаграммы.")
-        return chart_data
+            # --- 5. Извлечение объединенных ячеек ---
+            logger.debug(f"Извлечение объединенных ячеек с листа '{sheet_name}'...")
+            for merged_cell_range in sheet.merged_cells.ranges:
+                # merged_cell_range это openpyxl.utils.cell_range.CellRange
+                sheet_data["merged_cells"].append(str(merged_cell_range)) # Преобразуем в строку адреса диапазона
+
+            # Добавляем данные листа в результаты анализа
+            analysis_results["sheets"].append(sheet_data)
+
+        logger.info(f"Анализ Excel-файла '{file_path}' завершен.")
+        return analysis_results
 
     except Exception as e:
-        logger.error(f"[ДИАГРАММЫ] Ошибка при извлечении данных диаграммы: {e}", exc_info=True)
-        return chart_data 
-# === КОНЕЦ ИЗМЕНЕНИЙ ===
+        logger.error(f"Ошибка при анализе Excel-файла '{file_path}': {e}", exc_info=True)
+        # Возвращаем пустой словарь или поднимаем исключение
+        # В реальном приложении лучше поднимать пользовательское исключение
+        raise # Повторно поднимаем исключение для обработки выше
 
-def analyze_sheet_charts(sheet) -> List[Dict[str, Any]]:
-    """
-    Анализирует диаграммы на листе.
-    Args:
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Объект листа Excel.
-    Returns:
-        List[Dict[str, Any]]: Список словарей с информацией о диаграммах.
-    """
-    logger.debug(f"[ДИАГРАММЫ] Начало анализа диаграмм на листе '{sheet.title}'")
-    charts_info = []
-    try:
-        if hasattr(sheet, '_charts'):
-            charts = sheet._charts
-            logger.debug(f"[ДИАГРАММЫ] Найдено {len(charts)} диаграмм на листе '{sheet.title}' (через _charts).")
-            for i, chart in enumerate(charts):
-                logger.debug(f"[ДИАГРАММЫ] Обработка диаграммы {i+1}/{len(charts)}")
-                chart_data = extract_chart_data(chart, sheet) # Используем улучшенную функцию
-                if chart_data:
-                    charts_info.append(chart_data)
-        else:
-            logger.warning(f"[ДИАГРАММЫ] Атрибут _charts не найден у листа '{sheet.title}'.")
-            
-        logger.debug(f"[ДИАГРАММЫ] Анализ диаграмм на листе '{sheet.title}' завершен. Итого: {len(charts_info)} диаграмм.")
-        return charts_info
-    except Exception as e:
-        logger.error(f"[ДИАГРАММЫ] Ошибка при анализе диаграмм на листе '{sheet.title}': {e}", exc_info=True)
-        return []
+# --- Функция для группировки адресов ячеек в диапазоны (заглушка) ---
+# def _group_addresses(addresses: List[str]) -> str:
+#     """
+#     Группирует список адресов ячеек в строку диапазонов.
+#     Например: ['A1', 'A2', 'A3', 'B1'] -> 'A1:A3 B1'
+#     Это сложная задача, требующая алгоритмов.
+#     """
+#     # TODO: Реализовать алгоритм группировки
+#     # Пока возвращаем объединение через пробел
+#     return " ".join(addresses)
 
-# === НОВОЕ: Функция для анализа объединенных ячеек ===
-def analyze_sheet_merged_cells(sheet) -> List[str]:
-    """
-    Анализирует объединенные ячейки на листе.
-    Args:
-        sheet (openpyxl.worksheet.worksheet.Worksheet): Объект листа Excel.
-    Returns:
-        List[str]: Список строковых представлений диапазонов объединенных ячеек (например, 'A1:C3').
-    """
-    logger.debug(f"[ОБЪЕДИНЕННЫЕ ЯЧЕЙКИ] Начало анализа для листа '{sheet.title}'")
-    merged_ranges = []
-    try:
-        merged_ranges = [str(mcr) for mcr in sheet.merged_cells.ranges]
-        logger.debug(f"[ОБЪЕДИНЕННЫЕ ЯЧЕЙКИ] Найдено {len(merged_ranges)} объединенных диапазонов на листе '{sheet.title}'.")
-    except Exception as e:
-        logger.error(f"[ОБЪЕДИНЕННЫЕ ЯЧЕЙКИ] Ошибка при анализе для листа '{sheet.title}': {e}", exc_info=True)
-    return merged_ranges
-# === КОНЕЦ НОВОГО ===
-
-def analyze_excel_file(file_path: str, sheet_names: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
-    """
-    Основная функция для анализа Excel файла.
-    Args:
-        file_path (str): Путь к Excel файлу.
-        sheet_names (List[str], optional): Список имен листов для анализа. 
-                                          Если None, анализируются все листы.
-    Returns:
-        Optional[Dict[str, Any]]: Словарь с результатами анализа или None в случае ошибки.
-    """
-    logger.info(f"Начало анализа Excel файла: {file_path}")
-    try:
-        if not Path(file_path).exists():
-            logger.error(f"Файл не найден: {file_path}")
-            return None
-
-        documentation_template = load_documentation_template()
-        
-        # === ИСПРАВЛЕНО: Явная аннотация documentation как Dict[str, Any] ===
-        # Это решает ошибки Pylance связанные с несоответствием типов в словаре
-        documentation: Dict[str, Any] = documentation_template.copy()
-        documentation["file_path"] = file_path
-        documentation["analysis_timestamp"] = datetime.now().isoformat()
-        documentation["sheets"] = {} # Dict[str, Dict[str, Any]]
-
-        # data_only=False для получения формул и стилей
-        wb = load_workbook(file_path, data_only=False) 
-
-        if sheet_names is None:
-            sheet_names = wb.sheetnames
-            
-        logger.info(f"Будет проанализировано {len(sheet_names)} листов: {sheet_names}")
-
-        for idx, sheet_name in enumerate(sheet_names):
-            logger.info(f"Анализ листа {idx+1}/{len(sheet_names)}: '{sheet_name}'")
-            if sheet_name not in wb.sheetnames:
-                logger.warning(f"Лист '{sheet_name}' не найден в файле. Пропущен.")
-                continue
-                
-            sheet = wb[sheet_name]
-            
-            # --- АНАЛИЗ ---
-            sheet_structure = analyze_sheet_structure(sheet)
-            sheet_raw_data = analyze_sheet_raw_data(sheet) 
-            sheet_formulas = analyze_sheet_formulas(sheet)
-            cross_sheet_refs = analyze_cross_sheet_references(sheet_formulas, sheet_name)
-            sheet_charts = analyze_sheet_charts(sheet)
-            sheet_styles = analyze_sheet_styles(sheet) # НОВОЕ
-            sheet_merged_cells = analyze_sheet_merged_cells(sheet) # НОВОЕ
-            
-            # === ИСПРАВЛЕНО: Явная аннотация sheet_info как Dict[str, Any] ===
-            # Это решает все оставшиеся ошибки Pylance в этой функции
-            sheet_info: Dict[str, Any] = {
-                "name": sheet_name,
-                "index": idx,
-                "structure": sheet_structure,
-                "raw_data": sheet_raw_data,
-                "formulas": sheet_formulas,
-                "cross_sheet_references": cross_sheet_refs,
-                "charts": sheet_charts,
-                "styled_ranges": sheet_styles, # НОВОЕ
-                "merged_cells": sheet_merged_cells # НОВОЕ
-            }
-            
-            documentation["sheets"][sheet_name] = sheet_info
-
-        logger.info(f"Анализ Excel файла завершен: {file_path}")
-        return documentation
-
-    except Exception as e:
-        logger.error(f"Ошибка при анализе Excel файла {file_path}: {e}", exc_info=True)
-        return None
-
-# - ТОЧКА ВХОДА ДЛЯ ТЕСТИРОВАНИЯ -
+# Пример использования (если файл запускается напрямую)
 if __name__ == "__main__":
-    print("--- ТЕСТ АНАЛИЗАТОРА ---")
-    test_file = project_root / "data" / "samples" / "test_sample.xlsx"
-    print(f"Путь к тестовому файлу: {test_file}")
+    import sys
+    if len(sys.argv) != 2:
+        print("Использование: python logic_documentation.py <excel_file_path>")
+        sys.exit(1)
     
-    if test_file.exists():
-        print(f"Тестовый файл найден: {test_file}")
-        print("Начало анализа...")
-        result = analyze_excel_file(str(test_file))
-        if result:
-            print("Анализ завершен успешно.")
-            print(f"Файл: {result['file_path']}")
-            print(f"Время анализа: {result['analysis_timestamp']}")
-            print(f"Всего листов: {len(result['sheets'])}")
-            if result['sheets']:
-                first_sheet_name = list(result['sheets'].keys())[0]
-                print(f"Первый лист: {first_sheet_name}")
-                print(f" Структура: {result['sheets'][first_sheet_name]['structure'][:2]}...")
-                print(f" Сырые данные (первые 2 строки): {result['sheets'][first_sheet_name]['raw_data']['rows'][:2]}...")
-                print(f" Формулы: {result['sheets'][first_sheet_name]['formulas'][:1]}...")
-                print(f" Диаграммы: {len(result['sheets'][first_sheet_name]['charts'])} шт.")
-                print(f" Стили: {len(result['sheets'][first_sheet_name]['styled_ranges'])} записей.")
-                print(f" Объединенные ячейки: {len(result['sheets'][first_sheet_name]['merged_cells'])} шт.")
-        else:
-            print("Анализ завершился с ошибкой.")
-    else:
-        print(f"Тестовый файл не найден: {test_file}")
+    file_path = sys.argv[1]
+    try:
+        results = analyze_excel_file(file_path)
+        print(f"Анализ завершен. Результаты для {results['project_name']}:")
+        print(f"  - Листов: {len(results['sheets'])}")
+        for sheet in results['sheets']:
+            print(f"    - Лист '{sheet['name']}':")
+            print(f"      - Ячеек с данными: {len(sheet['raw_data'])}")
+            print(f"      - Формул: {len(sheet['formulas'])}")
+            print(f"      - Стилей: {len(sheet['styles'])}")
+            print(f"      - Диаграмм: {len(sheet['charts'])}")
+            print(f"      - Объединенных ячеек: {len(sheet['merged_cells'])}")
+    except Exception as e:
+        print(f"Ошибка при анализе: {e}")
+        sys.exit(1)
