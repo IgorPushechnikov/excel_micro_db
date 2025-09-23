@@ -1,104 +1,139 @@
 # src/storage/history.py
-"""
-Модуль для работы с историей изменений в хранилище проекта Excel Micro DB.
-"""
+
 import sqlite3
-import json
 import logging
-from typing import Any, Optional
-from datetime import datetime
+from typing import List, Dict, Any, Optional
 
-# from src.storage.base import DateTimeEncoder # Если потребуется
-# from src.storage.schema import ... # Если потребуются какие-либо константы
-
+# Получаем логгер для этого модуля
 logger = logging.getLogger(__name__)
 
-# --- SQL для создания таблицы истории (если она еще не создана) ---
-# Лучше держать это в schema.py, но если забыли, можно и здесь определить.
-# CREATE_EDIT_HISTORY_TABLE = '''
-#     CREATE TABLE IF NOT EXISTS edit_history (
-#         id INTEGER PRIMARY KEY AUTOINCREMENT,
-#         project_id INTEGER NOT NULL,
-#         sheet_id INTEGER,
-#         cell_address TEXT,
-#         action_type TEXT NOT NULL, -- 'edit_cell', 'add_row', 'delete_row', 'apply_style' и т.д.
-#         old_value TEXT, -- JSON или строка
-#         new_value TEXT, -- JSON или строка
-#         timestamp TEXT NOT NULL, -- ISO формат
-#         user TEXT, -- Имя пользователя, если применимо
-#         details TEXT, -- Дополнительная информация в JSON
-#         FOREIGN KEY (project_id) REFERENCES projects (id),
-#         FOREIGN KEY (sheet_id) REFERENCES sheets (id)
-#     )
-# '''
-# TABLE_CREATION_QUERIES.append(CREATE_EDIT_HISTORY_TABLE) # Добавить в schema.py
-
-# --- Основные функции работы с историей ---
-
 def save_edit_history_record(
-    connection: sqlite3.Connection,
-    project_id: int,
-    sheet_id: Optional[int],
-    cell_address: Optional[str],
-    action_type: str,
-    old_value: Any,
-    new_value: Any,
-    user: Optional[str] = None,
-    details: Optional[dict] = None
+    connection: sqlite3.Connection, 
+    sheet_id: int, 
+    cell_address: str, 
+    old_value: Any, 
+    new_value: Any
 ) -> bool:
     """
-    Сохраняет запись об изменении в истории.
+    Сохраняет запись об изменении ячейки в истории редактирования.
+
     Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
-        project_id (int): ID проекта.
-        sheet_id (Optional[int]): ID листа (если применимо).
-        cell_address (Optional[str]): Адрес ячейки (если применимо).
-        action_type (str): Тип действия (например, 'edit_cell').
-        old_value (Any): Старое значение.
-        new_value (Any): Новое значение.
-        user (Optional[str]): Имя пользователя.
-        details (Optional[dict]): Дополнительные детали.
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
+        sheet_id (int): ID листа, где произошло изменение.
+        cell_address (str): Адрес ячейки (например, 'A1').
+        old_value (Any): Предыдущее значение ячейки.
+        new_value (Any): Новое значение ячейки.
+
     Returns:
-        bool: True, если запись сохранена успешно, False в случае ошибки.
+        bool: True, если запись успешно сохранена, иначе False.
     """
     if not connection:
-        logger.error("Получено пустое соединение для сохранения записи истории.")
+        logger.error("Нет активного соединения с БД для сохранения записи истории.")
         return False
 
     try:
         cursor = connection.cursor()
         
-        # Преобразуем значения в строки/JSON, если необходимо
-        # Для простоты преобразуем всё в строку. Можно использовать json.dumps с DateTimeEncoder.
-        # serialized_old_value = json.dumps(old_value, cls=DateTimeEncoder, ensure_ascii=False) if old_value is not None else None
-        # serialized_new_value = json.dumps(new_value, cls=DateTimeEncoder, ensure_ascii=False) if new_value is not None else None
-        # serialized_details = json.dumps(details, cls=DateTimeEncoder, ensure_ascii=False) if details else None
-        # Пока просто str(), предполагая, что это будет обработано выше или значения уже сериализованы.
-        serialized_old_value = str(old_value) if old_value is not None else None
-        serialized_new_value = str(new_value) if new_value is not None else None
-        serialized_details = json.dumps(details, ensure_ascii=False) if details else None
+        # Получаем project_id из sheet_id для полноты записи
+        cursor.execute("SELECT project_id FROM sheets WHERE sheet_id = ?", (sheet_id,))
+        result = cursor.fetchone()
+        if not result:
+            logger.error(f"Не найден project_id для sheet_id {sheet_id}. Запись истории не сохранена.")
+            return False
+            
+        project_id = result[0]
 
-        timestamp_iso = datetime.now().isoformat()
-
-        cursor.execute('''
-            INSERT INTO edit_history 
-            (project_id, sheet_id, cell_address, action_type, old_value, new_value, timestamp, user, details)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            project_id, sheet_id, cell_address, action_type,
-            serialized_old_value, serialized_new_value,
-            timestamp_iso, user, serialized_details
-        ))
-
+        # Вставляем запись в таблицу edit_history
+        # Предполагается, что таблица edit_history имеет поля:
+        # history_id (INTEGER PRIMARY KEY AUTOINCREMENT)
+        # project_id (INTEGER)
+        # sheet_id (INTEGER)
+        # cell_address (TEXT)
+        # old_value (TEXT) -- Можно хранить как строку
+        # new_value (TEXT) -- Можно хранить как строку
+        # edited_at (TEXT DEFAULT (datetime('now'))) -- Время автоматически
+        
+        cursor.execute("""
+            INSERT INTO edit_history (project_id, sheet_id, cell_address, old_value, new_value)
+            VALUES (?, ?, ?, ?, ?)
+        """, (project_id, sheet_id, cell_address, str(old_value), str(new_value)))
+        
         connection.commit()
-        logger.debug(f"Запись истории сохранена: {action_type} на листе {sheet_id}, ячейка {cell_address}.")
+        logger.debug(f"Запись истории редактирования сохранена для ячейки {cell_address} на листе ID {sheet_id}.")
         return True
 
     except sqlite3.Error as e:
-        logger.error(f"Ошибка SQLite при сохранении записи истории: {e}")
-        connection.rollback()
+        logger.error(f"Ошибка SQLite при сохранении записи истории для ячейки {cell_address} на листе ID {sheet_id}: {e}")
         return False
     except Exception as e:
-        logger.error(f"Неожиданная ошибка при сохранении записи истории: {e}")
-        connection.rollback()
+        logger.error(f"Неожиданная ошибка при сохранении записи истории для ячейки {cell_address} на листе ID {sheet_id}: {e}", exc_info=True)
         return False
+
+
+def load_edit_history(
+    connection: sqlite3.Connection, 
+    sheet_id: Optional[int] = None, 
+    limit: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """
+    Загружает историю редактирования.
+
+    Args:
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
+        sheet_id (Optional[int]): ID листа для фильтрации. 
+                                  Если None, загружает всю историю проекта.
+        limit (Optional[int]): Максимальное количество записей для загрузки.
+
+    Returns:
+        List[Dict[str, Any]]: Список словарей, представляющих записи истории.
+                             Каждый словарь содержит ключи: history_id, project_id, sheet_id, 
+                             cell_address, old_value, new_value, edited_at.
+                             Возвращает пустой список в случае ошибки.
+    """
+    if not connection:
+        logger.error("Нет активного соединения с БД для загрузки истории редактирования.")
+        return []
+
+    try:
+        cursor = connection.cursor()
+        
+        # Формируем SQL-запрос с возможной фильтрацией и ограничением
+        query = "SELECT history_id, project_id, sheet_id, cell_address, old_value, new_value, edited_at FROM edit_history"
+        params = []
+        
+        if sheet_id is not None:
+            query += " WHERE sheet_id = ?"
+            params.append(sheet_id)
+            
+        query += " ORDER BY edited_at DESC, history_id DESC" # Новые записи первыми
+        
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+            
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        history_records = []
+        for row in rows:
+            history_records.append({
+                "history_id": row[0],
+                "project_id": row[1],
+                "sheet_id": row[2],
+                "cell_address": row[3],
+                "old_value": row[4],
+                "new_value": row[5],
+                "edited_at": row[6]
+            })
+            
+        logger.debug(f"Загружено {len(history_records)} записей истории редактирования (sheet_id={sheet_id}, limit={limit}).")
+        return history_records
+
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка SQLite при загрузке истории редактирования (sheet_id={sheet_id}, limit={limit}): {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при загрузке истории редактирования (sheet_id={sheet_id}, limit={limit}): {e}", exc_info=True)
+        return []
+
+# Дополнительные функции для работы с историей (например, откат по ID) могут быть добавлены здесь
