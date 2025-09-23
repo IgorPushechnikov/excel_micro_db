@@ -761,3 +761,43 @@ if __name__ == "__main__":
     else:
         logger.error(f"Экспорт завершился с ошибкой.")
         sys.exit(1)
+
+# --- Функция для удобного вызова из CLI/AppController ---
+# Исправленная функция export_project
+def export_project(project_db_path: str, output_excel_path: str) -> bool:
+    """
+    Удобная функция для экспорта проекта.
+    
+    Args:
+        project_db_path (str): Путь к файлу БД проекта.
+        output_excel_path (str): Путь к выходному .xlsx файлу.
+        
+    Returns:
+        bool: True, если экспорт успешен, иначе False.
+    """
+    # Используем существующую функцию экспорта
+    try:
+        success = export_project_from_db(project_db_path, output_excel_path)
+        return success
+    except Exception as e:
+        # Используйте logger, если он импортирован и настроен в этом файле
+        # logger.error(f"Ошибка при экспорте проекта: {e}", exc_info=True)
+        # Если logger недоступен, можно использовать print (но лучше заменить на logger)
+        print(f"Ошибка при экспорте проекта '{project_db_path}' -> '{output_excel_path}': {e}")
+        return False
+
+# Пример использования (если файл запускается напрямую)
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 3:
+        print("Использование: python direct_db_exporter.py <project_db_path> <output_excel_path>")
+        sys.exit(1)
+    
+    project_db_path = sys.argv[1]
+    output_excel_path = sys.argv[2]
+    
+    if export_project(project_db_path, output_excel_path):
+        print(f"Проект успешно экспортирован в {output_excel_path}")
+    else:
+        print(f"Ошибка при экспорте проекта в {output_excel_path}")
+        sys.exit(1)
