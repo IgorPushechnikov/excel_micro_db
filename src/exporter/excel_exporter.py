@@ -331,7 +331,7 @@ class XlsxWriterExporter:
         logger.debug(f"Преобразован стиль: {list(style_dict.keys())} -> {list(xlsxwriter_format.keys())}")
         return xlsxwriter_format
 
-    def _map_border_style(self, openpyxl_style: str) -> str:
+    def _map_border_style(self, openpyxl_style: str) -> int:
         """Отображает стиль границы из openpyxl в xlsxwriter."""
         # https://openpyxl.readthedocs.io/en/stable/api/openpyxl.styles.borders.html
         # https://xlsxwriter.readthedocs.io/format.html
