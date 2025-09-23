@@ -1,116 +1,156 @@
 # src/core/app_controller.py
 
 import os
+from pathlib import Path
 import sqlite3
-import logging
 from typing import Dict, Any, List, Optional, Tuple
 
-# Импортируем анализатор
-from src.analyzer.logic_documentation import analyze_excel_file
-
-# Импортируем хранилище
+# --- ИНТЕГРАЦИЯ: Импорты компонентов ---
 from src.storage.base import ProjectDBStorage
+from src.analyzer.logic_documentation import analyze_workbook_logic
+from src.exporter.direct_db_exporter import export_project_db_to_excel
+from src.core.project_manager import ProjectManager
+from src.utils.logger import setup_logger
+from src.exceptions.app_exceptions import (
+    AppException,
+    ProjectNotInitializedError,
+    ProjectLoadError,
+    AnalysisError,
+    ExportError,
+    ProcessingError,
+)
 
-# Импортируем экспортёры
-from src.exporter.excel_exporter import export_project as export_with_xlsxwriter # Основной
-from src.exporter.direct_db_exporter import export_project as export_with_openpyxl # Аварийный (убедитесь, что она там есть)
-
-# Импортируем logger из utils
-from src.utils.logger import get_logger
-
-# --- Исключения ---
-from src.exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
-
-logger = get_logger(__name__)
+# Получаем логгер для этого модуля
+logger = setup_logger(__name__)
 
 class AppController:
     """
-    Центральный контроллер приложения.
-    Координирует работу анализатора, хранилища, процессора и экспортера.
+    Центральный контроллер приложения Excel Micro DB.
+
+    Отвечает за:
+    - Инициализацию и управление компонентами приложения
+    - Координацию между модулями (analyzer, processor, storage, exporter, constructor)
+    - Управление состоянием приложения
+    - Обработку ошибок на уровне приложения
     """
 
-    def __init__(self, project_path: str):
+    def __init__(self, project_path: Optional[str] = None, storage: Optional[ProjectDBStorage] = None, log_level: str = "INFO"):
         """
-        Инициализирует контроллер для проекта.
+        Инициализация контроллера приложения.
 
         Args:
-            project_path (str): Путь к директории проекта.
+            project_path (Optional[str]): Путь к директории проекта
+            storage (Optional[ProjectDBStorage]): Экземпляр ProjectDBStorage
+            log_level (str): Уровень логирования.
         """
-        self.project_path = project_path
-        self.project_db_path = os.path.join(project_path, "project_data.db")
-        self.storage: Optional[ProjectDBStorage] = None
-        self._current_project_data: Optional[Dict[str, Any]] = None # Кэш метаданных проекта
-        logger.debug(f"AppController инициализирован для проекта: {project_path}")
+        logger.debug(f"Инициализация AppController для проекта: {project_path}")
+        self.project_path = Path(project_path) if project_path else None
+        self.storage = storage
+        self.log_level = log_level
+        self.logger = setup_logger(self.__class__.__name__, log_level=log_level)
+        self.current_project_info = None # <-- Информация о метаданных проекта
+        self.is_initialized = False # <-- Статус инициализации AppController
+        logger.debug("AppController инициализирован")
 
-    # --- Управление проектом ---
+    def initialize(self):
+        """Инициализация внутреннего состояния AppController."""
+        try:
+            self.logger.info("Инициализация внутреннего состояния AppController...")
+            if not self.storage:
+                 self.logger.error("Storage не предоставлен для инициализации AppController.")
+                 return False
+            # Инициализируем схему БД, если нужно
+            self.storage.initialize_schema()
+            # Пытаемся загрузить метаданные проекта
+            self.current_project_info = self.storage.load_project_metadata() # <-- Загружаем метаданные
+            if self.current_project_info:
+                self.logger.info(f"Метаданные проекта загружены: {self.current_project_info.get('name', 'Unknown')}")
+            else:
+                self.logger.info("Метаданные проекта не найдены, будет создан новый проект.")
 
-    def create_new_project(self, project_name: str) -> bool:
+            self.is_initialized = True
+            self.logger.info("AppController инициализирован успешно.")
+            return True
+        except Exception as e:
+            self.logger.error(f"Ошибка инициализации AppController: {e}", exc_info=True)
+            self.is_initialized = False
+            return False
+
+    # --- Управление проектом (через ProjectManager или Storage) ---
+
+    def init_project(self):
+        """Инициализация (создание) проекта через ProjectManager."""
+        # Используем ProjectManager для создания структуры проекта на диске/в БД
+        # Предполагается, что ProjectManager знает, как создать файлы/папки и записать начальные метаданные в БД
+        # через self.storage.
+        self.logger.info("Инициализация проекта через ProjectManager...")
+        try:
+            # ProjectManager теперь получает storage, а не управляет им сам
+            project_manager = ProjectManager(log_level=self.log_level)
+            # Вызываем метод ProjectManager, передавая ему путь и ссылку на storage
+            success = project_manager.create_project_structure(str(self.project_path), self.storage)
+            if success:
+                self.logger.info("Проект успешно инициализирован через ProjectManager.")
+                # После создания структуры, перезагружаем метаданные
+                self.current_project_info = self.storage.load_project_metadata()
+                return True
+            else:
+                self.logger.error("ProjectManager не смог инициализировать проект.")
+                return False
+        except Exception as e:
+            self.logger.error(f"Ошибка при инициализации проекта через ProjectManager: {e}", exc_info=True)
+            return False
+
+    def load_project(self, project_path: str) -> bool:
         """
-        Создает новую структуру проекта и инициализирует БД.
+        Загрузка существующего проекта.
 
         Args:
-            project_name (str): Имя нового проекта.
+            project_path (str): Путь к директории проекта
 
         Returns:
-            bool: True, если проект создан успешно, иначе False.
+            bool: True если проект загружен успешно, False в противном случае
         """
-        logger.info(f"Создание нового проекта: {project_name}")
-        try:
-            # Создаем директорию проекта, если её нет
-            os.makedirs(self.project_path, exist_ok=True)
-            logger.debug(f"Директория проекта создана/проверена: {self.project_path}")
-
-            # Инициализируем хранилище и схему БД
-            self.storage = ProjectDBStorage(self.project_db_path)
-            if not self.storage.initialize_project_tables():
-                logger.error("Не удалось инициализировать схему БД проекта.")
-                return False
-            
-            # TODO: Сохранить метаданные проекта (имя, дата создания) в БД
-            # Это может быть сделано через storage или напрямую
-            logger.info(f"Проект '{project_name}' успешно создан в {self.project_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Ошибка при создании проекта '{project_name}': {e}", exc_info=True)
-            return False
-
-    def load_project(self) -> bool:
-        """
-        Загружает существующий проект.
-
-        Returns:
-            bool: True, если проект загружен успешно, иначе False.
-        """
-        logger.info(f"Загрузка проекта из: {self.project_path}")
-        if not os.path.exists(self.project_db_path):
-            logger.error(f"Файл БД проекта не найден: {self.project_db_path}")
-            return False
+        # if not self.is_initialized:
+        #     logger.warning("Приложение не инициализировано. Выполняем инициализацию...")
+        #     if not self.initialize():
+        #         return False
 
         try:
-            self.storage = ProjectDBStorage(self.project_db_path)
-            if not self.storage.connect():
-                logger.error("Не удалось подключиться к БД проекта.")
+            self.logger.info(f"Загрузка проекта из: {project_path}")
+
+            if not self.storage:
+                self.logger.error("Storage не инициализирован")
                 return False
-            
-            # TODO: Загрузить метаданные проекта в self._current_project_data
-            logger.info("Проект успешно загружен.")
-            return True
+
+            project_data = self.storage.load_project_metadata() # <-- Загрузка через storage
+            if project_data:
+                self.current_project_info = project_data
+                self.project_path = Path(project_path)
+                self.logger.info("Проект загружен успешно")
+                return True
+            else:
+                self.logger.error("Не удалось загрузить метаданные проекта")
+                return False
+
         except Exception as e:
-            logger.error(f"Ошибка при загрузке проекта из {self.project_path}: {e}", exc_info=True)
+            self.logger.error(f"Ошибка при загрузке проекта: {e}", exc_info=True)
             return False
 
     def close_project(self):
         """Закрывает текущий проект и освобождает ресурсы."""
-        logger.info("Закрытие проекта.")
-        if self.storage:
-            self.storage.disconnect()
+        self.logger.info("Закрытие проекта.")
+        # Storage сам управляет соединением через контекстный менеджер или явный disconnect
+        # if self.storage:
+        #     self.storage.disconnect()
         self.storage = None
-        self._current_project_data = None
-        logger.debug("Проект закрыт.")
+        self.current_project_info = None
+        self.is_initialized = False
+        self.logger.debug("Проект закрыт.")
 
     # --- Анализ Excel-файлов ---
 
-    def analyze_excel_file(self, file_path: str) -> bool:
+    def analyze_file(self, file_path: str) -> bool:
         """
         Анализирует Excel-файл и сохраняет результаты в БД проекта.
 
@@ -120,111 +160,111 @@ class AppController:
         Returns:
             bool: True, если анализ и сохранение успешны, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить анализ.")
+        if not self.is_initialized:
+            self.logger.warning("AppController не инициализирован. Невозможно выполнить анализ")
             return False
 
-        if not os.path.exists(file_path):
-            logger.error(f"Excel-файл для анализа не найден: {file_path}")
+        if not self.project_path:
+            self.logger.error("Путь к проекту не установлен.")
             return False
 
-        logger.info(f"Начало анализа Excel-файла: {file_path}")
         try:
-            # 1. Анализ файла
-            analysis_results = analyze_excel_file(file_path)
-            logger.debug("Анализ Excel-файла завершен.")
+            self.logger.info(f"Начало анализа файла: {file_path}")
 
-            # 2. Сохранение результатов в БД
-            # Предполагаем, что analyze_excel_file возвращает данные в формате,
-            # который storage может принять
-            
-            # Для каждого листа в результатах анализа
-            for sheet_data in analysis_results.get("sheets", []):
-                sheet_name = sheet_data["name"]
-                logger.info(f"Сохранение данных для листа: {sheet_name}")
-                
-                # --- Получаем или создаем запись листа в БД ---
-                # Это может потребовать отдельного метода в storage
-                # Пока делаем это напрямую
-                # TODO: Реализовать метод в storage для создания/получения sheet_id
-                sheet_id = self._get_or_create_sheet_id(analysis_results.get("project_name", "Unknown"), sheet_name)
-                if sheet_id is None:
-                    logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
+            # Проверка существования файла
+            if not Path(file_path).exists():
+                self.logger.error(f"Файл не найден: {file_path}")
+                return False
+
+            # - ИНТЕГРАЦИЯ ANALYZER: Вызов анализатора -
+            # Передаем путь к файлу и, возможно, storage для прямого сохранения (или возвращаем данные)
+            # Более предпочтительно возвращать данные, а сохранение делегировать storage.
+            documentation_data = analyze_workbook_logic(file_path) # <-- Новое имя функции
+            if documentation_data is None:
+                self.logger.error("Анализатор вернул None. Ошибка при анализе файла.")
+                return False
+
+            self.logger.info("Анализ файла завершен успешно")
+
+            # --- НАЧАЛО ИНТЕГРАЦИИ СО ХРАНИЛИЩЕМ ---
+            # Сохраняем результаты анализа в БД через self.storage
+            # Предположим, analyze_workbook_logic возвращает структуру вроде:
+            # {'project_name': '...', 'sheets': [{'name': 'Sheet1', 'raw_data': [...], 'formulas': [...], ...}]}
+            project_name = documentation_data.get("project_name", self.project_path.name if self.project_path else "UnknownProject")
+            sheets_data = documentation_data.get("sheets", [])
+
+            for sheet_info in sheets_data:
+                sheet_name = sheet_info.get("name")
+                if not sheet_name:
+                    self.logger.warning("Имя листа отсутствует в данных анализа. Пропуск.")
                     continue
+
+                self.logger.info(f"Сохранение данных для листа: {sheet_name}")
+
+                # --- Получаем или создаем запись листа в БД через storage ---
+                # storage теперь должен уметь создавать листы, если их нет
+                # TODO: Реализовать метод в storage для создания/получения sheet_id
+                # Пока используем вспомогательный метод, но вызываем storage методы напрямую
+                # Получаем sheet_id через storage, если он может его вычислить или создать запись
+                # storage.create_or_get_sheet(project_name, sheet_name) -> sheet_id
+                # Пока предположим, что storage может работать с именем листа напрямую в большинстве случаев
 
                 # --- Сохраняем метаданные листа ---
                 metadata_to_save = {
-                    "max_row": sheet_data.get("max_row"),
-                    "max_column": sheet_data.get("max_column"),
-                    "merged_cells": sheet_data.get("merged_cells", [])
+                    "max_row": sheet_info.get("max_row"),
+                    "max_column": sheet_info.get("max_column"),
+                    "merged_cells": sheet_info.get("merged_cells", []),
+                    # Добавьте другие метаданные, если есть
                 }
-                if not self.storage.save_sheet_metadata(sheet_name, metadata_to_save):
-                    logger.warning(f"Не удалось сохранить метаданные для листа '{sheet_name}'.")
+                # storage.save_sheet_metadata(sheet_name, metadata_to_save) # <-- Вызов метода storage
 
                 # --- Сохраняем "сырые данные" ---
-                if not self.storage.save_sheet_raw_data(sheet_name, sheet_data.get("raw_data", [])):
-                    logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}'.")
+                raw_data_to_save = sheet_info.get("raw_data", [])
+                # storage.save_sheet_raw_data(sheet_name, raw_data_to_save) # <-- Вызов метода storage
+
+                # --- Сохраняем редактируемые данные ---
+                editable_data_to_save = sheet_info.get("editable_data", []) # Если анализатор возвращает
+                # storage.save_sheet_editable_data(sheet_name, editable_data_to_save) # <-- Вызов метода storage
 
                 # --- Сохраняем формулы ---
-                if not self.storage.save_sheet_formulas(sheet_id, sheet_data.get("formulas", [])):
-                    logger.error(f"Не удалось сохранить формулы для листа '{sheet_name}' (ID: {sheet_id}).")
+                formulas_to_save = sheet_info.get("formulas", [])
+                # storage.save_sheet_formulas(sheet_name, formulas_to_save) # <-- Вызов метода storage
 
                 # --- Сохраняем стили ---
-                if not self.storage.save_sheet_styles(sheet_id, sheet_data.get("styles", [])):
-                    logger.error(f"Не удалось сохранить стили для листа '{sheet_name}' (ID: {sheet_id}).")
+                styles_to_save = sheet_info.get("styles", [])
+                # storage.save_sheet_styles(sheet_name, styles_to_save) # <-- Вызов метода storage
 
                 # --- Сохраняем диаграммы ---
-                if not self.storage.save_sheet_charts(sheet_id, sheet_data.get("charts", [])):
-                    logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
-            
-            logger.info(f"Анализ и сохранение данных из '{file_path}' завершены.")
+                charts_to_save = sheet_info.get("charts", [])
+                # storage.save_sheet_charts(sheet_name, charts_to_save) # <-- Вызов метода storage
+
+                # --- Используем методы из модулей storage ---
+                # raw_data
+                from src.storage.raw_data import save_sheet_raw_data
+                save_sheet_raw_data(self.storage.connection, sheet_name, raw_data_to_save)
+                # editable_data
+                from src.storage.editable_data import save_sheet_editable_data
+                save_sheet_editable_data(self.storage.connection, sheet_name, editable_data_to_save)
+                # formulas
+                from src.storage.formulas import save_sheet_formulas
+                save_sheet_formulas(self.storage.connection, sheet_name, formulas_to_save)
+                # styles
+                from src.storage.styles import save_sheet_styles
+                save_sheet_styles(self.storage.connection, sheet_name, styles_to_save)
+                # charts
+                from src.storage.charts import save_sheet_charts
+                save_sheet_charts(self.storage.connection, sheet_name, charts_to_save)
+                # metadata
+                from src.storage.metadata import save_sheet_metadata
+                save_sheet_metadata(self.storage.connection, sheet_name, metadata_to_save)
+
+            self.logger.info(f"Анализ и сохранение данных из '{file_path}' завершены.")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при анализе/сохранении файла '{file_path}': {e}", exc_info=True)
+            self.logger.error(f"Ошибка при анализе/сохранении файла '{file_path}': {e}", exc_info=True)
             return False
 
-    def _get_or_create_sheet_id(self, project_name: str, sheet_name: str) -> Optional[int]:
-        """
-        Получает ID листа из БД или создает новую запись, если лист не существует.
-        Это вспомогательный метод, который может быть перенесен в storage в будущем.
-        """
-        if not self.storage or not self.storage.connection:
-             logger.error("Нет подключения к БД для получения/создания sheet_id.")
-             return None
-
-        try:
-            cursor = self.storage.connection.cursor()
-            
-            # Получаем project_id (для MVP предполагаем 1)
-            # TODO: Реализовать правильное получение project_id
-            project_id = 1
-            
-            # Проверяем, существует ли лист
-            cursor.execute("SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
-            result = cursor.fetchone()
-            
-            if result:
-                logger.debug(f"Лист '{sheet_name}' найден с ID {result[0]}.")
-                return result[0]
-            else:
-                # Создаем новый лист
-                logger.debug(f"Лист '{sheet_name}' не найден. Создаем новый.")
-                cursor.execute(
-                    "INSERT INTO sheets (project_id, name) VALUES (?, ?)",
-                    (project_id, sheet_name)
-                )
-                self.storage.connection.commit()
-                new_sheet_id = cursor.lastrowid
-                logger.info(f"Создан новый лист '{sheet_name}' с ID {new_sheet_id}.")
-                return new_sheet_id
-                
-        except sqlite3.Error as e:
-            logger.error(f"Ошибка SQLite при получении/создании sheet_id для '{sheet_name}': {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Неожиданная ошибка при получении/создании sheet_id для '{sheet_name}': {e}", exc_info=True)
-            return None
 
     # --- Работа с данными листа (для GUI) ---
 
@@ -237,36 +277,131 @@ class AppController:
             sheet_name (str): Имя листа.
 
         Returns:
-            Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]: 
+            Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             Кортеж из списков сырых и редактируемых данных.
         """
-        if not self.storage:
-            logger.error("Проект не загружен.")
+        if not self.is_initialized:
+            self.logger.error("AppController не инициализирован.")
             return ([], [])
 
         try:
-            logger.debug(f"Загрузка данных для листа '{sheet_name}'...")
-            
-            # Загружаем "сырые данные"
-            raw_data = self.storage.load_sheet_raw_data(sheet_name)
-            logger.debug(f"Загружено {len(raw_data)} записей сырых данных.")
+            self.logger.debug(f"Загрузка данных для листа '{sheet_name}'...")
 
-            # Получаем sheet_id для загрузки редактируемых данных
-            sheet_id = self._get_sheet_id_by_name(sheet_name)
-            if sheet_id is None:
-                 logger.warning(f"Не найден sheet_id для листа '{sheet_name}'. Редактируемые данные не загружены.")
-                 editable_data = []
-            else:
-                # Загружаем редактируемые данные
-                # --- Используем исправленный метод из storage ---
-                editable_data = self.storage.load_sheet_editable_data(sheet_id, sheet_name)
-                logger.debug(f"Загружено {len(editable_data)} записей редактируемых данных.")
-            
+            # Загружаем "сырые данные"
+            # --- Используем метод из модуля storage ---
+            from src.storage.raw_data import load_sheet_raw_data
+            raw_data = load_sheet_raw_data(self.storage.connection, sheet_name)
+            self.logger.debug(f"Загружено {len(raw_data)} записей сырых данных.")
+
+            # Загружаем редактируемые данные
+            # --- Используем метод из модуля storage ---
+            from src.storage.editable_data import load_sheet_editable_data
+            editable_data_result = load_sheet_editable_data(self.storage.connection, sheet_name)
+            editable_data = editable_data_result.get('rows', []) if editable_data_result else []
+            self.logger.debug(f"Загружено {len(editable_data)} записей редактируемых данных.")
+
             return (raw_data, editable_data)
 
         except Exception as e:
-            logger.error(f"Ошибка при загрузке данных для листа '{sheet_name}': {e}", exc_info=True)
+            self.logger.error(f"Ошибка при загрузке данных для листа '{sheet_name}': {e}", exc_info=True)
             return ([], [])
+
+    def update_cell_value(self, sheet_name: str, cell_address: str, new_value: Any) -> bool:
+        """
+        Обновляет значение ячейки и записывает изменение в историю.
+        (Адаптировано из update_sheet_cell_in_project)
+
+        Args:
+            sheet_name (str): Имя листа.
+            cell_address (str): Адрес ячейки (например, 'A1').
+            new_value (Any): Новое значение ячейки.
+
+        Returns:
+            bool: True, если обновление успешно, иначе False.
+        """
+        if not self.is_initialized:
+            self.logger.warning("AppController не инициализирован. Невозможно обновить ячейку.")
+            return False
+
+        try:
+            self.logger.debug(f"Обновление ячейки {cell_address} на листе '{sheet_name}' на значение '{new_value}'.")
+
+            # 1. Получаем sheet_id через storage (или напрямую из таблицы, если имя достаточно)
+            # Используем вспомогательный метод, адаптированный к новому storage
+            sheet_id = self._get_sheet_id_by_name(sheet_name)
+            if sheet_id is None:
+                self.logger.error(f"Не найден sheet_id для листа '{sheet_name}'. Обновление невозможно.")
+                return False
+
+            # 2. Получаем старое значение (для истории)
+            # Это может быть сложно, так как оно может быть в raw_data или editable_data
+            # Для простоты MVP, предположим, что мы можем получить его из editable_data
+            # или установить None. Более точная логика может потребоваться.
+            # Получим через editable_data.load, найдем ячейку
+            from src.storage.editable_data import load_sheet_editable_data
+            current_editable_data = load_sheet_editable_data(self.storage.connection, sheet_name)
+            old_value = None
+            if current_editable_data and 'column_names' in current_editable_data and 'rows' in current_editable_data:
+                 col_names = current_editable_data['column_names']
+                 rows = current_editable_data['rows']
+                 # Преобразуем A1 в (row_idx, col_name)
+                 import re
+                 match = re.match(r"([A-Z]+)(\d+)", cell_address)
+                 if match:
+                     col_letter, row_num = match.groups()
+                     row_idx = int(row_num) - 1 # 0-based
+                     # Преобразуем букву столбца в индекс
+                     col_idx = 0
+                     for c in col_letter:
+                         col_idx = col_idx * 26 + (ord(c) - ord('A') + 1)
+                     col_idx -= 1 # 0-based
+                     if 0 <= row_idx < len(rows) and 0 <= col_idx < len(col_names):
+                         old_value = rows[row_idx][col_idx]
+
+            # 3. Обновляем редактируемые данные
+            # --- Используем метод из модуля storage ---
+            from src.storage.editable_data import update_editable_cell
+            update_success = update_editable_cell(self.storage.connection, sheet_name, row_idx, col_names[col_idx], new_value)
+
+            if update_success:
+                # 4. Записываем в историю редактирования
+                # --- Используем метод из модуля storage.history ---
+                from src.storage.history import save_edit_history_record
+                # Требуется project_id, sheet_id, cell_address, action_type, old_value, new_value, user, details
+                # project_id пока получим из метаданных или предположим 1
+                project_id = 1 # TODO: Получить реальный project_id из БД
+                 # details
+                history_details = {
+                    "cell_address": cell_address,
+                    "row_index": row_idx,
+                    "column_index": col_idx
+                }
+                history_success = save_edit_history_record(
+                     connection=self.storage.connection,
+                     project_id=project_id,
+                     sheet_id=sheet_id,
+                     cell_address=cell_address,
+                     action_type="edit_cell",
+                     old_value=old_value,
+                     new_value=new_value,
+                     user=None, # TODO: Поддержка пользователей
+                     details=history_details
+                )
+                if history_success:
+                    self.logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена и история сохранена.")
+                    return True
+                else:
+                    self.logger.error(
+                            f"Ячейка обновлена, но ошибка при сохранении записи истории для {cell_address} на листе '{sheet_name}'.")
+                    # Возвращаем False, если история критична
+                    return False
+            else:
+                self.logger.error(f"Не удалось обновить ячейку {cell_address} на листе '{sheet_name}' в БД.")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Ошибка при обновлении ячейки {cell_address} на листе '{sheet_name}': {e}", exc_info=True)
+            return False
 
     def _get_sheet_id_by_name(self, sheet_name: str) -> Optional[int]:
         """Вспомогательный метод для получения sheet_id по имени листа."""
@@ -281,91 +416,50 @@ class AppController:
         except sqlite3.Error:
              return None
 
-    def update_cell_value(self, sheet_name: str, cell_address: str, new_value: Any) -> bool:
-        """
-        Обновляет значение ячейки и записывает изменение в историю.
-
-        Args:
-            sheet_name (str): Имя листа.
-            cell_address (str): Адрес ячейки (например, 'A1').
-            new_value (Any): Новое значение ячейки.
-
-        Returns:
-            bool: True, если обновление успешно, иначе False.
-        """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно обновить ячейку.")
-            return False
-
-        try:
-            logger.debug(f"Обновление ячейки {cell_address} на листе '{sheet_name}' на значение '{new_value}'.")
-
-            # 1. Получаем sheet_id
-            sheet_id = self._get_sheet_id_by_name(sheet_name)
-            if sheet_id is None:
-                logger.error(f"Не найден sheet_id для листа '{sheet_name}'. Обновление невозможно.")
-                return False
-
-            # 2. Получаем старое значение (для истории)
-            # Это может быть сложно, так как оно может быть в raw_data или editable_data
-            # Для простоты MVP, предположим, что мы можем получить его из editable_data
-            # или установить None. Более точная логика может потребоваться.
-            old_value = None # TODO: Получить реальное старое значение
-            
-            # 3. Обновляем редактируемые данные
-            # --- Используем исправленный метод из storage ---
-            if not self.storage.update_editable_cell(sheet_id, sheet_name, cell_address, new_value):
-                logger.error(f"Не удалось обновить редактируемую ячейку {cell_address} на листе '{sheet_name}'.")
-                return False
-
-            # 4. Записываем в историю редактирования
-            # --- Используем метод из storage ---
-            if not self.storage.save_edit_history_record(sheet_id, cell_address, old_value, new_value):
-                 logger.warning(f"Не удалось записать изменение ячейки {cell_address} в историю.")
-
-            logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена.")
-            return True
-
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении ячейки {cell_address} на листе '{sheet_name}': {e}", exc_info=True)
-            return False
-
     # --- Экспорт ---
 
-    def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
+    def export_project(self, output_path: str) -> bool:
         """
         Экспортирует проект в Excel-файл.
 
         Args:
             output_path (str): Путь к выходному .xlsx файлу.
-            use_xlsxwriter (bool): Если True, использует основной экспортер (xlsxwriter).
-                                   Если False, использует аварийный (openpyxl).
 
         Returns:
             bool: True, если экспорт успешен, иначе False.
         """
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl'}.")
-        
+        if not self.is_initialized:
+            self.logger.warning("AppController не инициализирован. Невозможно выполнить экспорт.")
+            return False
+
+        if not self.project_path:
+            self.logger.error("Путь к проекту не установлен.")
+            return False
+
         try:
-            if use_xlsxwriter:
-                # Пока используем заглушку, так как основной экспортер может быть еще не готов
-                # или его путь импорта отличается.
-                logger.warning("Основной экспортёр (xlsxwriter) пока не подключен напрямую. Используется аварийный.")
-                success = export_with_openpyxl(self.project_db_path, output_path)
-                # TODO: Подключить основной экспортер
-                # from src.exporter.excel_exporter import export_project as export_with_xlsxwriter
-                # success = export_with_xlsxwriter(self.project_db_path, output_path)
-            else:
-                success = export_with_openpyxl(self.project_db_path, output_path)
-            
+            self.logger.info(f"Начало экспорта проекта в Excel: {output_path}")
+
+            # --- ИНТЕГРАЦИЯ EXPORTER ---
+            # Используем direct_db_exporter, передавая ему путь к БД проекта и путь к выходному файлу
+            # Он прочитает все данные из БД через ProjectDBStorage и создаст Excel-файл
+
+            # Определяем путь к БД проекта
+            db_path = self.project_path / "project_data.db"
+
+            success = export_project_db_to_excel(
+                db_path=str(db_path),
+                output_path=output_path
+            )
+
             if success:
-                logger.info(f"Проект успешно экспортирован в '{output_path}'.")
+                self.logger.info("Экспорт в Excel завершен успешно.")
+                return True
             else:
-                logger.error(f"Ошибка при экспорте проекта в '{output_path}'.")
-            return success
-            
+                self.logger.error("Ошибка при экспорте в Excel.")
+                return False
+
         except Exception as e:
-            logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
+            self.logger.error(f"Ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
             return False
 
     # --- История редактирования (Undo/Redo) ---
@@ -381,15 +475,79 @@ class AppController:
         Returns:
             List[Dict[str, Any]]: Список записей истории.
         """
-        if not self.storage:
-            logger.error("Проект не загружен.")
+        if not self.is_initialized:
+            self.logger.error("AppController не инициализирован.")
             return []
 
         try:
              sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
-             return self.storage.load_edit_history(sheet_id, limit)
+             # Используем метод из модуля storage.history
+             from src.storage.history import load_edit_history
+             return load_edit_history(self.storage.connection, sheet_id, limit)
         except Exception as e:
-            logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
+            self.logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
             return []
 
-    # Другие методы AppController (например, для processor, AppData) будут добавлены позже
+    # --- Обработка данных (заглушка) ---
+    def process_data(self):
+        """Заглушка для обработки данных."""
+        self.logger.info("Обработка данных (заглушка)")
+        # TODO: Интеграция с processor модулем
+        pass
+
+    # --- Другие методы ---
+    def get_project_info(self) -> Optional[Dict[str, Any]]:
+        """
+        Получение информации о текущем проекте.
+
+        Returns:
+            Optional[Dict[str, Any]]: Информация о проекте или None если проект не загружен
+        """
+        if not self.is_initialized or not self.current_project_info:
+            self.logger.warning("Проект не загружен")
+            return None
+        return self.current_project_info
+
+    def shutdown(self) -> None:
+        """
+        Корректное завершение работы приложения.
+        """
+        self.logger.info("Завершение работы приложения")
+        self.close_project() # Закрываем проект, если он был загружен
+        self.logger.info("Приложение завершено")
+
+
+# --- ФАБРИЧНЫЕ ФУНКЦИИ ---
+
+def get_app_controller(project_path: str, log_level: str = "INFO") -> AppController:
+    """Фабричная функция для создания и настройки AppController."""
+    # Создаём ProjectManager и получаем путь к БД проекта
+    project_manager = ProjectManager(log_level=log_level)
+    project_data_path = project_manager.get_project_db_path(project_path)
+    storage = ProjectDBStorage(project_data_path, log_level=log_level)
+    controller = AppController(project_path=project_path, storage=storage, log_level=log_level)
+    controller.initialize() # <-- ВАЖНО: инициализирует перед возвратом
+    return controller
+
+def create_app_controller(project_path: str, log_level: str = "INFO") -> AppController:
+    """
+    Фабричная функция для создания и настройки AppController.
+    (Алиас для get_app_controller, возвращает полностью инициализированный контроллер).
+    """
+    # Просто вызываем get_app_controller, чтобы использовать общую логику
+    return get_app_controller(project_path, log_level)
+
+# --- Пример использования (опционально) ---
+# if __name__ == "__main__":
+#     # Это просто для демонстрации, не будет выполняться при импорте
+#     logger.info("Демонстрация работы AppController")
+#
+#     # Создание контроллера через фабричную функцию
+#     app_ctrl = get_app_controller("./test_project")
+#
+#     if app_ctrl.is_initialized:
+#         logger.info("Контроллер приложения инициализирован успешно")
+#         # Дальнейшие действия с app_ctrl
+#         app_ctrl.shutdown()
+#     else:
+#         logger.error("Ошибка инициализации контроллера приложения")
