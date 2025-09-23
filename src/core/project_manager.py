@@ -52,6 +52,10 @@ class ProjectManager:
         Returns:
             bool: True если проект создан успешно, False в противном случае
         """
+        # Инициализируем переменные заранее, чтобы избежать ошибок Pylance
+        db_path = None
+        storage = None
+
         try:
             project_path_obj = Path(project_path).resolve()
             logger.info(f"Создание нового проекта в: {project_path_obj}")
@@ -262,6 +266,11 @@ class ProjectManager:
         Returns:
             bool: True если проект валиден, False в противном случае
         """
+        # Инициализируем переменные заранее, чтобы избежать ошибок Pylance
+        db_path = None
+        storage = None
+        cursor = None
+
         try:
             project_path_obj = Path(project_path)
             logger.debug(f"Валидация проекта: {project_path_obj}")
@@ -300,14 +309,26 @@ class ProjectManager:
                     return False
 
                 # Проверка наличия ключевых таблиц
+                # Убедимся, что соединение установлено и объект cursor можно получить
+                if storage.connection:
+                    cursor = storage.connection.cursor()
+                else:
+                    logger.error(f"Не удалось получить соединение с БД проекта: {db_path}")
+                    storage.disconnect()
+                    return False
+
                 required_tables = ['projects', 'sheets', 'formulas', 'sheet_styles', 'sheet_charts', 'edit_history']
-                cursor = storage.connection.cursor()
-                for table_name in required_tables:
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
-                    if not cursor.fetchone():
-                        logger.error(f"БД проекта {db_path} не содержит обязательную таблицу '{table_name}'.")
-                        storage.disconnect()
-                        return False
+                if cursor: # Дополнительная проверка на None для Pylance
+                    for table_name in required_tables:
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+                        if not cursor.fetchone():
+                            logger.error(f"БД проекта {db_path} не содержит обязательную таблицу '{table_name}'.")
+                            storage.disconnect()
+                            return False
+                else:
+                    logger.error("Не удалось получить курсор для БД проекта")
+                    storage.disconnect()
+                    return False
 
                 storage.disconnect()
                 logger.debug(f"БД проекта {db_path} прошла базовую валидацию.")
@@ -315,7 +336,7 @@ class ProjectManager:
                 logger.error(f"Ошибка при валидации БД проекта {db_path}: {e}", exc_info=True)
                 # Попробуем отключиться на случай ошибки
                 try:
-                    if 'storage' in locals():
+                    if storage:
                         storage.disconnect()
                 except:
                     pass
