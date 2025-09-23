@@ -1,47 +1,30 @@
-# src/storage/metadata.py
-"""
-Модуль для работы с метаданными проекта в хранилище Excel Micro DB.
-(Пока содержит только заглушки или общие функции)
-"""
-import sqlite3
-import json
-import logging
-from typing import Dict, Any, List, Optional
-
-# from src.storage.base import DateTimeEncoder # Если потребуется
-# from src.storage.schema import ... # Если потребуются какие-либо константы
-
-logger = logging.getLogger(__name__)
-
-# Пример функции, которая могла бы быть здесь
-# def get_project_info(connection: sqlite3.Connection) -> Dict[str, Any]:
-#     """Получает общую информацию о проекте."""
-#     pass
-
-# def get_sheet_list(connection: sqlite3.Connection) -> List[str]:
-#     """Получает список имен листов."""
-#     pass
-
-# def load_sheet_structure(connection: sqlite3.Connection, sheet_name: str) -> List[Dict[str, Any]]:
-#     """Загружает структуру листа."""
-#     pass
 # src/storage/misc.py
 """
-Модуль для прочих функций хранилища Excel Micro DB, не вошедших в другие категории.
+Модуль для хранения прочих функций работы с БД проекта,
+которые не вошли в другие специализированные модули storage.
+
+Пока является заглушкой.
 """
-import sqlite3
+
 import logging
-from typing import Any
 
-# from src.storage.schema import ... # Если потребуются какие-либо константы
-
+# Получаем логгер для этого модуля
 logger = logging.getLogger(__name__)
 
-# Пример функции, которая могла бы быть здесь
-# def execute_custom_query(connection: sqlite3.Connection, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
-#     """Выполняет произвольный SQL-запрос."""
+# Пример будущей функции (пока заглушка)
+# def save_misc_project_data(connection, project_id, key, value):
+#     """
+#     Сохраняет произвольные пары ключ-значение, связанные с проектом.
+#     Может быть использовано для хранения настроек или временных данных.
+#     """
+#     # Реализация сохранения в БД
 #     pass
 
-# def backup_database(source_db_path: str, backup_db_path: str) -> bool:
-#     """Создает резервную копию базы данных."""
+# def load_misc_project_data(connection, project_id, key):
+#     """
+#     Загружает значение по ключу, связанное с проектом.
+#     """
+#     # Реализация загрузки из БД
 #     pass
+
+logger.debug("Модуль src/storage/misc.py загружен (заглушка).")
