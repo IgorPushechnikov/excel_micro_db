@@ -1,292 +1,147 @@
 # src/storage/raw_data.py
 
-"""
-Модуль для работы с сырыми данными в хранилище проекта Excel Micro DB.
-
-Содержит логику создания таблиц, сохранения и загрузки сырых данных.
-"""
-
 import sqlite3
 import logging
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-# from src.storage.base import sanitize_table_name # ИМПОРТ ПЕРЕМЕЩЕН ВНУТРЬ ФУНКЦИЙ, чтобы избежать циклического импорта
+from typing import List, Dict, Any
+import re
 
-# from src.storage.schema import ... # Если потребуются какие-либо константы из schema, импортируем их
-
+# Получаем логгер для этого модуля
 logger = logging.getLogger(__name__)
 
-# --- Вспомогательные функции ---
-
 def _get_raw_data_table_name(sheet_name: str) -> str:
-    """Генерирует имя таблицы для сырых данных листа."""
-    # Импортируем здесь, чтобы избежать циклического импорта
-    from src.storage.base import sanitize_table_name
-    # Используем санитизированное имя листа как основу
-    base_name = sanitize_table_name(sheet_name)
-    return f"raw_data_{base_name}"
-
-# --- Основные функции работы с сырыми данными ---
-
-def create_raw_data_table(connection: sqlite3.Connection, sheet_name: str, column_names: List[str]) -> bool:
     """
-    Создает таблицу в БД для хранения сырых данных листа.
+    Генерирует имя таблицы для "сырых" данных листа.
+    Args:
+        sheet_name (str): Имя листа Excel.
+    Returns:
+        str: Имя таблицы в БД.
+    """
+    # Санитизация имени таблицы для безопасности и корректности SQL
+    # Разрешаем только буквы, цифры и подчеркивания, заменяем пробелы подчеркиваниями
+    sanitized_sheet_name = re.sub(r'[^\w]', '_', sheet_name)
+    # Убедимся, что имя не начинается с цифры
+    if sanitized_sheet_name and sanitized_sheet_name[0].isdigit():
+        sanitized_sheet_name = f"_{sanitized_sheet_name}"
+    # Ограничиваем длину имени таблицы (SQLite ограничение, обычно 64 символа)
+    # Оставляем место для префикса 'raw_data_'
+    max_len = 50 # Примерное ограничение
+    if len(sanitized_sheet_name) > max_len:
+        sanitized_sheet_name = sanitized_sheet_name[:max_len]
+        
+    return f"raw_data_{sanitized_sheet_name}"
+
+
+def save_sheet_raw_data(connection: sqlite3.Connection, sheet_name: str, raw_data_list: List[Dict[str, Any]]) -> bool:
+    """
+    Сохраняет "сырые" данные листа в БД проекта.
+    Создает отдельную таблицу для данных листа, если она не существует.
 
     Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
         sheet_name (str): Имя листа Excel.
-        column_names (List[str]): Список имен столбцов.
+        raw_data_list (List[Dict[str, Any]]): Список словарей с 'cell_address', 'value', 'value_type'.
 
     Returns:
-        bool: True, если таблица создана или уже существует, False в случае ошибки.
+        bool: True, если сохранение успешно, иначе False.
     """
-    # === ИСПРАВЛЕНО: Инициализация table_name в начале функции ===
-    # Инициализируем table_name в начале области видимости функции, чтобы Pylance был доволен
-    # и чтобы переменная была доступна в блоках except
-    table_name = ""
-    # === КОНЕЦ ИСПРАВЛЕНИЯ ===
-
     if not connection:
-        logger.error("[DEBUG_STORAGE] Получено пустое соединение для создания таблицы сырых данных.")
+        logger.error("Нет активного соединения с БД для сохранения сырых данных.")
+        return False
+
+    if not isinstance(raw_data_list, list):
+        logger.error(f"Неверный тип данных для raw_data_list. Ожидался list, получен {type(raw_data_list)}.")
         return False
 
     try:
         cursor = connection.cursor()
-        # === ИСПРАВЛЕНО: Присваивание значения table_name внутри try ===
-        # table_name будет определена здесь, если код дойдет до этой точки без ошибок
         table_name = _get_raw_data_table_name(sheet_name)
-        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
-        logger.debug(f"[DEBUG_STORAGE] Создание таблицы сырых данных '{table_name}' для листа '{sheet_name}'.")
 
-        # 1. Проверяем, существует ли таблица
-        cursor.execute("""
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name=?
-        """, (table_name,))
-        if cursor.fetchone():
-            logger.debug(f"[DEBUG_STORAGE] Таблица '{table_name}' уже существует.")
-            return True  # Таблица уже существует
+        # Создаем таблицу для сырых данных листа, если она не существует
+        logger.debug(f"Создание/проверка таблицы '{table_name}' для сырых данных листа '{sheet_name}'...")
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                cell_address TEXT PRIMARY KEY,
+                value TEXT,
+                value_type TEXT
+            )
+        """)
+        logger.debug(f"Таблица '{table_name}' готова.")
 
-        # 2. Создаем таблицу
-        # Начинаем с обязательных служебных столбцов
-        columns_sql_parts = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]  # Уникальный ID строки
+        # Подготавливаем данные для вставки/обновления
+        # Используем INSERT OR REPLACE для простоты и атомарности
+        data_to_insert = [
+            (item.get('cell_address'), item.get('value'), type(item.get('value')).__name__)
+            for item in raw_data_list
+            if item.get('cell_address') # Пропускаем записи без адреса
+        ]
 
-        # Добавляем столбцы для данных
-        for col_name in column_names:
-            # Санитизируем имя столбца
-            # Импортируем здесь внутри цикла для избежания циклического импорта
-            from src.storage.base import sanitize_table_name # Хотя это избыточно, но соответствует стилю файла
-            sanitized_col_name = sanitize_table_name(col_name)
-            # - ИСПРАВЛЕНО: Проверка на конфликт имён -
-            # Проверяем, не совпадает ли санитизированное имя с зарезервированными
-            if sanitized_col_name.lower() in ['id']:
-                # Если совпадает, добавляем префикс
-                sanitized_col_name = f"data_{sanitized_col_name}"
-            logger.debug(f"[DEBUG_STORAGE] Зарезервированное имя столбца '{col_name}' переименовано в '{sanitized_col_name}' для таблицы '{table_name}'.")
-            # - КОНЕЦ ИСПРАВЛЕНИЯ -
-            # Добавляем столбец (в SQLite все значения TEXT, можно уточнить тип позже)
-            columns_sql_parts.append(f"{sanitized_col_name} TEXT")
-
-        create_table_sql = f"CREATE TABLE {table_name} ({', '.join(columns_sql_parts)})"
-        logger.debug(f"[DEBUG_STORAGE] SQL-запрос создания таблицы: {create_table_sql}")
-        cursor.execute(create_table_sql)
-
-        # 3. Регистрируем таблицу в реестре
-        # Регистрация будет происходить в save_sheet_raw_data.
-        connection.commit()
-        logger.info(f"[DEBUG_STORAGE] Таблица сырых данных '{table_name}' успешно создана.")
+        if data_to_insert:
+            logger.debug(f"Подготовлено {len(data_to_insert)} записей сырых данных для листа '{sheet_name}'.")
+            cursor.executemany(
+                f"INSERT OR REPLACE INTO {table_name} (cell_address, value, value_type) VALUES (?, ?, ?)",
+                data_to_insert
+            )
+            connection.commit()
+            logger.info(f"Сохранено {len(data_to_insert)} записей сырых данных для листа '{sheet_name}' в таблицу '{table_name}'.")
+        else:
+            logger.info(f"Нет сырых данных для сохранения для листа '{sheet_name}'.")
+            
         return True
 
     except sqlite3.Error as e:
-        # === ИСПРАВЛЕНО: table_name теперь всегда определена ===
-        logger.error(f"[DEBUG_STORAGE] Ошибка SQLite при создании таблицы '{table_name}': {e}")
-        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
-        connection.rollback()
+        logger.error(f"Ошибка SQLite при сохранении сырых данных для листа '{sheet_name}': {e}")
         return False
     except Exception as e:
-        # === ИСПРАВЛЕНО: table_name теперь всегда определена ===
-        logger.error(f"[DEBUG_STORAGE] Неожиданная ошибка при создании таблицы '{table_name}': {e}")
-        # === КОНЕЦ ИСПРАВЛЕНИЯ ===
-        connection.rollback()
+        logger.error(f"Неожиданная ошибка при сохранении сырых данных для листа '{sheet_name}': {e}", exc_info=True)
         return False
 
-def save_sheet_raw_data(connection: sqlite3.Connection, sheet_id: int, sheet_name: str, raw_data_info: Dict[str, Any]) -> bool:
+
+def load_sheet_raw_data(connection: sqlite3.Connection, sheet_name: str) -> List[Dict[str, Any]]:
     """
-    Сохраняет сырые данные листа в отдельную таблицу.
+    Загружает "сырые" данные листа из БД проекта.
 
     Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
-        sheet_id (int): ID листа в БД.
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
         sheet_name (str): Имя листа Excel.
-        raw_data_info (Dict[str, Any]): Информация о сырых данных (ключи: 'column_names', 'rows').
 
     Returns:
-        bool: True, если данные сохранены успешно, False в случае ошибки.
+        List[Dict[str, Any]]: Список словарей с 'cell_address', 'value', 'value_type'.
+                             Возвращает пустой список в случае ошибки или отсутствия данных/таблицы.
     """
     if not connection:
-        logger.error("Получено пустое соединение для сохранения сырых данных.")
-        return False
+        logger.error("Нет активного соединения с БД для загрузки сырых данных.")
+        return []
 
     try:
-        table_name = _get_raw_data_table_name(sheet_name)
-        column_names = raw_data_info.get("column_names", [])
-        rows_data = raw_data_info.get("rows", [])
-
-        logger.debug(f"[DEBUG_STORAGE] Начало сохранения сырых данных для листа '{sheet_name}' (ID: {sheet_id}) в таблицу '{table_name}'.")
-
-        # 1. Создаем таблицу (если не существует)
-        # Передаем column_names для создания столбцов
-        if not create_raw_data_table(connection, sheet_name, column_names):
-            logger.error(f"[DEBUG_STORAGE] Не удалось создать таблицу для сырых данных листа '{sheet_name}'.")
-            return False
-
-        # 2. Вставляем данные
         cursor = connection.cursor()
-
-        # Подготавливаем имена столбцов для вставки (санитизированные)
-        sanitized_col_names = []
-        for cn in column_names:
-            # Импортируем здесь внутри цикла для избежания циклического импорта
-            from src.storage.base import sanitize_table_name # Хотя это избыточно, но соответствует стилю файла
-            s_cn = sanitize_table_name(cn)
-            # Применяем ту же логику переименования, что и при создании
-            if s_cn.lower() == 'id':  # Только 'id' конфликтует, 'row_index' не создается как столбец
-                s_cn = f"data_{s_cn}"
-            sanitized_col_names.append(s_cn)
-
-        logger.debug(f"[DEBUG_STORAGE] Санитизированные имена столбцов для вставки: {sanitized_col_names}")
-
-        if not sanitized_col_names:
-            logger.warning(f"[DEBUG_STORAGE] Нет санитизированных имен столбцов для вставки в '{table_name}'.")
-            return True  # Нечего вставлять, но это не ошибка
-
-        # Формируем SQL-запрос для вставки
-        # placeholders - это список '?' для VALUES
-        placeholders = ', '.join(['?' for _ in sanitized_col_names])
-        # columns_str - это список санитизированных имен столбцов
-        columns_str = ', '.join(sanitized_col_names)
-        insert_sql = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
-        logger.debug(f"[DEBUG_STORAGE] SQL-запрос вставки данных: {insert_sql}")
-
-        # Подготавливаем данные для вставки
-        data_to_insert = []
-        for row_dict in rows_data:
-            # Для каждой строки создаем кортеж значений в порядке sanitized_col_names
-            row_values = []
-            for orig_col_name in column_names:  # Итерируемся по оригинальным именам
-                # Импортируем здесь внутри цикла для избежания циклического импорта
-                from src.storage.base import sanitize_table_name # Хотя это избыточно, но соответствует стилю файла
-                sanitized_name = sanitize_table_name(orig_col_name)
-                if sanitized_name.lower() == 'id':
-                    sanitized_name = f"data_{sanitized_name}"
-                # Получаем значение из row_dict по оригинальному имени
-                value = row_dict.get(orig_col_name, None)
-                # Убедимся, что значение является строкой или None для SQLite
-                if value is not None and not isinstance(value, (str, int, float, type(None))):
-                    # Если это datetime, преобразуем в ISO строку
-                    if isinstance(value, datetime):
-                        value = value.isoformat()
-                    else:
-                        # Для остальных типов - преобразуем в строку
-                        value = str(value)
-                row_values.append(value)
-            data_to_insert.append(tuple(row_values))
-
-        logger.debug(f"[DEBUG_STORAGE] Подготовлено {len(data_to_insert)} строк для вставки.")
-
-        # Выполняем массовую вставку
-        if data_to_insert:  # Проверяем, есть ли данные для вставки
-            cursor.executemany(insert_sql, data_to_insert)
-
-        # 3. Регистрируем таблицу в реестре (если ещё не зарегистрирована)
-        cursor.execute("""
-            INSERT OR IGNORE INTO raw_data_tables_registry (sheet_id, table_name)
-            VALUES (?, ?)
-        """, (sheet_id, table_name))
-        connection.commit()
-
-        logger.info(f"[DEBUG_STORAGE] В таблицу '{table_name}' вставлено {len(data_to_insert)} строк сырых данных и зарегистрирована.")
-
-        logger.info(f"[DEBUG_STORAGE] Сырые данные для листа '{sheet_name}' (ID: {sheet_id}) успешно сохранены в таблицу '{table_name}'.")
-        return True
-
-    except sqlite3.Error as e:
-        logger.error(f"[DEBUG_STORAGE] Ошибка SQLite при сохранении сырых данных для листа '{sheet_name}' (ID: {sheet_id}): {e}")
-        connection.rollback()
-        return False
-    except Exception as e:
-        logger.error(f"[DEBUG_STORAGE] Неожиданная ошибка при сохранении сырых данных для листа '{sheet_name}' (ID: {sheet_id}): {e}")
-        connection.rollback()
-        return False
-
-def load_sheet_raw_data(connection: sqlite3.Connection, sheet_name: str) -> Dict[str, Any]:
-    """
-    Загружает сырые данные листа из его таблицы.
-
-    Args:
-        connection (sqlite3.Connection): Активное соединение с БД.
-        sheet_name (str): Имя листа Excel.
-
-    Returns:
-        Dict[str, Any]: Словарь с ключами 'column_names' и 'rows'.
-                        Возвращает пустые списки, если таблица не найдена.
-    """
-    raw_data_info = {"column_names": [], "rows": []}
-    if not connection:
-        logger.error("Получено пустое соединение для загрузки сырых данных.")
-        return raw_data_info
-
-    try:
         table_name = _get_raw_data_table_name(sheet_name)
-        logger.debug(f"[DEBUG_STORAGE] Начало загрузки сырых данных для листа '{sheet_name}' из таблицы '{table_name}'.")
 
         # Проверяем, существует ли таблица
-        cursor = connection.cursor()
         cursor.execute("""
-            SELECT name FROM sqlite_master
+            SELECT name FROM sqlite_master 
             WHERE type='table' AND name=?
         """, (table_name,))
         if not cursor.fetchone():
-            logger.warning(f"[DEBUG_STORAGE] Таблица сырых данных '{table_name}' не найдена.")
-            return raw_data_info  # Возвращаем пустую структуру
+            logger.info(f"Таблица сырых данных '{table_name}' для листа '{sheet_name}' не найдена. Возвращается пустой список.")
+            return []
 
-        # Получаем имена столбцов
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns_info = cursor.fetchall()
-        # columns_info - список кортежей (cid, name, type, notnull, dflt_value, pk)
-        # Исключаем служебный столбец 'id'
-        column_names = [col_info[1] for col_info in columns_info if col_info[1].lower() != 'id']
-        # Убираем префикс 'data_' если он был добавлен
-        original_column_names = [cn[5:] if cn.startswith('data_') else cn for cn in column_names]
-        raw_data_info["column_names"] = original_column_names
-        logger.debug(f"[DEBUG_STORAGE] Загружены имена столбцов: {original_column_names}")
-
-        # Получаем все строки данных
-        # Формируем список столбцов для SELECT
-        select_columns = ', '.join(column_names) if column_names else '*'
-        cursor.execute(f"SELECT {select_columns} FROM {table_name}")
+        # Загружаем данные
+        cursor.execute(f"SELECT cell_address, value, value_type FROM {table_name}")
         rows = cursor.fetchall()
-
-        # Преобразуем кортежи в словари
-        rows_data = []
-        for row_tuple in rows:
-            row_dict = {}
-            for i, col_name in enumerate(column_names):
-                orig_col_name = original_column_names[i]
-                value = row_tuple[i]
-                # Здесь можно добавить десериализацию из строки, если потребуется
-                row_dict[orig_col_name] = value
-            rows_data.append(row_dict)
-
-        raw_data_info["rows"] = rows_data
-        logger.info(f"[DEBUG_STORAGE] Сырые данные для листа '{sheet_name}' загружены. Всего строк: {len(raw_data_info['rows'])}")
-        return raw_data_info
+        
+        raw_data = [
+            {"cell_address": row[0], "value": row[1], "value_type": row[2]}
+            for row in rows
+        ]
+        
+        logger.debug(f"Загружено {len(raw_data)} записей сырых данных для листа '{sheet_name}' из таблицы '{table_name}'.")
+        return raw_data
 
     except sqlite3.Error as e:
-        logger.error(f"[DEBUG_STORAGE] Ошибка SQLite при загрузке сырых данных для листа '{sheet_name}': {e}")
-        # Возвращаем пустую структуру в случае ошибки
-        return {"column_names": [], "rows": []}
+        logger.error(f"Ошибка SQLite при загрузке сырых данных для листа '{sheet_name}': {e}")
+        return []
     except Exception as e:
-        logger.error(f"[DEBUG_STORAGE] Неожиданная ошибка при загрузке сырых данных для листа '{sheet_name}': {e}")
-        # Возвращаем пустую структуру в случае ошибки
-        return {"column_names": [], "rows": []}
+        logger.error(f"Неожиданная ошибка при загрузке сырых данных для листа '{sheet_name}': {e}", exc_info=True)
+        return []
+
+# Дополнительные функции для работы с сырыми данными (если потребуются) могут быть добавлены здесь
