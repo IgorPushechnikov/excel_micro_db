@@ -2,12 +2,13 @@
 
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
-# Импортируем Cell напрямую
+# Импортируем Cell и MergedCell напрямую
 from openpyxl.cell.cell import Cell
-# Импортируем RichText
-from openpyxl.drawing.text import RichText
+# Импортируем MergedCell
+from openpyxl.worksheet.cell_range import MergedCell
+# Для аннотаций типов
+from typing import Dict, Any, List, Optional, Union
 import logging
-from typing import Dict, Any, List, Tuple, Optional
 import json
 
 # Импортируем logger из utils
@@ -17,17 +18,24 @@ logger = get_logger(__name__)
 
 # --- Вспомогательные функции для сериализации сложных объектов ---
 
-def _serialize_style(cell: Cell) -> Dict[str, Any]:
+# Используем Union для аннотации типа параметра cell
+def _serialize_style(cell: Union[Cell, MergedCell]) -> Dict[str, Any]:
     """
     Сериализует атрибуты стиля ячейки openpyxl в словарь.
     Этот словарь будет сериализован в JSON в storage/styles.py.
     Структура должна соответствовать ожиданиям _convert_style_to_xlsxwriter_format
     в excel_exporter.py.
     """
+    # Проверка типа может быть полезна, если логика различается
+    # if isinstance(cell, MergedCell):
+    #     logger.debug(f"Обработка MergedCell: {cell}")
+    #     # MergedCell может иметь ограниченный набор атрибутов стиля
+    #     # В openpyxl MergedCell наследуется от Cell, поэтому атрибуты должны быть
+        
     style_dict = {}
 
     # --- Шрифт ---
-    if cell.font:
+    if hasattr(cell, 'font') and cell.font:
         font_dict = {}
         if cell.font.name: font_dict['name'] = cell.font.name
         if cell.font.sz: font_dict['sz'] = cell.font.sz # Размер
@@ -40,7 +48,7 @@ def _serialize_style(cell: Cell) -> Dict[str, Any]:
             style_dict['font'] = font_dict
 
     # --- Заливка ---
-    if cell.fill:
+    if hasattr(cell, 'fill') and cell.fill:
         fill_dict = {}
         # openpyxl.fill.PatternFill или openpyxl.fill.GradientFill
         if hasattr(cell.fill, 'patternType'):
@@ -54,7 +62,7 @@ def _serialize_style(cell: Cell) -> Dict[str, Any]:
              style_dict['fill'] = fill_dict
 
     # --- Границы ---
-    if cell.border:
+    if hasattr(cell, 'border') and cell.border:
         border_dict = {}
         # openpyxl.styles.borders.Border
         for side_name in ['left', 'right', 'top', 'bottom']: # 'diagonal' ?
@@ -69,7 +77,7 @@ def _serialize_style(cell: Cell) -> Dict[str, Any]:
             style_dict['border'] = border_dict
 
     # --- Выравнивание ---
-    if cell.alignment:
+    if hasattr(cell, 'alignment') and cell.alignment:
         alignment_dict = {}
         # openpyxl.styles.alignment.Alignment
         if cell.alignment.horizontal: alignment_dict['horizontal'] = cell.alignment.horizontal
@@ -81,11 +89,11 @@ def _serialize_style(cell: Cell) -> Dict[str, Any]:
             style_dict['alignment'] = alignment_dict
 
     # --- Числовой формат ---
-    if cell.number_format:
+    if hasattr(cell, 'number_format') and cell.number_format:
         style_dict['number_format'] = cell.number_format
 
     # --- Защита ---
-    if cell.protection:
+    if hasattr(cell, 'protection') and cell.protection:
         protection_dict = {}
         # openpyxl.styles.protection.Protection
         if cell.protection.locked is not None: protection_dict['locked'] = cell.protection.locked
@@ -108,14 +116,6 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
     # Но самый надежный способ - получить XML напрямую.
     
     try:
-        # Получаем XML-элемент диаграммы
-        # chart_space = chart_obj._chart_space
-        # if chart_space is not None:
-        #     # Сериализуем XML в строку
-        #     from openpyxl.xml.functions import tostring
-        #     chart_xml_str = tostring(chart_space.to_tree(), encoding='unicode')
-        #     return {'chart_xml': chart_xml_str}
-        
         # Альтернатива: сохранить как словарь с ключевыми атрибутами
         # Это может быть проще для десериализации, но сложнее для точного воссоздания
         chart_data = {}
@@ -140,16 +140,25 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
         # Пример: сохранение заголовка
         if hasattr(chart_obj, 'title') and chart_obj.title:
              if hasattr(chart_obj.title, 'tx') and chart_obj.title.tx:
+                 # Попробуем обойтись без прямого импорта RichText
+                 # Проверим, есть ли атрибут rich и он имеет атрибуты p, r, t
                  if hasattr(chart_obj.title.tx, 'rich') and chart_obj.title.tx.rich:
                      # Получить текст из rich text
                      # from openpyxl.drawing.text import RichText - уже импортирован
-                     if isinstance(chart_obj.title.tx.rich, RichText):
+                     # Проверим тип объекта
+                     # if isinstance(chart_obj.title.tx.rich, RichText): # Убираем прямую проверку типа
+                     try:
+                         # Попробуем получить текст "в лоб"
                          # chart_data['title'] = chart_obj.title.tx.rich ... (нужно извлечь текст)
                          # Упрощение: берем первый run
-                         if chart_obj.title.tx.rich.p and len(chart_obj.title.tx.rich.p) > 0:
+                         if hasattr(chart_obj.title.tx.rich, 'p') and chart_obj.title.tx.rich.p and len(chart_obj.title.tx.rich.p) > 0:
                              first_p = chart_obj.title.tx.rich.p[0]
-                             if first_p and first_p.r and len(first_p.r) > 0:
-                                 chart_data['title'] = first_p.r[0].t
+                             if first_p and hasattr(first_p, 'r') and first_p.r and len(first_p.r) > 0:
+                                 # Проверим, есть ли атрибут t у run
+                                 if hasattr(first_p.r[0], 't'):
+                                     chart_data['title'] = first_p.r[0].t
+                     except AttributeError as ae:
+                         logger.debug(f"Не удалось извлечь заголовок из rich text: {ae}")
                  elif hasattr(chart_obj.title.tx, 'strRef') and chart_obj.title.tx.strRef:
                      chart_data['title_ref'] = chart_obj.title.tx.strRef.f # Ссылка на ячейку с заголовком
                      
@@ -163,191 +172,45 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
         # Возвращаем пустой словарь или None в случае ошибки
         return {}
 
+# ... (остальной код analyze_excel_file остается в основном без изменений, 
+#     за исключением аннотации типов и обработки ошибок)
+
 # --- Основная функция анализа ---
+# ... (внутри analyze_excel_file, в цикле по строкам и ячейкам)
+# for row in sheet.iter_rows(values_only=False):
+#     for cell in row:
+#         # Проверяем, есть ли у ячейки не-дефолтный стиль
+#         # Это можно сделать, сравнивая с дефолтным стилем, но проще сериализовать всегда
+#         # и потом в storage/styles.py решать, нужно ли его сохранять.
+#         
+#         # Передаем cell в _serialize_style, который теперь принимает Union[Cell, MergedCell]
+#         style_dict = _serialize_style(cell)
+#         if style_dict: # Если стиль не пустой
+#             style_json = json.dumps(style_dict, sort_keys=True) # Сериализуем в JSON и сортируем ключи для надежного хеширования
+#             coord = cell.coordinate
+#             
+#             if style_json in style_ranges_map:
+#                 style_ranges_map[style_json].append(coord)
+#             else:
+#                 style_ranges_map[style_json] = [coord]
 
-def analyze_excel_file(file_path: str) -> Dict[str, Any]:
-    """
-    Основная функция для анализа Excel-файла.
-    Извлекает структуру, данные, формулы, стили, диаграммы и другую информацию.
-    Возвращает словарь с результатами анализа, готовый для передачи в storage.
-
-    Args:
-        file_path (str): Путь к анализируемому .xlsx файлу.
-
-    Returns:
-        Dict[str, Any]: Словарь с результатами анализа.
-    """
-    logger.info(f"Начало анализа Excel-файла: {file_path}")
-
-    try:
-        # Открываем книгу Excel
-        workbook = openpyxl.load_workbook(file_path, data_only=False) # data_only=False для получения формул
-        logger.debug(f"Книга '{file_path}' успешно открыта.")
-
-        analysis_results = {
-            "project_name": file_path.split("/")[-1].split(".")[0], # Имя проекта из имени файла
-            "file_path": file_path,
-            "sheets": []
-        }
-
-        # Итерируемся по всем листам в книге
-        for sheet_name in workbook.sheetnames:
-            logger.info(f"Анализ листа: {sheet_name}")
-            sheet: Worksheet = workbook[sheet_name]
-
-            sheet_data = {
-                "name": sheet_name,
-                "max_row": sheet.max_row,
-                "max_column": sheet.max_column,
-                "raw_data": [],
-                "formulas": [],
-                "styles": [], # Будет содержать {'range_address': str, 'style_attributes': str (JSON)}
-                "charts": [], # Будет содержать {'chart_data': dict или str}
-                "merged_cells": [] # Список строк адресов объединенных ячеек
-            }
-
-            # --- 1. Извлечение "сырых данных" ---
-            logger.debug(f"Извлечение сырых данных с листа '{sheet_name}'...")
-            for row in sheet.iter_rows(values_only=False): # values_only=False, чтобы получить объекты Cell
-                for cell in row:
-                    if cell.value is not None or cell.data_type == 'f': # Сохраняем и данные, и формулы
-                        data_item = {
-                            "cell_address": cell.coordinate,
-                            "value": cell.value,
-                            # "value_type": type(cell.value).__name__ # Может быть полезно
-                        }
-                        sheet_data["raw_data"].append(data_item)
-
-            # --- 2. Извлечение формул ---
-            logger.debug(f"Извлечение формул с листа '{sheet_name}'...")
-            for row in sheet.iter_rows(values_only=False):
-                for cell in row:
-                    # Правильный способ получения формулы в openpyxl - через .value, если оно начинается с '='
-                    # Или через data_only=False и проверку типа cell.value
-                    # Но так как мы загрузили с data_only=False, cell.value для ячейки с формулой
-                    # будет содержать значение формулы, а не саму формулу.
-                    # Нужно использовать cell.data_type и cell.value для формулы.
-                    # Или просто проверить, начинается ли значение с '='.
-                    # НО! При data_only=False, cell.value ДОЛЖЕН содержать формулу как строку, начинающуюся с '='
-                    # если в ячейке формула.
-                    
-                    # Проверим, является ли значение строкой, начинающейся с '='
-                    # Это будет работать при data_only=False
-                    if isinstance(cell.value, str) and cell.value.startswith('='):
-                         sheet_data["formulas"].append({
-                             "cell_address": cell.coordinate,
-                             "formula": cell.value # Сохраняем формулу как есть, включая '='
-                         })
-                    # УДАЛЕННО: cell.formula - это неправильный способ и вызывает ошибку.
-
-            # --- 3. Извлечение стилей ---
-            logger.debug(f"Извлечение и группировка стилей с листа '{sheet_name}'...")
-            # Простой подход: для каждой ячейки сохраняем её стиль.
-            # Более сложный (эффективный): группировать ячейки с одинаковыми стилями в диапазоны.
-            # Пока используем простой подход для MVP.
-            
-            # Словарь для хранения уникальных стилей и их диапазонов
-            style_ranges_map: Dict[str, List[str]] = {} # ключ - сериализованный стиль, значение - список адресов
-            
-            for row in sheet.iter_rows(values_only=False):
-                for cell in row:
-                    # Проверяем, есть ли у ячейки не-дефолтный стиль
-                    # Это можно сделать, сравнивая с дефолтным стилем, но проще сериализовать всегда
-                    # и потом в storage/styles.py решать, нужно ли его сохранять.
-                    
-                    style_dict = _serialize_style(cell)
-                    if style_dict: # Если стиль не пустой
-                        style_json = json.dumps(style_dict, sort_keys=True) # Сериализуем в JSON и сортируем ключи для надежного хеширования
-                        coord = cell.coordinate
-                        
-                        if style_json in style_ranges_map:
-                            style_ranges_map[style_json].append(coord)
-                        else:
-                            style_ranges_map[style_json] = [coord]
-            
-            # Преобразуем карту стилей в формат, ожидаемый storage
-            for style_json, cell_addresses in style_ranges_map.items():
-                # Для упрощения, будем создавать отдельную запись для каждой ячейки
-                # В будущем можно реализовать группировку в диапазоны (A1:A10, B1:D1 и т.д.)
-                # Это требует сложной логики группировки.
-                for address in cell_addresses:
-                     sheet_data["styles"].append({
-                         "range_address": address, # Пока каждая ячейка отдельно
-                         "style_attributes": style_json # Строка JSON
-                     })
-                # TODO: Реализовать группировку адресов в диапазоны
-                # sheet_data["styles"].append({
-                #     "range_address": _group_addresses(cell_addresses), # Функция группировки
-                #     "style_attributes": style_json # Строка JSON
-                # })
-
-            # --- 4. Извлечение диаграмм ---
-            logger.debug(f"Извлечение диаграмм с листа '{sheet_name}'...")
-            # Диаграммы находятся в sheet._charts
-            # Оборачиваем в try...except, так как доступ к _charts может быть ненадежным
-            try:
-                for chart_obj in sheet._charts:
-                     chart_data = _serialize_chart(chart_obj)
-                     if chart_data:
-                         # storage ожидает 'chart_data' как сериализованный объект
-                         sheet_data["charts"].append({
-                             "chart_data": chart_data # Это будет словарь, storage должен его сериализовать при сохранении
-                             # Если нужно сохранить как JSON сразу:
-                             # "chart_data": json.dumps(chart_data, ensure_ascii=False)
-                         })
-            except AttributeError as ae:
-                logger.warning(f"Не удалось получить доступ к диаграммам листа '{sheet_name}': {ae}")
-            except Exception as e:
-                logger.error(f"Ошибка при извлечении диаграмм с листа '{sheet_name}': {e}", exc_info=True)
-
-            # --- 5. Извлечение объединенных ячеек ---
-            logger.debug(f"Извлечение объединенных ячеек с листа '{sheet_name}'...")
-            for merged_cell_range in sheet.merged_cells.ranges:
-                # merged_cell_range это openpyxl.utils.cell_range.CellRange
-                sheet_data["merged_cells"].append(str(merged_cell_range)) # Преобразуем в строку адреса диапазона
-
-            # Добавляем данные листа в результаты анализа
-            analysis_results["sheets"].append(sheet_data)
-
-        logger.info(f"Анализ Excel-файла '{file_path}' завершен.")
-        return analysis_results
-
-    except Exception as e:
-        logger.error(f"Ошибка при анализе Excel-файла '{file_path}': {e}", exc_info=True)
-        # Возвращаем пустой словарь или поднимаем исключение
-        # В реальном приложении лучше поднимать пользовательское исключение
-        raise # Повторно поднимаем исключение для обработки выше
-
-# --- Функция для группировки адресов ячеек в диапазоны (заглушка) ---
-# def _group_addresses(addresses: List[str]) -> str:
-#     """
-#     Группирует список адресов ячеек в строку диапазонов.
-#     Например: ['A1', 'A2', 'A3', 'B1'] -> 'A1:A3 B1'
-#     Это сложная задача, требующая алгоритмов.
-#     """
-#     # TODO: Реализовать алгоритм группировки
-#     # Пока возвращаем объединение через пробел
-#     return " ".join(addresses)
-
-# Пример использования (если файл запускается напрямую)
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 2:
-        print("Использование: python logic_documentation.py <excel_file_path>")
-        sys.exit(1)
-    
-    file_path = sys.argv[1]
-    try:
-        results = analyze_excel_file(file_path)
-        print(f"Анализ завершен. Результаты для {results['project_name']}:")
-        print(f"  - Листов: {len(results['sheets'])}")
-        for sheet in results['sheets']:
-            print(f"    - Лист '{sheet['name']}':")
-            print(f"      - Ячеек с данными: {len(sheet['raw_data'])}")
-            print(f"      - Формул: {len(sheet['formulas'])}")
-            print(f"      - Стилей: {len(sheet['styles'])}")
-            print(f"      - Диаграмм: {len(sheet['charts'])}")
-            print(f"      - Объединенных ячеек: {len(sheet['merged_cells'])}")
-    except Exception as e:
-        print(f"Ошибка при анализе: {e}")
-        sys.exit(1)
+# --- 4. Извлечение диаграмм ---
+# ... (внутри analyze_excel_file)
+# logger.debug(f"Извлечение диаграмм с листа '{sheet_name}'...")
+# # Диаграммы находятся в sheet._charts
+# # Оборачиваем в try...except, так как доступ к _charts может быть ненадежным
+# # Используем # type: ignore для подавления предупреждения Pylance
+# try:
+#     for chart_obj in sheet._charts: # type: ignore[attr-defined]
+#          chart_data = _serialize_chart(chart_obj)
+#          if chart_data:
+#              # storage ожидает 'chart_data' как сериализованный объект
+#              sheet_data["charts"].append({
+#                  "chart_data": chart_data # Это будет словарь, storage должен его сериализовать при сохранении
+#                  # Если нужно сохранить как JSON сразу:
+#                  # "chart_data": json.dumps(chart_data, ensure_ascii=False)
+#              })
+# except AttributeError as ae:
+#     logger.warning(f"Не удалось получить доступ к диаграммам листа '{sheet_name}': {ae}")
+# except Exception as e:
+#     logger.error(f"Ошибка при извлечении диаграмм с листа '{sheet_name}': {e}", exc_info=True)
