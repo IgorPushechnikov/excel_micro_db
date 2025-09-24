@@ -224,6 +224,12 @@ class AppController:
                 if not self.storage.save_sheet_metadata(sheet_name, metadata_to_save):
                     logger.warning(f"Не удалось сохранить метаданные для листа '{sheet_name}'.")
 
+                # --- Сохраняем объединенные ячейки в отдельную таблицу ---
+                merged_cells_list = sheet_data.get("merged_cells", [])
+                if merged_cells_list: # Сохраняем только если список не пуст
+                    if not self.storage.save_sheet_merged_cells(sheet_id, merged_cells_list):
+                        logger.error(f"Не удалось сохранить объединенные ячейки для листа '{sheet_name}' (ID: {sheet_id}).")
+
                 # --- Сохраняем "сырые данные" ---
                 if not self.storage.save_sheet_raw_data(sheet_name, sheet_data.get("raw_data", [])):
                     logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}'.")
