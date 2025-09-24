@@ -94,17 +94,17 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
                 merged_cells = storage.load_sheet_merged_cells(sheet_id) # Возвращает список ['A1:B2', ...]
                 logger.debug(f"[ЭКСПОРТ] Загружены объединённые ячейки для листа '{sheet_name}' (ID: {sheet_id}): {merged_cells}")
 
-                # 4c. Запись данных и формул
-                _write_data_and_formulas(worksheet, raw_data, formulas)
+                # 4c. Подготовка стилей (создание карты форматов)
+                cell_format_map = build_cell_format_map(workbook, styles)
 
-                # 4d. Применение стилей
-                _apply_styles(workbook, worksheet, styles)
+                # 4d. Запись данных и формул с применением стилей
+                _write_data_and_formulas(worksheet, raw_data, formulas, cell_format_map)
 
                 # 4e. Применение объединенных ячеек
                 logger.debug(f"[ЭКСПОРТ] Перед вызовом _apply_merged_cells для листа '{sheet_name}' с данными: {merged_cells}")
                 _apply_merged_cells(worksheet, merged_cells)
 
-                # 4e. (Опционально) Обработка объединенных ячеек, диаграмм и т.д.
+                # 4f. (Опционально) Обработка объединенных ячеек, диаграмм и т.д.
                 # merged_cells = storage.load_sheet_merged_cells(sheet_id)
                 # _apply_merged_cells(worksheet, merged_cells)
 
@@ -128,16 +128,17 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
     return success
 
 
-def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas: List[Dict[str, Any]]):
+def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas: List[Dict[str, Any]], cell_format_map: Dict[tuple[int, int], Any]):
     """
-    Записывает данные и формулы на лист xlsxwriter.
+    Записывает данные и формулы на лист xlsxwriter, применяя стили из cell_format_map.
 
     Args:
         worksheet: Объект листа xlsxwriter.
         raw_data (List[Dict[str, Any]]): Список данных.
         formulas (List[Dict[str, Any]]): Список формул.
+        cell_format_map (Dict[tuple[int, int], Any]): Словарь сопоставления (row, col) -> xlsxwriter.format.
     """
-    logger.debug(f"Запись {len(raw_data)} записей данных и {len(formulas)} формул на лист.")
+    logger.debug(f"Запись {len(raw_data)} записей данных и {len(formulas)} формул на лист с применением стилей.")
     # Запись "сырых" данных
     for item in raw_data:
         address = item['cell_address'] # e.g., 'A1'
@@ -145,7 +146,9 @@ def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas
         # xlsxwriter требует номера строки/столбца, преобразуем адрес
         try:
             row, col = _xl_cell_to_row_col(address)
-            worksheet.write(row, col, value)
+            # Проверяем, есть ли формат для этой ячейки
+            cell_format = cell_format_map.get((row, col))
+            worksheet.write(row, col, value, cell_format)
         except Exception as e:
             logger.warning(f"Не удалось записать данные в ячейку {address}: {e}")
 
@@ -157,21 +160,28 @@ def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas
             row, col = _xl_cell_to_row_col(address)
             # Для формул xlsxwriter ожидает строку без '='
             formula_clean = formula[1:] if formula.startswith('=') else formula
-            worksheet.write_formula(row, col, formula_clean)
+            # Проверяем, есть ли формат для этой ячейки
+            cell_format = cell_format_map.get((row, col))
+            worksheet.write_formula(row, col, formula_clean, cell_format)
         except Exception as e:
             logger.warning(f"Не удалось записать формулу в ячейку {address}: {e}")
 
 
-def _apply_styles(workbook, worksheet, styles: List[Dict[str, Any]]):
+def build_cell_format_map(workbook, styles: List[Dict[str, Any]]) -> Dict[tuple[int, int], Any]:
     """
-    Применяет стили к диапазонам на листе xlsxwriter.
+    Создает словарь, сопоставляющий координаты ячеек (row, col) с форматами xlsxwriter.
+    Это позволяет применять стили одновременно с записью данных/формул.
 
     Args:
-        workbook: Объект книги xlsxwriter.
-        worksheet: Объект листа xlsxwriter.
-        styles (List[Dict[str, Any]]): Список стилей.
+        workbook: Объект книги xlsxwriter (для создания форматов).
+        styles (List[Dict[str, Any]]): Список стилей из БД.
+
+    Returns:
+        Dict[tuple[int, int], Any]: Словарь, где ключ - (row, col), значение - объект формата xlsxwriter.
     """
-    logger.debug(f"Применение {len(styles)} стилей к листу.")
+    logger.debug(f"Создание карты форматов ячеек для {len(styles)} стилей.")
+    cell_format_map: Dict[tuple[int, int], Any] = {}
+
     for style_item in styles:
         range_addr = style_item['range_address'] # e.g., 'A1:B10'
         style_json_str = style_item['style_attributes']
@@ -186,26 +196,44 @@ def _apply_styles(workbook, worksheet, styles: List[Dict[str, Any]]):
             # 2. Создаём формат xlsxwriter
             cell_format = workbook.add_format(xlsxwriter_format_dict)
 
-            # 3. Применяем формат к диапазону
-            # xlsxwriter требует (row_start, col_start, row_end, col_end)
+            # 3. Заполняем карту форматов для каждой ячейки в диапазоне
             row_start, col_start, row_end, col_end = _xl_range_to_coords(range_addr)
             
-            # TODO: Переделать логику применения стилей.
-            # Текущая реализация write_blank для каждой ячейки диапазона ПЕРЕЗАПИСЫВАЕТ уже записанные данные/формулы.
-            # write_blank(r, c, "", ...) предназначен для записи НОВОЙ пустой ячейки с форматом.
-            # Правильный подход - применять формат при записи данных/формул или использовать conditional formatting.
-            # ВРЕМЕННОЕ РЕШЕНИЕ: Применяем стиль только к первой ячейке диапазона, чтобы избежать перезаписи.
-            # Это НЕ обеспечит полноценного форматирования всего диапазона, но позволит экспорту завершиться.
-            
-            # worksheet.write_blank(row_start, col_start, None, cell_format) # Применяем стиль к первой ячейке
-            # Убираем цикл write_blank по всему диапазону, так как он перезаписывает данные.
-            # Пока просто логируем, что стиль "применен" (хотя на самом деле нет для всего диапазона).
-            logger.debug(f"Стиль для диапазона {range_addr} обработан (полное применение НЕ реализовано).")
+            for r in range(row_start, row_end + 1):
+                for c in range(col_start, col_end + 1):
+                    # Если ячейка уже имеет формат, xlsxwriter использует первый применённый формат.
+                    # В реальных сценариях диапазоны могут пересекаться, и нужно решать, какой стиль приоритетнее.
+                    # Для MVP/простоты принимаем первый встреченный стиль для ячейки.
+                    if (r, c) not in cell_format_map:
+                        cell_format_map[(r, c)] = cell_format
+                    else:
+                        # Логируем, если стили пересекаются, чтобы было видно в отладке
+                        logger.debug(f"Ячейка ({r}, {c}) уже имеет формат. Второй стиль из диапазона {range_addr} игнорируется.")
 
         except json.JSONDecodeError as je:
             logger.error(f"Ошибка разбора JSON стиля для диапазона {range_addr}: {je}")
         except Exception as e:
-            logger.error(f"Ошибка при применении стиля к диапазону {range_addr}: {e}", exc_info=True)
+            logger.error(f"Ошибка при создании карты форматов для диапазона {range_addr}: {e}", exc_info=True)
+    
+    logger.debug(f"Создана карта форматов для {len(cell_format_map)} ячеек.")
+    return cell_format_map
+
+
+def _apply_styles(workbook, worksheet, styles: List[Dict[str, Any]]):
+    """
+    Применяет стили к диапазонам на листе xlsxwriter.
+    В текущей реализации создает карту форматов и передает её в _write_data_and_formulas.
+
+    Args:
+        workbook: Объект книги xlsxwriter.
+        worksheet: Объект листа xlsxwriter.
+        styles (List[Dict[str, Any]]): Список стилей.
+    """
+    logger.debug(f"Применение {len(styles)} стилей к листу через карту форматов.")
+    cell_format_map = build_cell_format_map(workbook, styles)
+    # Стили теперь готовы к применению при записи данных/формул
+    # _apply_styles больше не записывает напрямую, только подготавливает данные
+    logger.debug(f"Карта форматов создана. Передача в _write_data_and_formulas.")
 
 
 def _xl_cell_to_row_col(cell: str) -> tuple[int, int]:
