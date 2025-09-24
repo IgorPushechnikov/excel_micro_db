@@ -441,7 +441,7 @@ def export_sheet_data(conn: sqlite3.Connection, wb: OpenpyxlWorkbook, sheet_id: 
         logger.debug("[ДАННЫЕ] --- Экспорт заголовков ---")
         # 4. Получаем структуру листа для заголовков
         logger.debug("[ДАННЫЕ] Запрос структуры листа для заголовков...")
-        sheet_cursor = conn.execute("SELECT structure FROM sheets WHERE id = ?", (sheet_id,))
+        sheet_cursor = conn.execute("SELECT structure FROM sheets WHERE sheet_id = ?", (sheet_id,))
         sheet_row = sheet_cursor.fetchone()
         if sheet_row and sheet_row['structure']:
             try:
@@ -465,7 +465,7 @@ def export_sheet_data(conn: sqlite3.Connection, wb: OpenpyxlWorkbook, sheet_id: 
         logger.debug("[ДАННЫЕ] --- Экспорт формул ---")
         # 5. Добавляем формулы (формулы могут быть в любой строке/столбце)
         logger.debug("[ДАННЫЕ] Запрос формул...")
-        formula_cursor = conn.execute("SELECT cell, formula FROM formulas WHERE sheet_id = ?", (sheet_id,))
+        formula_cursor = conn.execute("SELECT cell_address AS cell, formula FROM formulas WHERE sheet_id = ?", (sheet_id,))
         formulas = formula_cursor.fetchall()
         logger.info(f"[ДАННЫЕ] Получено {len(formulas)} формул.")
         for formula_row in formulas:
@@ -635,7 +635,7 @@ def export_project_from_db(db_path: Union[str, Path], output_path: Union[str, Pa
 
         # 3. Получение списка листов
         logger.debug("[ЭКСПОРТ] Запрос списка листов...")
-        sheet_cursor = conn.execute("SELECT id, name FROM sheets ORDER BY sheet_index")
+        sheet_cursor = conn.execute("SELECT sheet_id AS id, name FROM sheets ORDER BY sheet_id")
         sheets = sheet_cursor.fetchall()
         logger.info(f"[ЭКСПОРТ] Найдено {len(sheets)} листов для экспорта.")
 
