@@ -438,6 +438,50 @@ class ProjectDBStorage:
             logger.error(f"Ошибка при загрузке диаграмм для листа ID {sheet_id}: {e}", exc_info=True)
             return []
 
+    # --- Методы для работы с объединенными ячейками ---
+
+    def save_sheet_merged_cells(self, sheet_id: int, merged_cells_list: List[str]) -> bool:
+        """
+        Сохраняет список объединенных ячеек для листа в БД проекта.
+
+        Args:
+            sheet_id (int): ID листа в БД.
+            merged_cells_list (List[str]): Список строковых адресов диапазонов (например, ['A1:B2', 'C3:D5']).
+
+        Returns:
+            bool: True, если сохранение успешно, иначе False.
+        """
+        try:
+            # Импортируем json здесь, если еще не импортирован глобально в этом файле
+            # import json 
+            
+            with self.get_connection() as conn:
+                if conn:
+                    serialized_data = json.dumps(merged_cells_list)
+                    cursor = conn.cursor()
+                    
+                    # Используем INSERT OR REPLACE для обновления или вставки
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO sheet_merged_cells (sheet_id, merged_cells_data)
+                        VALUES (?, ?)
+                        """,
+                        (sheet_id, serialized_data)
+                    )
+                    conn.commit()
+                    logger.info(f"[ОБЪЕДИНЕНИЕ] Сохранено {len(merged_cells_list)} объединенных диапазонов для sheet_id={sheet_id}.")
+                    return True
+                else:
+                    return False
+        except json.JSONEncodeError as je:
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка сериализации списка объединенных ячеек для sheet_id={sheet_id}: {je}")
+        except sqlite3.Error as e:
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка SQLite при сохранении merged_cells для sheet_id={sheet_id}: {e}")
+        except Exception as e:
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Неожиданная ошибка при сохранении merged_cells для sheet_id={sheet_id}: {e}", exc_info=True)
+        
+        return False
+
     # --- Методы для работы с историей редактирования ---
 
     # Используют функции из src/storage/history.py
