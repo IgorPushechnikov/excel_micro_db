@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional, Union
 import os
 
 # Импортируем новые функции из модулей storage
-from src.storage import schema, raw_data, editable_data, formulas, styles, charts, history, metadata
+from src.storage import schema, raw_data, editable_data, formulas, styles, charts, history, metadata, sheets
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -110,11 +110,60 @@ class ProjectDBStorage:
                 self.disconnect()
             return False
 
-    # --- Методы для работы с метаданными проекта и листов ---
+    # --- Методы для работы с листами (таблица sheets) ---
+
+    def save_sheet(self, project_id: int, sheet_name: str, max_row: Optional[int] = None, max_column: Optional[int] = None) -> Optional[int]:
+        """
+        Сохраняет информацию о листе в таблицу 'sheets'.
+        Если лист с таким именем для проекта уже существует, возвращает его sheet_id.
+        Иначе создает новую запись.
+
+        Args:
+            project_id (int): ID проекта.
+            sheet_name (str): Имя листа Excel.
+            max_row (Optional[int]): Максимальный номер строки.
+            max_column (Optional[int]): Максимальный номер столбца.
+
+        Returns:
+            Optional[int]: sheet_id листа или None в случае ошибки.
+        """
+        try:
+            with self.get_connection() as conn:
+                if conn:
+                    return sheets.save_sheet(conn, project_id, sheet_name, max_row, max_column)
+                else:
+                    return None
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении листа '{sheet_name}': {e}", exc_info=True)
+            return None
+
+    def load_all_sheets_metadata(self, project_id: int = 1) -> List[Dict[str, Any]]:
+        """
+        Загружает метаданные (ID и имя) для всех листов в проекте.
+        Используется для экспорта, чтобы знать, какие листы обрабатывать.
+
+        Args:
+            project_id (int): ID проекта (по умолчанию 1 для MVP).
+
+        Returns:
+            List[Dict[str, Any]]: Список словарей с ключами 'sheet_id' и 'name'.
+            Возвращает пустой список в случае ошибки или отсутствия листов.
+        """
+        try:
+            with self.get_connection() as conn:
+                if conn:
+                    return sheets.load_all_sheets_metadata(conn, project_id)
+                else:
+                    return []
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке списка листов для проекта ID {project_id}: {e}", exc_info=True)
+            return []
+
+    # --- Методы для работы с дополнительными метаданными листов (таблица project_metadata) ---
 
     def save_sheet_metadata(self, sheet_name: str, sheet_data: Dict[str, Any]) -> bool:
         """
-        Сохраняет метаданные листа в БД проекта.
+        Сохраняет метаданные листа в БД проекта (в таблицу project_metadata).
 
         Args:
             sheet_name (str): Имя листа Excel.
@@ -135,7 +184,7 @@ class ProjectDBStorage:
 
     def load_sheet_metadata(self, sheet_name: str) -> Optional[Dict[str, Any]]:
         """
-        Загружает метаданные листа из БД проекта.
+        Загружает метаданные листа из БД проекта (из таблицы project_metadata).
 
         Args:
             sheet_name (str): Имя листа Excel.
