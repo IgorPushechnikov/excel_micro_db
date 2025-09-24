@@ -7,7 +7,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 # SQL-запросы для создания таблиц проекта
+
 # --- Таблицы для управления проектами ---
+
 SQL_CREATE_PROJECTS_TABLE = """
 CREATE TABLE IF NOT EXISTS projects (
     project_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,6 +21,7 @@ CREATE TABLE IF NOT EXISTS projects (
 """
 
 # --- Таблицы для хранения информации о листах ---
+
 SQL_CREATE_SHEETS_TABLE = """
 CREATE TABLE IF NOT EXISTS sheets (
     sheet_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sheets (
 # как editable_data_<sanitized_sheet_name>
 
 # --- Таблицы для хранения формул ---
+
 SQL_CREATE_FORMULAS_TABLE = """
 CREATE TABLE IF NOT EXISTS formulas (
     formula_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,12 +55,13 @@ CREATE TABLE IF NOT EXISTS formulas (
 """
 
 # --- Таблицы для хранения стилей ---
+
 # Таблица для хранения определений уникальных стилей
 SQL_CREATE_STYLES_TABLE = """
 CREATE TABLE IF NOT EXISTS styles (
-    style_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    style_id INTEGER PRIMARY KEY AUTOINCREMENT
     -- Можно добавить общие атрибуты стиля, если нужно для поиска/индексации
-    -- Например: name TEXT UNIQUE 
+    -- Например: name TEXT UNIQUE
     -- Пока храним всё в sheet_styles
 );
 """
@@ -79,6 +84,7 @@ CREATE TABLE IF NOT EXISTS sheet_styles (
 """
 
 # --- Таблицы для хранения диаграмм ---
+
 # Таблица для хранения данных диаграмм
 # Хранит сериализованные данные диаграммы (например, JSON или XML)
 SQL_CREATE_SHEET_CHARTS_TABLE = """
@@ -95,6 +101,7 @@ CREATE TABLE IF NOT EXISTS sheet_charts (
 """
 
 # --- Таблицы для хранения истории редактирования ---
+
 # Исправленный SQL-запрос для создания таблицы истории редактирования
 # Включает все необходимые поля
 SQL_CREATE_EDIT_HISTORY_TABLE = """
@@ -112,6 +119,7 @@ CREATE TABLE IF NOT EXISTS edit_history (
 """
 
 # --- Таблицы для хранения метаданных проекта ---
+
 # Для хранения произвольных пар ключ-значение для проекта
 SQL_CREATE_PROJECT_METADATA_TABLE = """
 CREATE TABLE IF NOT EXISTS project_metadata (
@@ -131,6 +139,7 @@ def initialize_project_schema(connection: sqlite3.Connection):
     Args:
         connection (sqlite3.Connection): Активное соединение с БД проекта.
     """
+
     if not connection:
         logger.error("Нет активного соединения с БД для инициализации схемы.")
         return
@@ -139,6 +148,7 @@ def initialize_project_schema(connection: sqlite3.Connection):
         cursor = connection.cursor()
 
         # --- Создание таблиц ---
+
         logger.debug("Создание таблицы 'projects'...")
         cursor.execute(SQL_CREATE_PROJECTS_TABLE)
 
@@ -165,6 +175,7 @@ def initialize_project_schema(connection: sqlite3.Connection):
         cursor.execute(SQL_CREATE_PROJECT_METADATA_TABLE)
 
         # --- Создание индексов для оптимизации ---
+
         # Индекс для быстрого поиска листов по project_id
         logger.debug("Создание индекса для 'sheets.project_id'...")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sheets_project_id ON sheets(project_id);")
@@ -184,6 +195,7 @@ def initialize_project_schema(connection: sqlite3.Connection):
         # Индекс для быстрого поиска истории по project_id и sheet_id
         logger.debug("Создание индекса для 'edit_history.project_id'...")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_edit_history_project_id ON edit_history(project_id);")
+
         logger.debug("Создание индекса для 'edit_history.sheet_id'...")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_edit_history_sheet_id ON edit_history(sheet_id);")
 
@@ -192,9 +204,9 @@ def initialize_project_schema(connection: sqlite3.Connection):
 
     except sqlite3.Error as e:
         logger.error(f"Ошибка SQLite при инициализации схемы: {e}")
-        raise # Повторно вызываем исключение, чтобы ошибка передалась выше
+        raise  # Повторно вызываем исключение, чтобы ошибка передалась выше
     except Exception as e:
         logger.error(f"Неожиданная ошибка при инициализации схемы: {e}", exc_info=True)
-        raise # Повторно вызываем исключение
+        raise  # Повторно вызываем исключение
 
 # Дополнительные функции для работы со схемой (если потребуются) могут быть добавлены здесь
