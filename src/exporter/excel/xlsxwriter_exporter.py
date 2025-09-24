@@ -98,13 +98,20 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
                 cell_format_map = build_cell_format_map(workbook, styles)
 
                 # 4d. Запись данных и формул с применением стилей
-                _write_data_and_formulas(worksheet, raw_data, formulas, cell_format_map)
+                written_cells = _write_data_and_formulas(worksheet, raw_data, formulas, cell_format_map)
 
-                # 4e. Применение объединенных ячеек
+                # 4e. Применение стилей к пустым ячейкам, у которых есть стиль в cell_format_map
+                for (r, c), cell_format in cell_format_map.items():
+                    if (r, c) not in written_cells:
+                        # Используем write_blank для установки формата на пустую ячейку
+                        worksheet.write_blank(r, c, None, cell_format)
+                        logger.debug(f"Применён стиль к пустой ячейке ({r}, {c})")
+
+                # 4f. Применение объединенных ячеек
                 logger.debug(f"[ЭКСПОРТ] Перед вызовом _apply_merged_cells для листа '{sheet_name}' с данными: {merged_cells}")
                 _apply_merged_cells(worksheet, merged_cells)
 
-                # 4f. (Опционально) Обработка объединенных ячеек, диаграмм и т.д.
+                # 4g. (Опционально) Обработка объединенных ячеек, диаграмм и т.д.
                 # merged_cells = storage.load_sheet_merged_cells(sheet_id)
                 # _apply_merged_cells(worksheet, merged_cells)
 
@@ -128,17 +135,22 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
     return success
 
 
-def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas: List[Dict[str, Any]], cell_format_map: Dict[tuple[int, int], Any]):
+def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas: List[Dict[str, Any]], cell_format_map: Dict[tuple[int, int], Any]) -> set[tuple[int, int]]:
     """
     Записывает данные и формулы на лист xlsxwriter, применяя стили из cell_format_map.
+    Возвращает множество координат (row, col), в которые что-то было записано.
 
     Args:
         worksheet: Объект листа xlsxwriter.
         raw_data (List[Dict[str, Any]]): Список данных.
         formulas (List[Dict[str, Any]]): Список формул.
         cell_format_map (Dict[tuple[int, int], Any]): Словарь сопоставления (row, col) -> xlsxwriter.format.
+
+    Returns:
+        set[tuple[int, int]]: Множество координат (row, col), в которые были записаны данные или формулы.
     """
     logger.debug(f"Запись {len(raw_data)} записей данных и {len(formulas)} формул на лист с применением стилей.")
+    written_cells = set()
     # Запись "сырых" данных
     for item in raw_data:
         address = item['cell_address'] # e.g., 'A1'
@@ -149,6 +161,7 @@ def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas
             # Проверяем, есть ли формат для этой ячейки
             cell_format = cell_format_map.get((row, col))
             worksheet.write(row, col, value, cell_format)
+            written_cells.add((row, col))
         except Exception as e:
             logger.warning(f"Не удалось записать данные в ячейку {address}: {e}")
 
@@ -163,8 +176,11 @@ def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas
             # Проверяем, есть ли формат для этой ячейки
             cell_format = cell_format_map.get((row, col))
             worksheet.write_formula(row, col, formula_clean, cell_format)
+            written_cells.add((row, col))
         except Exception as e:
             logger.warning(f"Не удалось записать формулу в ячейку {address}: {e}")
+    
+    return written_cells
 
 
 def build_cell_format_map(workbook, styles: List[Dict[str, Any]]) -> Dict[tuple[int, int], Any]:
