@@ -92,6 +92,7 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
                 formulas = storage.load_sheet_formulas(sheet_id) # Возвращает список {'cell_address': ..., 'formula': ...}
                 styles = storage.load_sheet_styles(sheet_id) # Возвращает список {'range_address': ..., 'style_attributes': ...}
                 merged_cells = storage.load_sheet_merged_cells(sheet_id) # Возвращает список ['A1:B2', ...]
+                logger.debug(f"[ЭКСПОРТ] Загружены объединённые ячейки для листа '{sheet_name}' (ID: {sheet_id}): {merged_cells}")
 
                 # 4c. Запись данных и формул
                 _write_data_and_formulas(worksheet, raw_data, formulas)
@@ -100,6 +101,7 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
                 _apply_styles(workbook, worksheet, styles)
 
                 # 4e. Применение объединенных ячеек
+                logger.debug(f"[ЭКСПОРТ] Перед вызовом _apply_merged_cells для листа '{sheet_name}' с данными: {merged_cells}")
                 _apply_merged_cells(worksheet, merged_cells)
 
                 # 4e. (Опционально) Обработка объединенных ячеек, диаграмм и т.д.
@@ -210,6 +212,7 @@ def _xl_cell_to_row_col(cell: str) -> tuple[int, int]:
     """
     Преобразует адрес ячейки Excel (e.g., 'A1') в индексы строки и столбца (0-based).
     """
+    logger.debug(f"[КООРД] Преобразование ячейки '{cell}' в (row, col) (0-based).")
     from openpyxl.utils import coordinate_to_tuple
     # Используем вспомогательную функцию из openpyxl, она надежна.
     # row, col = coordinate_to_tuple(cell) # row, col are 1-based
@@ -224,29 +227,40 @@ def _xl_cell_to_row_col(cell: str) -> tuple[int, int]:
             row_str += char
 
     if not col_str or not row_str:
-        raise ValueError(f"Неверный формат адреса ячейки: {cell}")
+        error_msg = f"Неверный формат адреса ячейки: {cell}"
+        logger.error(f"[КООРД] {error_msg}")
+        raise ValueError(error_msg)
 
     row = int(row_str) - 1 # 0-based
     col = 0
     for c in col_str:
         col = col * 26 + (ord(c) - ord('A') + 1)
     col -= 1 # 0-based
-    return row, col
+    result = (row, col)
+    logger.debug(f"[КООРД] Результат для '{cell}': {result}")
+    return result
 
 
 def _xl_range_to_coords(range_str: str) -> tuple[int, int, int, int]:
     """
     Преобразует диапазон Excel (e.g., 'A1:B10') в координаты (row_start, col_start, row_end, col_end) (0-based).
     """
+    logger.debug(f"[КООРД] Преобразование диапазона '{range_str}' в координаты.")
     if ':' not in range_str:
         # Это одиночная ячейка
+        logger.debug(f"[КООРД] Диапазон '{range_str}' - это одиночная ячейка.")
         r, c = _xl_cell_to_row_col(range_str)
-        return r, c, r, c
+        coords = (r, c, r, c)
+        logger.debug(f"[КООРД] Результат для '{range_str}': {coords}")
+        return coords
 
     start_cell, end_cell = range_str.split(':', 1)
+    logger.debug(f"[КООРД] Разделение диапазона на '{start_cell}' и '{end_cell}'.")
     row_start, col_start = _xl_cell_to_row_col(start_cell)
     row_end, col_end = _xl_cell_to_row_col(end_cell)
-    return row_start, col_start, row_end, col_end
+    coords = (row_start, col_start, row_end, col_end)
+    logger.debug(f"[КООРД] Результат для диапазона '{range_str}': {coords}")
+    return coords
 
 
 def _apply_merged_cells(worksheet, merged_ranges: List[str]):
@@ -257,27 +271,33 @@ def _apply_merged_cells(worksheet, merged_ranges: List[str]):
         worksheet: Объект листа xlsxwriter.
         merged_ranges (List[str]): Список строковых адресов диапазонов (например, ['A1:B2', 'C3:D5']).
     """
-    logger.debug(f"[ОБЪЕДИНЕНИЕ] Применение {len(merged_ranges)} объединенных диапазонов.")
+    logger.debug(f"[ОБЪЕДИНЕНИЕ] Начало применения объединений. Получено {len(merged_ranges)} диапазонов: {merged_ranges}")
+    if not merged_ranges:
+        logger.debug("[ОБЪЕДИНЕНИЕ] Список диапазонов пуст. Нечего применять.")
+        return
+    
     applied_count = 0
     for range_addr in merged_ranges:
         try:
+            logger.debug(f"[ОБЪЕДИНЕНИЕ] Обработка диапазона: '{range_addr}'")
             if not range_addr or ":" not in range_addr:
                  logger.warning(f"[ОБЪЕДИНЕНИЕ] Неверный формат диапазона объединения: '{range_addr}'. Пропущен.")
                  continue
 
             # xlsxwriter.merge_range требует (first_row, first_col, last_row, last_col)
             first_row, first_col, last_row, last_col = _xl_range_to_coords(range_addr)
+            logger.debug(f"[ОБЪЕДИНЕНИЕ] Координаты диапазона '{range_addr}': ({first_row}, {first_col}) -> ({last_row}, {last_col})")
             
             # merge_range также требует значение и формат. Передаем None и None.
             # Если нужно заполнить объединенную ячейку данными или стилем, логика усложняется.
             # Пока просто объединяем.
             worksheet.merge_range(first_row, first_col, last_row, last_col, None)
-            logger.debug(f"[ОБЪЕДИНЕНИЕ] Объединен диапазон: {range_addr}")
+            logger.info(f"[ОБЪЕДИНЕНИЕ] Успешно объединен диапазон: {range_addr}")
             applied_count += 1
             
         except ValueError as ve: # Ошибка от _xl_range_to_coords
             logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка преобразования координат диапазона '{range_addr}': {ve}")
         except Exception as e:
-            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка при объединении диапазона '{range_addr}': {e}", exc_info=True)
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Критическая ошибка при объединении диапазона '{range_addr}': {e}", exc_info=True)
     
-    logger.info(f"[ОБЪЕДИНЕНИЕ] Успешно применено {applied_count}/{len(merged_ranges)} объединений.")
+    logger.info(f"[ОБЪЕДИНЕНИЕ] Завершено. Успешно применено {applied_count}/{len(merged_ranges)} объединений.")
