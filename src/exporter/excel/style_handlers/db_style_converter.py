@@ -72,6 +72,9 @@ def json_style_to_xlsxwriter_format(style_json_str: str) -> Optional[Dict[str, A
                     xlsxwriter_format['pattern'] = 1
             elif pt == 'none':
                 xlsxwriter_format['pattern'] = 0
+            elif pt is None:
+                # Если patternType = null, не устанавливаем pattern, даже если цвета указаны (они могут быть прозрачными по умолчанию).
+                pass
             else:
                 # Сопоставление других типов паттернов (не все поддерживаются один-к-одному)
                 # Устанавливаем solid (1) только если есть цвет (fg или bg), иначе оставляем без заливки (0 или не устанавливаем).
