@@ -100,6 +100,19 @@ CREATE TABLE IF NOT EXISTS sheet_charts (
 );
 """
 
+# --- Таблицы для хранения объединенных ячеек ---
+
+# Таблица для хранения данных об объединенных ячейках на листе
+# Хранит сериализованный JSON-массив строк адресов диапазонов
+SQL_CREATE_SHEET_MERGED_CELLS_TABLE = """
+CREATE TABLE IF NOT EXISTS sheet_merged_cells (
+    sheet_id INTEGER NOT NULL,
+    merged_cells_data TEXT NOT NULL, -- Сериализованный JSON-массив строк адресов диапазонов, например, '["A1:B2", "C3:D5"]'
+    FOREIGN KEY (sheet_id) REFERENCES sheets (sheet_id) ON DELETE CASCADE,
+    PRIMARY KEY (sheet_id)
+);
+"""
+
 # --- Таблицы для хранения истории редактирования ---
 
 # Исправленный SQL-запрос для создания таблицы истории редактирования
@@ -166,6 +179,9 @@ def initialize_project_schema(connection: sqlite3.Connection):
 
         logger.debug("Создание таблицы 'sheet_charts'...")
         cursor.execute(SQL_CREATE_SHEET_CHARTS_TABLE)
+
+        logger.debug("Создание таблицы 'sheet_merged_cells'...")
+        cursor.execute(SQL_CREATE_SHEET_MERGED_CELLS_TABLE)
 
         # --- Исправление: Создание таблицы 'edit_history' ---
         logger.debug("Создание таблицы 'edit_history'...")
