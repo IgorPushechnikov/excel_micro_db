@@ -12,10 +12,8 @@ from src.analyzer.logic_documentation import analyze_excel_file
 from src.storage.base import ProjectDBStorage
 
 # Импортируем экспортёры
-from src.exporter.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный
-
-# Предполагаем, что основной экспортер также будет доступен
-# from src.exporter.excel_exporter import export_project as export_with_xlsxwriter # Основной
+from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter  # Основной
+from src.exporter.fallback.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный (предполагаем, что он перемещён)
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
