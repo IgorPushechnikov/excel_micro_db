@@ -9,6 +9,7 @@ from openpyxl.cell.cell import Cell as OpenPyxlCell
 from typing import Dict, Any, List, Optional
 import logging
 import json
+import re
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -17,10 +18,54 @@ logger = get_logger(__name__)
 
 # --- Вспомогательные функции для сериализации сложных объектов ---
 
-# --- ИСПРАВЛЕНИЕ: Используем новый синтаксис объединения типов ---
-# В Python 3.10+ можно использовать X | Y для объединения типов
-# iter_rows() возвращает _CellOrMergedCell, который должен быть совместим с OpenPyxlCell.
-# В новых версиях Python Pylance должен принять эту аннотацию.
+# --- Вспомогательная функция для извлечения RGB ---
+def _get_rgb_string(color_obj):
+    """
+    Извлекает строковое RGB-представление из объекта цвета openpyxl.
+    Поддерживает RGB, Color, ThemeColor.
+    Возвращает строку RGB (например, 'FF0000') или None, если цвет не может быть представлен в RGB.
+    """
+    if color_obj is None:
+        return None
+
+    # Проверяем, является ли объект экземпляром RGB (часто используется для цветов)
+    # или имеет атрибут rgb, как у Color
+    if hasattr(color_obj, 'rgb'):
+        # Это может быть Color или RGB
+        # RGB-объекты также имеют атрибут rgb, но он может быть не строкой
+        # Попробуем получить .rgb
+        rgb_val = getattr(color_obj, 'rgb', None)
+        if isinstance(rgb_val, str):
+            # Если rgb - строка, это и есть нужное нам значение
+            return rgb_val
+        # Если rgb не строка, возможно, это ThemeColor или что-то другое
+        # Попробуем строковое представление
+        return str(color_obj)
+
+    # Если у объекта нет атрибута rgb, но он сам является строкой (например, RGB),
+    # используем строковое представление
+    if isinstance(color_obj, str):
+        return color_obj
+
+    # Попробуем строковое представление для других типов (например, ThemeColor)
+    # ThemeColor может иметь атрибуты типа tint, theme, но не rgb
+    # Если строковое представление не даст полезного результата (например, '<ThemeColor...>'),
+    # можно вернуть None или обработать особым образом.
+    # Для ThemeColor, если он не преобразуется в RGB, возвращаем None.
+    if hasattr(color_obj, 'type') and getattr(color_obj, 'type') == 'theme':
+         # ThemeColor не может быть представлен как простой RGB
+         return None
+
+    # Попробуем строковое представление как последнюю надежду
+    str_repr = str(color_obj)
+    # Проверим, похоже ли строковое представление на RGB (6 или 8 шестнадцатеричных символов, возможно, с '0x' или '#')
+    if re.fullmatch(r'[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8}', str_repr):
+        return str_repr
+
+    # Если ничего не подошло, возвращаем None
+    return None
+
+
 def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
     """
     Сериализует атрибуты стиля ячейки openpyxl в словарь.
@@ -39,8 +84,8 @@ def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
         if cell.font.sz: font_dict['sz'] = cell.font.sz # Размер
         if cell.font.b: font_dict['b'] = cell.font.b # Жирный
         if cell.font.i: font_dict['i'] = cell.font.i # Курсив
-        if cell.font.color and cell.font.color.rgb:
-            font_dict['color'] = {'rgb': cell.font.color.rgb}
+        if cell.font.color and _get_rgb_string(cell.font.color):
+            font_dict['color'] = {'rgb': _get_rgb_string(cell.font.color)}
         # ... другие атрибуты шрифта (underline, vertAlign и т.д.)
         if font_dict:
             style_dict['font'] = font_dict
@@ -51,10 +96,10 @@ def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
         # openpyxl.fill.PatternFill или openpyxl.fill.GradientFill
         if hasattr(cell.fill, 'patternType'):
              fill_dict['patternType'] = cell.fill.patternType
-        if hasattr(cell.fill, 'fgColor') and cell.fill.fgColor and cell.fill.fgColor.rgb:
-             fill_dict['fgColor'] = {'rgb': cell.fill.fgColor.rgb}
-        if hasattr(cell.fill, 'bgColor') and cell.fill.bgColor and cell.fill.bgColor.rgb:
-             fill_dict['bgColor'] = {'rgb': cell.fill.bgColor.rgb}
+        if hasattr(cell.fill, 'fgColor') and cell.fill.fgColor and _get_rgb_string(cell.fill.fgColor):
+             fill_dict['fgColor'] = {'rgb': _get_rgb_string(cell.fill.fgColor)}
+        if hasattr(cell.fill, 'bgColor') and cell.fill.bgColor and _get_rgb_string(cell.fill.bgColor):
+             fill_dict['bgColor'] = {'rgb': _get_rgb_string(cell.fill.bgColor)}
         # ... обработка GradientFill
         if fill_dict:
              style_dict['fill'] = fill_dict
@@ -65,11 +110,11 @@ def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
         # openpyxl.styles.borders.Border
         for side_name in ['left', 'right', 'top', 'bottom']: # 'diagonal' ?
             side_obj = getattr(cell.border, side_name, None)
-            if side_obj and (side_obj.style or (side_obj.color and side_obj.color.rgb)):
+            if side_obj and (side_obj.style or (side_obj.color and _get_rgb_string(side_obj.color))):
                 side_dict = {}
                 if side_obj.style: side_dict['style'] = side_obj.style
-                if side_obj.color and side_obj.color.rgb:
-                    side_dict['color'] = {'rgb': side_obj.color.rgb}
+                if side_obj.color and _get_rgb_string(side_obj.color):
+                    side_dict['color'] = {'rgb': _get_rgb_string(side_obj.color)}
                 border_dict[side_name] = side_dict
         if border_dict:
             style_dict['border'] = border_dict
@@ -102,6 +147,7 @@ def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
     # logger.debug(f"Сериализован стиль для ячейки {cell.coordinate}: {list(style_dict.keys())}")
     return style_dict
 
+
 def _serialize_chart(chart_obj) -> Dict[str, Any]:
     """
     Сериализует объект диаграммы openpyxl.
@@ -122,8 +168,6 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                     ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
                 if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
                     ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
-                elif hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'numRef') and s.cat.numRef:
-                    ser_dict['cat_range'] = s.cat.numRef.f
                 # ... другие атрибуты серии (название, цвета и т.д.)
                 series_data.append(ser_dict)
             chart_data['series'] = series_data
