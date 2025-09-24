@@ -5,6 +5,7 @@ import logging
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional, Union
 import os
+import json
 
 # Импортируем новые функции из модулей storage
 from src.storage import schema, raw_data, editable_data, formulas, styles, charts, history, metadata, sheets
@@ -486,5 +487,48 @@ class ProjectDBStorage:
         except Exception as e:
             logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
             return []
+
+    # --- Методы для работы с объединенными ячейками ---
+
+    def load_sheet_merged_cells(self, sheet_id: int) -> List[str]:
+        """
+        Загружает список объединенных ячеек для листа.
+
+        Args:
+            sheet_id (int): ID листа в БД.
+
+        Returns:
+            List[str]: Список строковых адресов объединенных диапазонов (например, ['A1:B2', 'C3:D5']).
+                    Возвращает пустой список, если данных нет или произошла ошибка.
+        """
+        if not self.connection:
+            logger.error("[ОБЪЕДИНЕНИЕ] Нет подключения к БД для загрузки объединенных ячеек.")
+            return []
+
+        try:
+            logger.debug(f"[ОБЪЕДИНЕНИЕ] Запрос объединенных ячеек для sheet_id={sheet_id}...")
+            cursor = self.connection.execute(
+                "SELECT merged_cells_data FROM sheet_merged_cells WHERE sheet_id = ?", (sheet_id,)
+            )
+            row = cursor.fetchone()
+            
+            if row and row['merged_cells_data']:
+                merged_cells_list = json.loads(row['merged_cells_data'])
+                if isinstance(merged_cells_list, list):
+                    logger.info(f"[ОБЪЕДИНЕНИЕ] Загружено {len(merged_cells_list)} объединенных диапазонов для sheet_id={sheet_id}.")
+                    return merged_cells_list
+                else:
+                    logger.warning(f"[ОБЪЕДИНЕНИЕ] Данные merged_cells_data для sheet_id={sheet_id} не являются списком.")
+            else:
+                logger.info(f"[ОБЪЕДИНЕНИЕ] Объединенные ячейки для sheet_id={sheet_id} не найдены.")
+
+        except json.JSONDecodeError as je:
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка разбора JSON merged_cells_data для sheet_id={sheet_id}: {je}")
+        except sqlite3.Error as e:
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка SQLite при загрузке merged_cells для sheet_id={sheet_id}: {e}")
+        except Exception as e:
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Неожиданная ошибка при загрузке merged_cells для sheet_id={sheet_id}: {e}", exc_info=True)
+
+        return []
 
     # Дополнительные методы и логика класса могут быть добавлены здесь
