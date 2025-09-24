@@ -13,7 +13,7 @@ from src.storage.base import ProjectDBStorage
 
 # Импортируем экспортёры
 from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter  # Основной
-from src.exporter.fallback.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный
+# from src.exporter.fallback.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный (отключен)
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -535,12 +535,12 @@ class AppController:
         Args:
             output_path (str): Путь к выходному .xlsx файлу.
             use_xlsxwriter (bool): Если True, использует основной экспортер (xlsxwriter).
-                                   Если False, использует аварийный (openpyxl).
+                                   Ранее использовал аварийный (openpyxl), но он отключен.
 
         Returns:
             bool: True, если экспорт успешен, иначе False.
         """
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl'}.")
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
 
         try:
             if use_xlsxwriter:
@@ -548,7 +548,10 @@ class AppController:
                 success = export_with_xlsxwriter(self.project_db_path, output_path)
             else:
                 # Используем аварийный экспортёр openpyxl
-                success = export_with_openpyxl(self.project_db_path, output_path)
+                # Этот блок отключен, так как direct_db_exporter не работает.
+                logger.warning("Попытка использовать отключенный аварийный экспортёр openpyxl.")
+                return False
+                # success = export_with_openpyxl(self.project_db_path, output_path)
 
             if success:
                 logger.info(f"Проект успешно экспортирован в '{output_path}'.")
