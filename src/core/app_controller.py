@@ -3,7 +3,7 @@
 import os
 import sqlite3
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 # Импортируем анализатор
 from src.analyzer.logic_documentation import analyze_excel_file
@@ -12,7 +12,8 @@ from src.analyzer.logic_documentation import analyze_excel_file
 from src.storage.base import ProjectDBStorage
 
 # Импортируем экспортёры
-from src.exporter.direct_db_exporter import export_project as export_with_openpyxl # Аварийный
+from src.exporter.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный
+
 # Предполагаем, что основной экспортер также будет доступен
 # from src.exporter.excel_exporter import export_project as export_with_xlsxwriter # Основной
 
@@ -24,9 +25,11 @@ from src.exceptions.app_exceptions import ProjectError, AnalysisError, ExportErr
 
 logger = get_logger(__name__)
 
+
 class AppController:
     """
     Центральный контроллер приложения.
+
     Координирует работу анализатора, хранилища, процессора и экспортера.
     """
 
@@ -40,10 +43,63 @@ class AppController:
         self.project_path = project_path
         self.project_db_path = os.path.join(project_path, "project_data.db")
         self.storage: Optional[ProjectDBStorage] = None
-        self._current_project_data: Optional[Dict[str, Any]] = None # Кэш метаданных проекта
+        self._current_project_data: Optional[Dict[str, Any]] = None  # Кэш метаданных проекта
+
         logger.debug(f"AppController инициализирован для проекта: {project_path}")
 
+    def initialize(self) -> bool:
+        """
+        Инициализирует контроллер приложения.
+        
+        Если project_path указан и существует, пытается загрузить проект.
+        Если project_path не указан или проект не существует, готов к созданию нового проекта.
+        
+        Returns:
+            bool: True, если инициализация прошла успешно.
+        """
+        if not self.project_path:
+            # Режим без проекта (например, для создания нового)
+            logger.info("AppController инициализирован в режиме без проекта.")
+            return True
+            
+        project_db_path = os.path.join(self.project_path, "project_data.db")
+        if os.path.exists(project_db_path):
+            # Пытаемся загрузить существующий проект
+            return self.load_project()
+        else:
+            # Проект еще не создан, но путь задан. Готовы к созданию.
+            logger.info(f"AppController инициализирован для нового проекта в: {self.project_path}")
+            return True
+
+    @property
+    def is_project_loaded(self) -> bool:
+        """Проверяет, загружен ли проект."""
+        return self.storage is not None
+
+    @property
+    def current_project(self) -> Optional[Dict[str, Any]]:
+        """Возвращает текущие метаданные проекта."""
+        return self._current_project_data
+
     # --- Управление проектом ---
+
+    def create_project(self, project_path: str) -> bool:
+        """
+        Создает новую структуру проекта и инициализирует БД.
+        Этот метод вызывается из CLI.
+
+        Args:
+            project_path (str): Путь к новой директории проекта.
+
+        Returns:
+            bool: True, если проект создан успешно, иначе False.
+        """
+        # Обновляем пути контроллера
+        self.project_path = project_path
+        self.project_db_path = os.path.join(project_path, "project_data.db")
+        
+        project_name = os.path.basename(os.path.abspath(project_path))
+        return self.create_new_project(project_name)
 
     def create_new_project(self, project_name: str) -> bool:
         """
@@ -66,9 +122,10 @@ class AppController:
             if not self.storage.initialize_project_tables():
                 logger.error("Не удалось инициализировать схему БД проекта.")
                 return False
-            
+
             # TODO: Сохранить метаданные проекта (имя, дата создания) в БД
             # Это может быть сделано через storage или напрямую
+
             logger.info(f"Проект '{project_name}' успешно создан в {self.project_path}")
             return True
         except Exception as e:
@@ -92,8 +149,9 @@ class AppController:
             if not self.storage.connect():
                 logger.error("Не удалось подключиться к БД проекта.")
                 return False
-            
+
             # TODO: Загрузить метаданные проекта в self._current_project_data
+
             logger.info("Проект успешно загружен.")
             return True
         except Exception as e:
@@ -105,18 +163,24 @@ class AppController:
         logger.info("Закрытие проекта.")
         if self.storage:
             self.storage.disconnect()
-        self.storage = None
+            self.storage = None
         self._current_project_data = None
         logger.debug("Проект закрыт.")
 
+    def shutdown(self):
+        """Полное завершение работы контроллера."""
+        self.close_project()
+        logger.info("AppController завершил работу.")
+
     # --- Анализ Excel-файлов ---
 
-    def analyze_excel_file(self, file_path: str) -> bool:
+    def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
         """
         Анализирует Excel-файл и сохраняет результаты в БД проекта.
 
         Args:
             file_path (str): Путь к анализируемому .xlsx файлу.
+            options (Optional[Dict[str, Any]]): Опции анализа.
 
         Returns:
             bool: True, если анализ и сохранение успешны, иначе False.
@@ -138,16 +202,16 @@ class AppController:
             # 2. Сохранение результатов в БД
             # Предполагаем, что analyze_excel_file возвращает данные в формате,
             # который storage может принять
-            
             # Для каждого листа в результатах анализа
             for sheet_data in analysis_results.get("sheets", []):
                 sheet_name = sheet_data["name"]
                 logger.info(f"Сохранение данных для листа: {sheet_name}")
-                
+
                 # --- Получаем или создаем запись листа в БД ---
                 # Это может потребовать отдельного метода в storage
                 # Пока делаем это напрямую
                 # TODO: Реализовать метод в storage для создания/получения sheet_id
+
                 sheet_id = self._get_or_create_sheet_id(analysis_results.get("project_name", "Unknown"), sheet_name)
                 if sheet_id is None:
                     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
@@ -177,10 +241,9 @@ class AppController:
                 # --- Сохраняем диаграммы ---
                 if not self.storage.save_sheet_charts(sheet_id, sheet_data.get("charts", [])):
                     logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
-            
+
             logger.info(f"Анализ и сохранение данных из '{file_path}' завершены.")
             return True
-
         except Exception as e:
             logger.error(f"Ошибка при анализе/сохранении файла '{file_path}': {e}", exc_info=True)
             return False
@@ -188,23 +251,23 @@ class AppController:
     def _get_or_create_sheet_id(self, project_name: str, sheet_name: str) -> Optional[int]:
         """
         Получает ID листа из БД или создает новую запись, если лист не существует.
+
         Это вспомогательный метод, который может быть перенесен в storage в будущем.
         """
         if not self.storage or not self.storage.connection:
-             logger.error("Нет подключения к БД для получения/создания sheet_id.")
-             return None
+            logger.error("Нет подключения к БД для получения/создания sheet_id.")
+            return None
 
         try:
             cursor = self.storage.connection.cursor()
-            
+
             # Получаем project_id (для MVP предполагаем 1)
             # TODO: Реализовать правильное получение project_id
             project_id = 1
-            
+
             # Проверяем, существует ли лист
             cursor.execute("SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
             result = cursor.fetchone()
-            
             if result:
                 logger.debug(f"Лист '{sheet_name}' найден с ID {result[0]}.")
                 return result[0]
@@ -219,7 +282,6 @@ class AppController:
                 new_sheet_id = cursor.lastrowid
                 logger.info(f"Создан новый лист '{sheet_name}' с ID {new_sheet_id}.")
                 return new_sheet_id
-                
         except sqlite3.Error as e:
             logger.error(f"Ошибка SQLite при получении/создании sheet_id для '{sheet_name}': {e}")
             return None
@@ -232,13 +294,14 @@ class AppController:
     def get_sheet_data(self, sheet_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Получает данные листа для отображения в GUI.
+
         Возвращает кортеж (raw_data, editable_data).
 
         Args:
             sheet_name (str): Имя листа.
 
         Returns:
-            Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]: 
+            Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             Кортеж из списков сырых и редактируемых данных.
         """
         if not self.storage:
@@ -247,7 +310,7 @@ class AppController:
 
         try:
             logger.debug(f"Загрузка данных для листа '{sheet_name}'...")
-            
+
             # Загружаем "сырые данные"
             raw_data = self.storage.load_sheet_raw_data(sheet_name)
             logger.debug(f"Загружено {len(raw_data)} записей сырых данных.")
@@ -255,24 +318,113 @@ class AppController:
             # Получаем sheet_id для загрузки редактируемых данных
             sheet_id = self._get_sheet_id_by_name(sheet_name)
             if sheet_id is None:
-                 logger.warning(f"Не найден sheet_id для листа '{sheet_name}'. Редактируемые данные не загружены.")
-                 editable_data = []
+                logger.warning(f"Не найден sheet_id для листа '{sheet_name}'. Редактируемые данные не загружены.")
+                editable_data = []
             else:
                 # Загружаем редактируемые данные
                 # --- Используем исправленный метод из storage ---
                 editable_data = self.storage.load_sheet_editable_data(sheet_id, sheet_name)
                 logger.debug(f"Загружено {len(editable_data)} записей редактируемых данных.")
-            
-            return (raw_data, editable_data)
 
+            return (raw_data, editable_data)
         except Exception as e:
             logger.error(f"Ошибка при загрузке данных для листа '{sheet_name}': {e}", exc_info=True)
             return ([], [])
 
+    def get_sheet_editable_data(self, sheet_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Получает редактируемые данные листа в формате, ожидаемом SheetDataModel.
+        Этот метод вызывается из SheetEditor.
+
+        Args:
+            sheet_name (str): Имя листа.
+
+        Returns:
+            Optional[Dict[str, Any]]: Словарь с 'column_names' и 'rows', или None в случае ошибки.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен.")
+            return None
+
+        try:
+            logger.debug(f"Загрузка редактируемых данных для листа '{sheet_name}' для GUI...")
+
+            # Для MVP предположим, что имена столбцов - это стандартные имена Excel (A, B, C...)
+            # В будущем их нужно будет загружать из метаданных листа
+            from src.constructor.widgets.sheet_editor import SheetDataModel
+            dummy_model = SheetDataModel({"column_names": [], "rows": []})
+            max_columns = 20  # Временное значение, в реальности нужно из метаданных
+            column_names = dummy_model._generate_excel_column_names(max_columns)
+
+            # Получаем sheet_id
+            sheet_id = self._get_sheet_id_by_name(sheet_name)
+            if sheet_id is None:
+                logger.warning(f"Не найден sheet_id для листа '{sheet_name}'.")
+                # Возвращаем структуру с пустыми данными
+                return {"column_names": column_names, "rows": []}
+
+            # Загружаем редактируемые данные
+            editable_data_list = self.storage.load_sheet_editable_data(sheet_id, sheet_name)
+            
+            # Преобразуем список словарей в список кортежей для модели
+            # Предполагаем, что данные хранятся по адресам, и нам нужно создать матрицу
+            # Это упрощенная реализация для MVP
+            rows = []
+            if editable_data_list:
+                # Найдем максимальный номер строки и столбца
+                max_row = 0
+                max_col = 0
+                cell_dict = {}
+                for item in editable_data_list:
+                    addr = item["cell_address"]
+                    # Простой парсер адреса (только для A1, B2 и т.д., без диапазонов)
+                    col_part = ""
+                    row_part = ""
+                    for char in addr:
+                        if char.isalpha():
+                            col_part += char
+                        else:
+                            row_part += char
+                    if row_part and col_part:
+                        row_idx = int(row_part) - 1  # 0-based
+                        col_idx = self._column_letter_to_index(col_part)
+                        max_row = max(max_row, row_idx)
+                        max_col = max(max_col, col_idx)
+                        cell_dict[(row_idx, col_idx)] = item["value"]
+                
+                # Создаем матрицу данных
+                for r in range(max_row + 1):
+                    row = []
+                    for c in range(max(max_col + 1, len(column_names))):
+                        row.append(cell_dict.get((r, c), ""))
+                    rows.append(tuple(row))
+            else:
+                # Если данных нет, создаем одну пустую строку
+                rows = [tuple([""] * len(column_names))]
+
+            result = {
+                "column_names": column_names,
+                "rows": rows
+            }
+            logger.debug(f"Редактируемые данные для листа '{sheet_name}' подготовлены для GUI.")
+            return result
+
+        except Exception as e:
+            logger.error(f"Ошибка при подготовке редактируемых данных для листа '{sheet_name}': {e}", exc_info=True)
+            return None
+
+    def _column_letter_to_index(self, letter: str) -> int:
+        """Преобразует букву столбца Excel (например, 'A', 'Z', 'AA') в 0-базовый индекс."""
+        result = 0
+        for char in letter:
+            result = result * 26 + (ord(char.upper()) - ord('A') + 1)
+        return result - 1  # 0-based index
+
     def _get_sheet_id_by_name(self, sheet_name: str) -> Optional[int]:
         """Вспомогательный метод для получения sheet_id по имени листа."""
         if not self.storage or not self.storage.connection:
-             return None
+            return None
+
         try:
             cursor = self.storage.connection.cursor()
             # Предполагаем project_id = 1
@@ -280,7 +432,29 @@ class AppController:
             result = cursor.fetchone()
             return result[0] if result else None
         except sqlite3.Error:
-             return None
+            return None
+
+    def update_sheet_cell_in_project(self, sheet_name: str, row_index: int, column_name: str, new_value: str) -> bool:
+        """
+        Обновляет значение ячейки в проекте. Этот метод вызывается из SheetEditor.
+        Он преобразует координаты из GUI в адрес ячейки Excel и вызывает update_cell_value.
+
+        Args:
+            sheet_name (str): Имя листа.
+            row_index (int): Индекс строки (0-based).
+            column_name (str): Имя столбца (например, 'A', 'B', 'AA').
+            new_value (str): Новое значение ячейки.
+
+        Returns:
+            bool: True, если обновление успешно, иначе False.
+        """
+        try:
+            # Преобразуем координаты в адрес ячейки Excel (например, A1)
+            cell_address = f"{column_name}{row_index + 1}"  # row_index 0-based -> Excel 1-based
+            return self.update_cell_value(sheet_name, cell_address, new_value)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении ячейки в проекте: {e}", exc_info=True)
+            return False
 
     def update_cell_value(self, sheet_name: str, cell_address: str, new_value: Any) -> bool:
         """
@@ -311,8 +485,8 @@ class AppController:
             # Это может быть сложно, так как оно может быть в raw_data или editable_data
             # Для простоты MVP, предположим, что мы можем получить его из editable_data
             # или установить None. Более точная логика может потребоваться.
-            old_value = None # TODO: Получить реальное старое значение
-            
+            old_value = None  # TODO: Получить реальное старое значение
+
             # 3. Обновляем редактируемые данные
             # --- Используем исправленный метод из storage ---
             if not self.storage.update_editable_cell(sheet_id, sheet_name, cell_address, new_value):
@@ -322,16 +496,33 @@ class AppController:
             # 4. Записываем в историю редактирования
             # --- Используем метод из storage ---
             if not self.storage.save_edit_history_record(sheet_id, cell_address, old_value, new_value):
-                 logger.warning(f"Не удалось записать изменение ячейки {cell_address} в историю.")
+                logger.warning(f"Не удалось записать изменение ячейки {cell_address} в историю.")
 
             logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена.")
             return True
-
         except Exception as e:
             logger.error(f"Ошибка при обновлении ячейки {cell_address} на листе '{sheet_name}': {e}", exc_info=True)
             return False
 
     # --- Экспорт ---
+
+    def export_results(self, export_type: str, output_path: str) -> bool:
+        """
+        Универсальный метод для экспорта результатов проекта.
+        Вызывается из CLI и GUI.
+
+        Args:
+            export_type (str): Тип экспорта ('excel').
+            output_path (str): Путь к выходному файлу.
+
+        Returns:
+            bool: True, если экспорт успешен, иначе False.
+        """
+        if export_type.lower() == 'excel':
+            return self.export_project(output_path, use_xlsxwriter=False)
+        else:
+            logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
+            return False
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """
@@ -346,7 +537,7 @@ class AppController:
             bool: True, если экспорт успешен, иначе False.
         """
         logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl'}.")
-        
+
         try:
             if use_xlsxwriter:
                 # Пока используем заглушку, так как основной экспортер может быть еще не готов
@@ -358,13 +549,13 @@ class AppController:
                 # success = export_with_xlsxwriter(self.project_db_path, output_path)
             else:
                 success = export_with_openpyxl(self.project_db_path, output_path)
-            
+
             if success:
                 logger.info(f"Проект успешно экспортирован в '{output_path}'.")
             else:
                 logger.error(f"Ошибка при экспорте проекта в '{output_path}'.")
+
             return success
-            
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
             return False
@@ -387,10 +578,25 @@ class AppController:
             return []
 
         try:
-             sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
-             return self.storage.load_edit_history(sheet_id, limit)
+            sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
+            return self.storage.load_edit_history(sheet_id, limit)
         except Exception as e:
             logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
             return []
 
     # Другие методы AppController (например, для processor, AppData) будут добавлены позже
+
+
+def create_app_controller(project_path: Optional[str] = None) -> AppController:
+    """
+    Фабричная функция для создания и инициализации экземпляра AppController.
+
+    Args:
+        project_path (Optional[str]): Путь к директории проекта. 
+                                      Если None, создается контроллер без привязки к проекту.
+
+    Returns:
+        AppController: Инициализированный экземпляр контроллера приложения.
+    """
+    controller = AppController(project_path or "")
+    return controller
