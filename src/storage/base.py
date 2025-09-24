@@ -8,14 +8,17 @@ import os
 
 # Импортируем новые функции из модулей storage
 from src.storage import schema, raw_data, editable_data, formulas, styles, charts, history, metadata
+
 # Импортируем logger из utils
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class ProjectDBStorage:
     """
     Основной класс для взаимодействия с базой данных проекта SQLite.
+
     Координирует вызовы подмодулей для работы с различными аспектами данных проекта.
     """
 
@@ -33,15 +36,15 @@ class ProjectDBStorage:
     def connect(self) -> bool:
         """
         Устанавливает соединение с базой данных проекта.
+        Если файл БД не существует, он будет создан при первом обращении к нему
+        (например, в initialize_project_tables).
 
         Returns:
             bool: True, если соединение успешно установлено, иначе False.
         """
         try:
-            if not os.path.exists(self.db_path):
-                logger.error(f"Файл базы данных не найден: {self.db_path}")
-                return False
-
+            # Убираем проверку существования файла.
+            # SQLite создаст его при первом обращении (CREATE TABLE и т.д.)
             self.connection = sqlite3.connect(self.db_path)
             logger.info(f"Установлено соединение с БД проекта: {self.db_path}")
             return True
@@ -68,8 +71,10 @@ class ProjectDBStorage:
         """
         was_connected = self.connection is not None
         if not was_connected:
-            self.connect()
-        
+            # Пытаемся подключиться. Если файл не существует, connect() все равно вернет True,
+            # а ошибка возникнет позже при выполнении запроса.
+            if not self.connect():
+                raise Exception(f"Не удалось подключиться к БД: {self.db_path}")
         try:
             yield self.connection
         finally:
@@ -79,21 +84,30 @@ class ProjectDBStorage:
     def initialize_project_tables(self) -> bool:
         """
         Инициализирует схему таблиц проекта в БД.
+        Создает новый файл БД, если он не существует.
 
         Returns:
             bool: True, если инициализация успешна, иначе False.
         """
         try:
-            with self.get_connection() as conn:
-                if conn:
-                    schema.initialize_project_schema(conn)
-                    logger.info("Схема таблиц проекта инициализирована.")
-                    return True
-                else:
-                    logger.error("Не удалось получить соединение для инициализации схемы.")
-                    return False
+            # Вместо использования get_connection (который вызывает connect и проверяет существование файла),
+            # создаем соединение напрямую. Это позволит SQLite создать файл БД, если его нет.
+            self.connection = sqlite3.connect(self.db_path)
+            logger.info(f"Создано соединение с БД проекта (новый файл): {self.db_path}")
+            
+            # Теперь инициализируем схему
+            schema.initialize_project_schema(self.connection)
+            logger.info("Схема таблиц проекта инициализирована.")
+            
+            # Отключаемся после инициализации
+            self.disconnect()
+            return True
+            
         except Exception as e:
             logger.error(f"Ошибка при инициализации схемы таблиц проекта: {e}", exc_info=True)
+            # Попытаемся отключиться, если соединение было установлено
+            if self.connection:
+                self.disconnect()
             return False
 
     # --- Методы для работы с метаданными проекта и листов ---
@@ -171,7 +185,7 @@ class ProjectDBStorage:
 
         Returns:
             List[Dict[str, Any]]: Список словарей с 'cell_address', 'value', 'value_type'.
-                                 Возвращает пустой список в случае ошибки или отсутствия данных.
+            Возвращает пустой список в случае ошибки или отсутствия данных.
         """
         try:
             with self.get_connection() as conn:
@@ -184,6 +198,7 @@ class ProjectDBStorage:
             return []
 
     # --- Методы для работы с редактируемыми данными ---
+
     # Используют функции из src/storage/editable_data.py
 
     def load_sheet_editable_data(self, sheet_id: int, sheet_name: str) -> List[Dict[str, Any]]:
@@ -196,7 +211,7 @@ class ProjectDBStorage:
 
         Returns:
             List[Dict[str, Any]]: Список словарей с ключами 'cell_address' и 'value'.
-                                  Возвращает пустой список в случае ошибки или отсутствия данных.
+            Возвращает пустой список в случае ошибки или отсутствия данных.
         """
         try:
             with self.get_connection() as conn:
@@ -232,6 +247,7 @@ class ProjectDBStorage:
             return False
 
     # --- Методы для работы с формулами ---
+
     # Используют функции из src/storage/formulas.py
 
     def save_sheet_formulas(self, sheet_id: int, formulas_list: List[Dict[str, str]]) -> bool:
@@ -264,7 +280,7 @@ class ProjectDBStorage:
 
         Returns:
             List[Dict[str, str]]: Список словарей с 'cell_address' и 'formula'.
-                                 Возвращает пустой список в случае ошибки или отсутствия данных.
+            Возвращает пустой список в случае ошибки или отсутствия данных.
         """
         try:
             with self.get_connection() as conn:
@@ -277,6 +293,7 @@ class ProjectDBStorage:
             return []
 
     # --- Методы для работы со стилями ---
+
     # Используют функции из src/storage/styles.py
 
     def save_sheet_styles(self, sheet_id: int, styles_list: List[Dict[str, Any]]) -> bool:
@@ -310,7 +327,7 @@ class ProjectDBStorage:
 
         Returns:
             List[Dict[str, Any]]: Список словарей с 'style_attributes' и 'range_address'.
-                                 Возвращает пустой список в случае ошибки или отсутствия данных.
+            Возвращает пустой список в случае ошибки или отсутствия данных.
         """
         try:
             with self.get_connection() as conn:
@@ -324,6 +341,7 @@ class ProjectDBStorage:
             return []
 
     # --- Методы для работы с диаграммами ---
+
     # Используют функции из src/storage/charts.py
 
     def save_sheet_charts(self, sheet_id: int, charts_list: List[Dict[str, Any]]) -> bool:
@@ -357,7 +375,7 @@ class ProjectDBStorage:
 
         Returns:
             List[Dict[str, Any]]: Список словарей с данными диаграмм.
-                                 Возвращает пустой список в случае ошибки или отсутствия данных.
+            Возвращает пустой список в случае ошибки или отсутствия данных.
         """
         try:
             with self.get_connection() as conn:
@@ -371,6 +389,7 @@ class ProjectDBStorage:
             return []
 
     # --- Методы для работы с историей редактирования ---
+
     # Используют функции из src/storage/history.py
 
     def save_edit_history_record(self, sheet_id: int, cell_address: str, old_value: Any, new_value: Any) -> bool:
@@ -419,4 +438,4 @@ class ProjectDBStorage:
             logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
             return []
 
-# Дополнительные методы и логика класса могут быть добавлены здесь
+    # Дополнительные методы и логика класса могут быть добавлены здесь
