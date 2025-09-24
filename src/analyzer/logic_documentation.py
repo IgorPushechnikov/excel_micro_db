@@ -151,12 +151,57 @@ def _serialize_style(cell: OpenPyxlCell | Any) -> Dict[str, Any]:
 def _serialize_chart(chart_obj) -> Dict[str, Any]:
     """
     Сериализует объект диаграммы openpyxl.
-    В данном примере мы будем сохранять XML-представление диаграммы,
-    которое можно будет использовать при экспорте.
+    Включает тип, данные, заголовок, позицию и размер.
     """
     try:
         chart_data = {}
         chart_data['type'] = type(chart_obj).__name__ # 'BarChart', 'LineChart' и т.д.
+
+        # --- Извлечение позиции и размера ---
+        # Привязка диаграммы к листу (anchor) определяет её позицию и размер
+        if hasattr(chart_obj, 'anchor'):
+            anchor = chart_obj.anchor
+            logger.debug(f"[ДИАГРАММА] Найден anchor типа: {type(anchor).__name__} для {chart_data['type']}")
+            
+            # Проверяем тип привязки
+            if hasattr(anchor, '_from'):
+                # Это может быть OneCellAnchor или TwoCellAnchor
+                from_cell = anchor._from
+                to_cell = getattr(anchor, 'to', None) # 'to' может не быть у OneCellAnchor
+                
+                position_info = {
+                    "from_col": from_cell.col,
+                    "from_row": from_cell.row,
+                    "from_col_offset": from_cell.colOff,
+                    "from_row_offset": from_cell.rowOff,
+                }
+                
+                if to_cell:
+                    # TwoCellAnchor: позиция определяется двумя ячейками
+                    position_info.update({
+                        "to_col": to_cell.col,
+                        "to_row": to_cell.row,
+                        "to_col_offset": to_cell.colOff,
+                        "to_row_offset": to_cell.rowOff,
+                    })
+                else:
+                    # OneCellAnchor: позиция определяется одной ячейкой и размером
+                    # Размеры могут быть в chart_obj.width/height или в anchor.ext
+                    ext = getattr(anchor, 'ext', None)
+                    width = getattr(chart_obj, 'width', None) or (ext.width if ext else None)
+                    height = getattr(chart_obj, 'height', None) or (ext.height if ext else None)
+                    
+                    position_info.update({
+                        "width": width,
+                        "height": height,
+                    })
+                
+                chart_data['position'] = position_info
+            else:
+                logger.warning(f"[ДИАГРАММА] Anchor не имеет атрибута _from: {type(anchor).__name__}")
+        else:
+            logger.warning(f"[ДИАГРАММА] У диаграммы {chart_data['type']} нет атрибута 'anchor'")
+        # --- Конец извлечения позиции и размера ---
 
         # Пример: сохранение ссылок на данные
         if hasattr(chart_obj, 'ser') and chart_obj.ser:
