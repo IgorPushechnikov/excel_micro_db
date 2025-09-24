@@ -1,6 +1,8 @@
 # src/core/project_manager.py
+
 """
 Менеджер проектов для Excel Micro DB.
+
 Отвечает за создание, загрузку, сохранение и управление проектами.
 """
 
@@ -27,6 +29,7 @@ class ProjectManager:
     Менеджер проектов Excel Micro DB.
 
     Отвечает за:
+
     - Создание новых проектов
     - Загрузку существующих проектов
     - Сохранение состояния проектов
@@ -52,10 +55,10 @@ class ProjectManager:
         Returns:
             bool: True если проект создан успешно, False в противном случае
         """
+
         # Инициализируем переменные заранее, чтобы избежать ошибок Pylance
         db_path = None
         storage = None
-
         try:
             project_path_obj = Path(project_path).resolve()
             logger.info(f"Создание нового проекта в: {project_path_obj}")
@@ -83,17 +86,20 @@ class ProjectManager:
                 from src.storage.base import ProjectDBStorage
                 db_path = project_path_obj / "project_data.db"
                 storage = ProjectDBStorage(str(db_path))
+                # Главное изменение: вызываем initialize_project_tables, а не пытаемся подключиться
                 if not storage.initialize_project_tables():
                     logger.error(f"Не удалось инициализировать схему БД проекта: {db_path}")
                     # Опционально: удалить частично созданные файлы/папки
                     # self._cleanup_partial_project(project_path_obj)
                     return False
+
                 # Отключаемся после инициализации
                 storage.disconnect()
                 logger.info(f"БД проекта инициализирована: {db_path}")
             except Exception as e:
                 logger.error(f"Ошибка при инициализации БД проекта {db_path}: {e}", exc_info=True)
                 return False
+
             # --- КОНЕЦ НОВОГО ШАГА ---
 
             # Создаем метаданные проекта
@@ -119,6 +125,7 @@ class ProjectManager:
         Args:
             project_path (Path): Путь к директории проекта
         """
+
         # Определяем необходимые поддиректории
         subdirs = [
             "data/raw",
@@ -149,6 +156,7 @@ class ProjectManager:
         Returns:
             Dict[str, Any]: Словарь с метаданными проекта
         """
+
         now = datetime.now().isoformat()
         metadata = {
             "project_name": project_name,
@@ -177,6 +185,7 @@ class ProjectManager:
         Returns:
             bool: True если сохранение успешно, False в противном случае
         """
+
         try:
             metadata_file = project_path / self.PROJECT_METADATA_FILE
             with open(metadata_file, 'w', encoding='utf-8') as f:
@@ -197,6 +206,7 @@ class ProjectManager:
         Returns:
             Optional[Dict[str, Any]]: Метаданные проекта или None если ошибка
         """
+
         try:
             project_path_obj = Path(project_path).resolve()
             logger.info(f"Загрузка проекта из: {project_path_obj}")
@@ -228,7 +238,6 @@ class ProjectManager:
 
             logger.info(f"Проект '{metadata.get('project_name')}' загружен успешно")
             return metadata
-
         except Exception as e:
             logger.error(f"Ошибка при загрузке проекта: {e}")
             return None
@@ -243,6 +252,7 @@ class ProjectManager:
         Returns:
             Optional[Dict[str, Any]]: Метаданные проекта или None если ошибка
         """
+
         try:
             metadata_file = project_path / self.PROJECT_METADATA_FILE
             with open(metadata_file, 'r', encoding='utf-8') as f:
@@ -266,11 +276,11 @@ class ProjectManager:
         Returns:
             bool: True если проект валиден, False в противном случае
         """
+
         # Инициализируем переменные заранее, чтобы избежать ошибок Pylance
         db_path = None
         storage = None
         cursor = None
-
         try:
             project_path_obj = Path(project_path)
             logger.debug(f"Валидация проекта: {project_path_obj}")
@@ -291,7 +301,7 @@ class ProjectManager:
             for dir_name in required_dirs:
                 if not (project_path_obj / dir_name).exists():
                     logger.warning(f"Отсутствует обязательная директория: {dir_name}")
-                    # Не возвращаем False, так как можем попытаться восстановить структуру
+            # Не возвращаем False, так как можем попытаться восстановить структуру
 
             # --- НОВАЯ ПРОВЕРКА: Валидация БД проекта ---
             logger.debug("Валидация внутренней БД проекта...")
@@ -318,7 +328,7 @@ class ProjectManager:
                     return False
 
                 required_tables = ['projects', 'sheets', 'formulas', 'sheet_styles', 'sheet_charts', 'edit_history']
-                if cursor: # Дополнительная проверка на None для Pylance
+                if cursor:  # Дополнительная проверка на None для Pylance
                     for table_name in required_tables:
                         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
                         if not cursor.fetchone():
@@ -341,11 +351,11 @@ class ProjectManager:
                 except:
                     pass
                 return False
+
             # --- КОНЕЦ НОВОЙ ПРОВЕРКИ ---
 
             logger.debug(f"Проект {project_path_obj} прошел валидацию")
             return True
-
         except Exception as e:
             logger.error(f"Ошибка при валидации проекта: {e}")
             return False
@@ -361,6 +371,7 @@ class ProjectManager:
         Returns:
             bool: True если файл добавлен успешно, False в противном случае
         """
+
         try:
             project_path_obj = Path(project_path)
             file_path_obj = Path(file_path)
@@ -391,7 +402,6 @@ class ProjectManager:
 
             # Сохраняем обновленные метаданные
             return self._save_project_metadata(project_path_obj, metadata)
-
         except Exception as e:
             logger.error(f"Ошибка при добавлении Excel файла в проект: {e}")
             return False
@@ -406,9 +416,9 @@ class ProjectManager:
         Returns:
             Dict[str, Dict[str, Any]]: Словарь с информацией о проектах
         """
+
         projects = {}
         root_path_obj = Path(root_path)
-
         try:
             # Рекурсивно ищем проекты в поддиректориях
             for metadata_file in root_path_obj.rglob(self.PROJECT_METADATA_FILE):
@@ -416,7 +426,6 @@ class ProjectManager:
                     project_path = metadata_file.parent
                     with open(metadata_file, 'r', encoding='utf-8') as f:
                         metadata = json.load(f)
-
                     project_name = metadata.get("project_name", project_path.name)
                     projects[str(project_path)] = {
                         "name": project_name,
@@ -431,7 +440,6 @@ class ProjectManager:
 
             logger.debug(f"Найдено {len(projects)} проектов в {root_path}")
             return projects
-
         except Exception as e:
             logger.error(f"Ошибка при поиске проектов: {e}")
             return projects
@@ -440,11 +448,11 @@ class ProjectManager:
         """
         Очистка ресурсов менеджера проектов.
         """
+
         logger.debug("Очистка ресурсов ProjectManager")
         # Здесь можно добавить закрытие файлов, соединений и т.д.
 
 
-# Функции для удобного использования менеджера проектов
 def create_project_manager() -> ProjectManager:
     """
     Фабричная функция для создания экземпляра ProjectManager.
@@ -452,6 +460,7 @@ def create_project_manager() -> ProjectManager:
     Returns:
         ProjectManager: Экземпляр менеджера проектов
     """
+
     return ProjectManager()
 
 
@@ -473,8 +482,8 @@ if __name__ == "__main__":
         if project_data:
             logger.info(f"Загружен проект: {project_data.get('project_name')}")
 
-        # Валидация проекта
-        if pm.validate_project(test_project_path):
-            logger.info("Проект прошел валидацию")
-    else:
-        logger.error("Ошибка при создании тестового проекта")
+            # Валидация проекта
+            if pm.validate_project(test_project_path):
+                logger.info("Проект прошел валидацию")
+            else:
+                logger.error("Ошибка при создании тестового проекта")
