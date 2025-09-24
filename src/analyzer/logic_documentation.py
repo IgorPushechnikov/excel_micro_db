@@ -335,9 +335,21 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
 
             # --- 5. Извлечение объединенных ячеек ---
             logger.debug(f"Извлечение объединенных ячеек с листа '{sheet_name}'...")
-            for merged_cell_range in sheet.merged_cells.ranges:
+            logger.debug(f"Объект merged_cells: {sheet.merged_cells}")
+            logger.debug(f"Атрибут ranges объекта merged_cells: {getattr(sheet.merged_cells, 'ranges', 'NO_RANGES_ATTR')}")
+            merged_ranges = getattr(sheet.merged_cells, 'ranges', [])
+            logger.debug(f"Итерация по ranges...")
+            merged_count = 0
+            for merged_cell_range in merged_ranges:
+                merged_count += 1
+                logger.debug(f"Найден объединенный диапазон: {merged_cell_range} (Тип: {type(merged_cell_range)})")
                 # merged_cell_range это openpyxl.utils.cell_range.CellRange
-                sheet_data["merged_cells"].append(str(merged_cell_range)) # Преобразуем в строку адреса диапазона
+                range_str = str(merged_cell_range)
+                logger.debug(f"Преобразован в строку: {range_str}")
+                sheet_data["merged_cells"].append(range_str) # Преобразуем в строку адреса диапазона
+                logger.debug(f"Добавлен в sheet_data['merged_cells']. Текущий размер: {len(sheet_data['merged_cells'])}")
+            
+            logger.info(f"Завершено извлечение объединенных ячеек с листа '{sheet_name}'. Найдено: {merged_count}")
 
             # Добавляем данные листа в результаты анализа
             analysis_results["sheets"].append(sheet_data)
