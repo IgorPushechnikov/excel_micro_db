@@ -551,10 +551,14 @@ class ProjectDBStorage:
 
         try:
             logger.debug(f"[ОБЪЕДИНЕНИЕ] Запрос объединенных ячеек для sheet_id={sheet_id}...")
+            # Устанавливаем row_factory для получения sqlite3.Row
+            self.connection.row_factory = sqlite3.Row
             cursor = self.connection.execute(
                 "SELECT merged_cells_data FROM sheet_merged_cells WHERE sheet_id = ?", (sheet_id,)
             )
             row = cursor.fetchone()
+            # Сбрасываем row_factory в значение по умолчанию (None -> tuple)
+            self.connection.row_factory = None
             
             if row and row['merged_cells_data']:
                 merged_cells_list = json.loads(row['merged_cells_data'])
