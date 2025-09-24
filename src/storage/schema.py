@@ -216,6 +216,13 @@ def initialize_project_schema(connection: sqlite3.Connection):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_edit_history_sheet_id ON edit_history(sheet_id);")
 
         connection.commit()
+        logger.debug("Commit выполнен. Проверка наличия таблиц...")
+        # Принудительная проверка, что таблицы созданы
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables_after_commit = [row[0] for row in cursor.fetchall()]
+        logger.debug(f"Таблицы после commit: {tables_after_commit}")
+        if 'sheet_merged_cells' not in tables_after_commit:
+            logger.error("КРИТИЧЕСКАЯ ОШИБКА: Таблица 'sheet_merged_cells' НЕ создана после commit!")
         logger.info("Схема таблиц проекта успешно инициализирована.")
 
     except sqlite3.Error as e:
