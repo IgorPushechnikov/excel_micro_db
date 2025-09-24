@@ -13,7 +13,7 @@ from src.storage.base import ProjectDBStorage
 
 # Импортируем экспортёры
 from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter  # Основной
-from src.exporter.fallback.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный (предполагаем, что он перемещён)
+from src.exporter.fallback.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -517,7 +517,7 @@ class AppController:
             bool: True, если экспорт успешен, иначе False.
         """
         if export_type.lower() == 'excel':
-            return self.export_project(output_path, use_xlsxwriter=False)
+            return self.export_project(output_path, use_xlsxwriter=True) # <-- Изменение: теперь True
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
             return False
@@ -538,14 +538,10 @@ class AppController:
 
         try:
             if use_xlsxwriter:
-                # Пока используем заглушку, так как основной экспортер может быть еще не готов
-                # или его путь импорта отличается.
-                logger.warning("Основной экспортёр (xlsxwriter) пока не подключен напрямую. Используется аварийный.")
-                success = export_with_openpyxl(self.project_db_path, output_path)
-                # TODO: Подключить основной экспортер
-                # from src.exporter.excel_exporter import export_project as export_with_xlsxwriter
-                # success = export_with_xlsxwriter(self.project_db_path, output_path)
+                # Используем основной экспортёр xlsxwriter
+                success = export_with_xlsxwriter(self.project_db_path, output_path)
             else:
+                # Используем аварийный экспортёр openpyxl
                 success = export_with_openpyxl(self.project_db_path, output_path)
 
             if success:
