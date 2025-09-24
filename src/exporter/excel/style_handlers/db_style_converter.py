@@ -67,13 +67,17 @@ def json_style_to_xlsxwriter_format(style_json_str: str) -> Optional[Dict[str, A
         if 'patternType' in fill_data:
             pt = fill_data['patternType']
             if pt == 'solid':
-                xlsxwriter_format['pattern'] = 1
+                # Для solid, проверим, есть ли цвет. Если нет, не устанавливаем pattern.
+                if ('fgColor' in fill_data and 'rgb' in fill_data['fgColor']) or ('bgColor' in fill_data and 'rgb' in fill_data['bgColor']):
+                    xlsxwriter_format['pattern'] = 1
             elif pt == 'none':
                 xlsxwriter_format['pattern'] = 0
             else:
                 # Сопоставление других типов паттернов (не все поддерживаются один-к-одному)
-                # Пока ставим 1 (solid) как дефолт для непустого паттерна
-                xlsxwriter_format['pattern'] = 1
+                # Устанавливаем solid (1) только если есть цвет (fg или bg), иначе оставляем без заливки (0 или не устанавливаем).
+                if ('fgColor' in fill_data and 'rgb' in fill_data['fgColor']) or ('bgColor' in fill_data and 'rgb' in fill_data['bgColor']):
+                     xlsxwriter_format['pattern'] = 1
+                # else: # Не устанавливаем pattern, если нет цвета для неподдерживаемого типа паттерна
 
         # Цвета заливки
         if 'fgColor' in fill_data and 'rgb' in fill_data['fgColor']:
