@@ -8,3 +8,4 @@ data/samples/test_sample.xlsx
 /test_workspace
 /logs
 logs/excel_micro_db.log.txt
+sync.ffs_db
