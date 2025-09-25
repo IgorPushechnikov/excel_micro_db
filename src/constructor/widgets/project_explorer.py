@@ -1,16 +1,14 @@
 # src/constructor/widgets/project_explorer.py
 """
-Модуль для виджета обозревателя проекта.
+Модуль для виджета обозревателя проекта с Fluent Widgets.
 """
 
 import logging
 from typing import Optional, List, Dict, Any
 
-from PySide6.QtCore import Qt, Slot, Signal
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QMessageBox
-)
+# --- НОВОЕ: Импорт из qfluentwidgets ---
+from qfluentwidgets import TreeWidget
+# --- КОНЕЦ НОВОГО ---
 
 # Импортируем AppController
 from src.core.app_controller import AppController
@@ -19,9 +17,11 @@ from src.core.app_controller import AppController
 logger = logging.getLogger(__name__)
 
 
-class ProjectExplorer(QWidget):
+# --- НОВОЕ: ProjectExplorer наследуется от TreeWidget ---
+class ProjectExplorer(TreeWidget):
     """
-    Виджет для отображения структуры проекта.
+    Виджет для отображения структуры проекта с Fluent дизайном.
+    Наследуется от TreeWidget из qfluentwidgets.
     """
 
     # Сигнал, испускаемый при выборе листа
@@ -36,37 +36,42 @@ class ProjectExplorer(QWidget):
         """
         super().__init__()
         self.app_controller: AppController = app_controller
-        self._tree: Optional[QTreeWidget] = None
-        self._setup_ui()
-        self._load_project_structure()
-        logger.debug("ProjectExplorer инициализирован.")
-
-    def _setup_ui(self):
-        """Настраивает UI виджета."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self._tree = QTreeWidget()
-        self._tree.setHeaderLabel("") # Или "Структура проекта"
-        self._tree.setAlternatingRowColors(True)
+        # self._tree: Optional[QTreeWidget] = None # Уже есть self (TreeWidget)
+        self.setHeaderLabel("") # Или "Структура проекта"
+        self.setAlternatingRowColors(True)
         
         # Подключаем сигнал клика
-        self._tree.itemClicked.connect(self._on_item_clicked)
+        self.itemClicked.connect(self._on_item_clicked)
 
-        layout.addWidget(self._tree)
-        logger.debug("UI ProjectExplorer настроено.")
+        self._load_project_structure()
+        logger.debug("ProjectExplorer (Fluent) инициализирован.")
+
+    # def _setup_ui(self): # Уже настроен через наследование
+    #     """Настраивает UI виджета."""
+    #     layout = QVBoxLayout(self)
+    #     layout.setContentsMargins(0, 0, 0, 0)
+    #
+    #     self._tree = QTreeWidget()
+    #     self._tree.setHeaderLabel("") # Или "Структура проекта"
+    #     self._tree.setAlternatingRowColors(True)
+    #     
+    #     # Подключаем сигнал клика
+    #     self._tree.itemClicked.connect(self._on_item_clicked)
+    #
+    #     layout.addWidget(self._tree)
+    #     logger.debug("UI ProjectExplorer настроено.")
 
     def _load_project_structure(self):
         """Загружает структуру проекта из AppController."""
-        logger.debug("Загрузка структуры проекта в ProjectExplorer...")
+        logger.debug("Загрузка структуры проекта в ProjectExplorer (Fluent)...")
         
         # Проверим, загружен ли проект
         if not self.app_controller.is_project_loaded:
-             logger.info("Проект не загружен. ProjectExplorer будет пуст.")
-             self._tree.clear()
+             logger.info("Проект не загружен. ProjectExplorer (Fluent) будет пуст.")
+             self.clear()
              placeholder_item = QTreeWidgetItem(["<Нет открытого проекта>"])
              placeholder_item.setFlags(Qt.NoItemFlags) # Нельзя выбрать
-             self._tree.addTopLevelItem(placeholder_item)
+             self.addTopLevelItem(placeholder_item)
              return
 
         try:
@@ -76,7 +81,7 @@ class ProjectExplorer(QWidget):
                  sheets_data = storage.load_all_sheets_metadata()
                  logger.debug(f"Получены данные листов: {sheets_data}")
 
-                 self._tree.clear()
+                 self.clear()
                  if sheets_data:
                     for sheet_info in sheets_data:
                         sheet_name = sheet_info.get("name", "Безымянный лист")
@@ -86,19 +91,19 @@ class ProjectExplorer(QWidget):
                         item.setData(0, Qt.UserRole, sheet_id) # Сохраняем ID
                         item.setData(0, Qt.UserRole + 1, sheet_name) # Сохраняем имя
                         
-                        self._tree.addTopLevelItem(item)
+                        self.addTopLevelItem(item)
                     
                     # Раскрываем все элементы
-                    self._tree.expandAll()
+                    self.expandAll()
                  else:
                      placeholder_item = QTreeWidgetItem(["<Нет листов в проекте>"])
                      placeholder_item.setFlags(Qt.NoItemFlags)
-                     self._tree.addTopLevelItem(placeholder_item)
+                     self.addTopLevelItem(placeholder_item)
             else:
                  logger.warning("Нет доступа к storage AppController.")
                  placeholder_item = QTreeWidgetItem(["<Ошибка доступа к данным>"])
                  placeholder_item.setFlags(Qt.NoItemFlags)
-                 self._tree.addTopLevelItem(placeholder_item)
+                 self.addTopLevelItem(placeholder_item)
 
         except Exception as e:
             logger.error(f"Ошибка при загрузке структуры проекта: {e}", exc_info=True)
