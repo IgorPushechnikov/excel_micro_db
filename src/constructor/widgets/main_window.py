@@ -65,19 +65,19 @@ class MainWindow(FluentWindow):
 
         # --- Пример: Добавление страницы "Главная" ---
         home_interface = self._create_home_interface()
-        self.addSubInterface(home_interface, 'home_interface', 'Главная', icon=None) # QIcon.fromTheme('home')
+        self.addSubInterface(home_interface, 'home_interface', 'Главная') # QIcon.fromTheme('home')
 
         # --- Пример: Добавление страницы "Проект" ---
         project_interface = self._create_project_interface()
-        self.addSubInterface(project_interface, 'project_interface', 'Проект', icon=None) # QIcon.fromTheme('folder')
+        self.addSubInterface(project_interface, 'project_interface', 'Проект') # QIcon.fromTheme('folder')
 
         # --- Пример: Добавление страницы "Редактор" ---
         editor_interface = self._create_editor_interface()
-        self.addSubInterface(editor_interface, 'editor_interface', 'Редактор', icon=None) # QIcon.fromTheme('edit')
+        self.addSubInterface(editor_interface, 'editor_interface', 'Редактор') # QIcon.fromTheme('edit')
 
         # --- Пример: Добавление страницы "Настройки" ---
         settings_interface = self._create_settings_interface()
-        self.addSubInterface(settings_interface, 'settings_interface', 'Настройки', icon=None) # QIcon.fromTheme('settings')
+        self.addSubInterface(settings_interface, 'settings_interface', 'Настройки') # QIcon.fromTheme('settings')
 
         logger.debug("UI главного окна (Fluent) настроено.")
 
