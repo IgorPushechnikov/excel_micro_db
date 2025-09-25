@@ -7,8 +7,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, Slot, Signal
+# from PySide6.QtCore import Qt, Slot, Signal # Старый импорт Qt
+from PySide6.QtCore import Slot, Signal
 from PySide6.QtGui import QAction, QIcon
+# Импортируем QtCore и QtGui напрямую для доступа к атрибутам Qt
+from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QMenu, QToolBar, QStatusBar,
     QDockWidget, QTreeWidget, QTreeWidgetItem,
@@ -68,14 +71,14 @@ class MainWindow(QMainWindow):
         # --- Project Explorer (Dock Widget) ---
         self.project_explorer_dock = QDockWidget("Проект", self)
         self.project_explorer_dock.setAllowedAreas(
-            Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea
+            QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea
         )
         self.project_explorer = ProjectExplorer(self.app_controller)
         self.project_explorer_dock.setWidget(self.project_explorer)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.project_explorer_dock)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.project_explorer_dock)
 
         # --- Splitter для центральной области ---
-        self.central_splitter = QSplitter(Qt.Horizontal)
+        self.central_splitter = QSplitter(QtCore.Qt.Horizontal)
         central_layout.addWidget(self.central_splitter)
 
         # --- Tab Widget для SheetEditor ---
@@ -87,9 +90,9 @@ class MainWindow(QMainWindow):
         # --- Панель свойств (справа, например) ---
         self.properties_dock = QDockWidget("Свойства", self)
         properties_widget = QLabel("Панель свойств\n(Пока недоступна)")
-        properties_widget.setAlignment(Qt.AlignCenter)
+        properties_widget.setAlignment(QtCore.Qt.AlignCenter)
         self.properties_dock.setWidget(properties_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.properties_dock)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.properties_dock)
 
         logger.debug("UI главного окна настроено.")
 
