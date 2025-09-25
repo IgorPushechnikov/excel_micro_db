@@ -247,10 +247,10 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
 
         # Пример: сохранение ссылок на данные
         if hasattr(chart_obj, 'ser') and chart_obj.ser:
-        series_data = [] # Инициализация списка серий
-        for idx, s in enumerate(chart_obj.ser):
-        ser_dict = {} # Инициализация словаря для каждой серии
-            # Сохраняем адреса диапазонов данных
+            series_data = [] # Инициализация списка серий
+            for idx, s in enumerate(chart_obj.ser):
+                ser_dict = {} # Инициализация словаря для каждой серии
+                # Сохраняем адреса диапазонов данных
                 if hasattr(s, 'val') and s.val and hasattr(s.val, 'numRef') and s.val.numRef:
                     ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
                 if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
