@@ -3,17 +3,19 @@
 import sqlite3
 import logging
 from pathlib import Path
+from typing import Union # Добавим Union для аннотации
 
 logger = logging.getLogger(__name__)
 
-def dump_db_to_sql(db_path: str, output_sql_path: str):
+def dump_db_to_sql(db_path: Union[Path, str], output_sql_path: Union[Path, str]):
     """
     Конвертирует базу данных SQLite в файл SQL-дампа.
 
     Args:
-        db_path (str): Путь к файлу базы данных SQLite (.db).
-        output_sql_path (str): Путь к выходному файлу SQL-дампа (.sql).
+        db_path (Union[Path, str]): Путь к файлу базы данных SQLite (.db).
+        output_sql_path (Union[Path, str]): Путь к выходному файлу SQL-дампа (.sql).
     """
+    # Преобразуем в Path объекты внутри функции для удобства
     db_path = Path(db_path)
     output_sql_path = Path(output_sql_path)
 
