@@ -395,39 +395,59 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                 # 6. Настраиваем заголовок диаграммы
                 title = chart_data.get('title')
                 title_ref = chart_data.get('title_ref')
+                chart_title_to_set = None
                 if title is not None: # Даже если title == ""
-                    chart.set_title({'name': title})
-                    logger.debug(f"[ДИАГРАММА] Установлен заголовок: '{title}'")
+                    chart_title_to_set = title
+                    logger.debug(f"[ДИАГРАММА] Используется текстовый заголовок: '{title}'")
                 elif title_ref:
-                    chart.set_title({'name': title_ref}) # xlsxwriter может интерпретировать ссылку
-                    logger.debug(f"[ДИАГРАММА] Установлена ссылка на заголовок: '{title_ref}'")
+                    # Пытаемся обработать ссылку на заголовок
+                    parsed_ref = _parse_title_ref(title_ref)
+                    if parsed_ref:
+                        if parsed_ref['is_single_cell']:
+                            # Если ссылка на одну ячейку, передаем её как есть
+                            chart_title_to_set = title_ref
+                            logger.debug(f"[ДИАГРАММА] Используется ссылка на одну ячейку как заголовок: '{title_ref}'")
+                        else:
+                            # Если ссылка на диапазон, пытаемся извлечь значения
+                            # TODO: Реализовать извлечение значений из диапазона.
+                            # Пока устанавливаем саму ссылку как заголовок, надеясь, что xlsxwriter сможет её обработать.
+                            # Если нет, можно установить фиктивный заголовок или оставить пустым.
+                            chart_title_to_set = title_ref # Или "Заголовок из " + title_ref
+                            logger.debug(f"[ДИАГРАММА] Используется ссылка на диапазон как заголовок (временное решение): '{title_ref}'")
+                    else:
+                        logger.warning(f"[ДИАГРАММА] Неверный формат title_ref '{title_ref}'. Заголовок не установлен.")
                 
-                # 7. Настраиваем размеры диаграммы
-                width_emu = chart_data.get('width_emu')
-                height_emu = chart_data.get('height_emu')
-                if width_emu is not None and height_emu is not None:
-                    # xlsxwriter.set_size ожидает размеры в пикселях
-                    # Конвертируем EMU в пиксели (приблизительно, 914400 EMU = 1 дюйм, 96 DPI)
-                    # pixels = emu / 914400 * 96
-                    # Упрощаем: 1 EMU = 1/914400 дюйма, 1 дюйм = 96 пикселей => 1 EMU = 96/914400 пикселей
-                    # 96/914400 = 1/9525
-                    width_px = int(width_emu / 9525)
-                    height_px = int(height_emu / 9525)
-                    chart.set_size({'width': width_px, 'height': height_px})
-                    logger.debug(f"[ДИАГРАММА] Установлен размер: {width_px}x{height_px} пикселей (из EMU {width_emu}x{height_emu})")
+                if chart_title_to_set is not None:
+                    chart.set_title({'name': chart_title_to_set})
+                    logger.debug(f"[ДИАГРАММА] Установлен окончательный заголовок диаграммы: '{chart_title_to_set}'")
+                else:
+                    logger.debug(f"[ДИАГРАММА] Заголовок диаграммы не будет установлен.")
                 
-                # 8. Настраиваем позицию и вставляем диаграмму на лист
-                # Используем только from_row и from_col для грубой позиции, игнорируем смещения EMU
+                # 7. Настраиваем позицию и размер диаграммы, используя ячейки
+                # Используем from_row/col и to_row/col для определения размера в ячейках
                 position_info = chart_data.get('position')
                 if position_info:
                     from_col = position_info.get('from_col')
                     from_row = position_info.get('from_row')
+                    to_col = position_info.get('to_col')
+                    to_row = position_info.get('to_row')
 
                     if from_col is not None and from_row is not None:
-                        # Вставляем диаграмму в ячейку (from_row, from_col) без смещения
-                        # Это дает приблизительное, но стабильное позиционирование
-                        worksheet.insert_chart(from_row, from_col, chart)
-                        logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в ({from_row}, {from_col}) без смещения.")
+                        # Вычисляем ширину и высоту в количестве ячеек
+                        width_cells = (to_col - from_col + 1) if to_col is not None else 8 # значение по умолчанию
+                        height_cells = (to_row - from_row + 1) if to_row is not None else 16 # значение по умолчанию
+
+                        # Вставляем диаграмму с указанием размера в ячейках
+                        # xlsxwriter.insert_chart не принимает смещения (offsets) в EMU, только в пикселях
+                        # Используем масштабирование через x_scale и y_scale
+                        # Эти значения определяют, сколько "ячеек" будет занимать диаграмма
+                        # Это приближенное, но более надежное решение, чем конвертация EMU в пиксели
+                        chart_options_for_insert = {
+                            'x_scale': width_cells / 8.0,  # Масштаб по X (8 - стандартная ширина ячейки в условных единицах)
+                            'y_scale': height_cells / 16.0 # Масштаб по Y (16 - стандартная высота ячейки в условных единицах)
+                        }
+                        worksheet.insert_chart(from_row, from_col, chart, chart_options_for_insert)
+                        logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в ({from_row}, {from_col}) с масштабом {width_cells}x{height_cells} ячеек (x_scale={chart_options_for_insert['x_scale']}, y_scale={chart_options_for_insert['y_scale']}).")
                     else:
                         logger.warning(f"[ДИАГРАММА] Неполные данные позиции: from_col={from_col}, from_row={from_row}")
                         # Вставляем в A1 (0, 0), если данные неполные
@@ -437,6 +457,8 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     logger.warning(f"[ДИАГРАММА] У диаграммы нет информации о позиции. Вставляется в (0, 0) по умолчанию.")
                     # Если позиция неизвестна, вставляем в ячейку A1 (0, 0)
                     worksheet.insert_chart(0, 0, chart) # Вставляем в A1
+
+                # УБРАНО: chart.set_size больше не используется, так как размер задается через масштаб при вставке
                 
                 logger.info(f"[ДИАГРАММА] Диаграмма типа '{chart_data['type']}' успешно экспортирована на лист ID {sheet_id}.")
                 
@@ -493,3 +515,45 @@ def _apply_merged_cells(worksheet, merged_ranges: List[str]):
             logger.error(f"[ОБЪЕДИНЕНИЕ] Критическая ошибка при объединении диапазона '{range_addr}': {e}", exc_info=True)
     
     logger.info(f"[ОБЪЕДИНЕНИЕ] Завершено. Успешно применено {applied_count}/{len(merged_ranges)} объединений.")
+
+
+# --- Вспомогательные функции для работы с диаграммами ---
+
+def _parse_title_ref(title_ref: str) -> Optional[Dict[str, Any]]:
+    """
+    Парсит строку ссылки на заголовок диаграммы (например, "=Sheet1!$A$1:$B$2")
+    и возвращает словарь с информацией о листе и диапазоне.
+
+    Args:
+        title_ref (str): Строка ссылки на заголовок.
+
+    Returns:
+        Optional[Dict[str, Any]]: Словарь с ключами 'sheet_name', 'range_address',
+                                  'is_single_cell' (bool), или None, если парсинг не удался.
+    """
+    if not title_ref or not title_ref.startswith("="):
+        logger.warning(f"[ДИАГРАММА] Неверный формат title_ref: '{title_ref}'. Ожидается строка, начинающаяся с '='.")
+        return None
+
+    # Убираем знак '=' в начале
+    ref_body = title_ref[1:]
+    
+    # Разделяем по '!'
+    if '!' not in ref_body:
+        logger.warning(f"[ДИАГРАММА] Неверный формат title_ref: '{title_ref}'. Ожидается 'SheetName!Range'.")
+        return None
+
+    sheet_part, range_part = ref_body.split('!', 1)
+    sheet_name = sheet_part.strip("'") # Убираем одинарные кавычки, если они есть
+    range_address = range_part
+
+    # Определяем, является ли диапазон одной ячейкой
+    is_single_cell = ':' not in range_address
+
+    return {
+        'sheet_name': sheet_name,
+        'range_address': range_address,
+        'is_single_cell': is_single_cell
+    }
+
+# Дополнительные вспомогательные функции можно добавить здесь
