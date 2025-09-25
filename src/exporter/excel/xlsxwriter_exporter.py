@@ -365,9 +365,8 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                 xlsxwriter_chart_type = chart_type_map.get(chart_data['type'], 'column') # Дефолт 'column'
                 
                 chart_options = {'type': xlsxwriter_chart_type}
-                # Для 3D диаграмм добавляем опции
-                if chart_data['type'] == 'PieChart3D':
-                    chart_options['subtype'] = '3d'
+                # xlsxwriter не поддерживает subtype '3d' для 'pie'. Опции 3D диаграмм зависят от стиля.
+                # subtype строка убирается.
                 
                 chart = workbook.add_chart(chart_options)
                 logger.debug(f"[ДИАГРАММА] Создан объект xlsxwriter.Chart типа: {xlsxwriter_chart_type}.")
@@ -422,6 +421,20 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     logger.debug(f"[ДИАГРАММА] Установлен окончательный заголовок диаграммы: '{chart_title_to_set}'")
                 else:
                     logger.debug(f"[ДИАГРАММА] Заголовок диаграммы не будет установлен.")
+                
+                # --- НОВОЕ: Устанавливаем стиль диаграммы, если она была 3D ---
+                if chart_data['type'] == 'PieChart3D':
+                    # Попробуем стиль 10, который обычно соответствует 3D Pie Chart в Excel
+                    # Стили 10-12 часто бывают 3D для Pie/Doughnut
+                    chart.set_style(10) # или 11, 12 - можно протестировать
+                    logger.debug(f"[ДИАГРАММА] Установлен 3D стиль (10) для PieChart3D.")
+                # --- КОНЕЦ НОВОГО КОДА ---
+
+                # --- НОВОЕ (или обновление существующего): Настраиваем легенду диаграммы ---
+                # xlsxwriter по умолчанию может включать легенду, но явно указываем, что она нужна.
+                chart.set_legend({'position': 'bottom'}) # Можно изменить позицию по необходимости
+                logger.debug(f"[ДИАГРАММА] Установлена легенда диаграммы (позиция: bottom).")
+                # --- КОНЕЦ НОВОГО КОДА ---
                 
                 # 7. Настраиваем позицию и размер диаграммы, используя ячейки
                 # Используем from_row/col и to_row/col для определения размера в ячейках
