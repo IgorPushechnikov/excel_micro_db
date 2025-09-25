@@ -246,22 +246,39 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                 series_data.append(ser_dict)
             chart_data['series'] = series_data
 
-        # Пример: сохранение заголовка
+        # --- Улучшенное извлечение заголовка ---
         if hasattr(chart_obj, 'title') and chart_obj.title:
-             if hasattr(chart_obj.title, 'tx') and chart_obj.title.tx:
-                 if hasattr(chart_obj.title.tx, 'rich') and chart_obj.title.tx.rich:
-                     try:
-                         # Упрощение: берем первый run
-                         if hasattr(chart_obj.title.tx.rich, 'p') and chart_obj.title.tx.rich.p and len(chart_obj.title.tx.rich.p) > 0:
-                             first_p = chart_obj.title.tx.rich.p[0]
-                             if first_p and hasattr(first_p, 'r') and first_p.r and len(first_p.r) > 0:
-                                 # Проверим, есть ли атрибут t у run
-                                 if hasattr(first_p.r[0], 't'):
-                                     chart_data['title'] = first_p.r[0].t
-                     except AttributeError as ae:
-                         logger.debug(f"Не удалось извлечь заголовок из rich text: {ae}")
-                 elif hasattr(chart_obj.title.tx, 'strRef') and chart_obj.title.tx.strRef:
-                     chart_data['title_ref'] = chart_obj.title.tx.strRef.f # Ссылка на ячейку с заголовком
+            title_obj = chart_obj.title
+            title_text = None
+            
+            # Проверяем, есть ли текстовый заголовок (tx)
+            if hasattr(title_obj, 'tx') and title_obj.tx:
+                tx_obj = title_obj.tx
+                
+                # Проверяем Rich Text
+                if hasattr(tx_obj, 'rich') and tx_obj.rich:
+                    try:
+                        # Берем первый параграф и первый run
+                        if (hasattr(tx_obj.rich, 'p') and tx_obj.rich.p and 
+                            len(tx_obj.rich.p) > 0 and tx_obj.rich.p[0] and
+                            hasattr(tx_obj.rich.p[0], 'r') and tx_obj.rich.p[0].r and
+                            len(tx_obj.rich.p[0].r) > 0):
+                            
+                            first_run = tx_obj.rich.p[0].r[0]
+                            # Получаем текст из run (может быть пустым "")
+                            title_text = getattr(first_run, 't', "") 
+                            
+                    except (AttributeError, IndexError) as ae:
+                        logger.debug(f"[ДИАГРАММА] Не удалось извлечь заголовок из rich text: {ae}")
+                
+                # Проверяем ссылку на ячейку
+                elif hasattr(tx_obj, 'strRef') and tx_obj.strRef:
+                    chart_data['title_ref'] = tx_obj.strRef.f
+            
+            # Если текст был извлечен (даже если он ""), сохраняем его
+            if title_text is not None:
+                chart_data['title'] = title_text
+            # --- Конец улучшенного извлечения заголовка ---
 
         logger.debug(f"Сериализована диаграмма типа {chart_data.get('type', 'Unknown')}")
         return chart_data
