@@ -1,218 +1,144 @@
 # src/constructor/widgets/main_window.py
 """
-Модуль для главного окна графического интерфейса.
+Модуль для главного окна графического интерфейса с использованием PySide6-Fluent-Widgets.
 """
 
 import logging
 from pathlib import Path
 from typing import Optional
 
-# from PySide6.QtCore import Qt, Slot, Signal # Старый импорт Qt
+# --- Импорт из PySide6 ---
 from PySide6.QtCore import Slot, Signal
 from PySide6.QtGui import QAction, QIcon
-# Импортируем QtCore и QtGui напрямую для доступа к атрибутам Qt
-from PySide6 import QtCore, QtGui
 from PySide6.QtWidgets import (
-    QMainWindow, QMenuBar, QMenu, QToolBar, QStatusBar,
-    QDockWidget, QTreeWidget, QTreeWidgetItem,
-    QTabWidget, QWidget, QLabel, QMessageBox,
-    QVBoxLayout, QHBoxLayout, QSplitter
+    QWidget, QVBoxLayout, QLabel, QMessageBox
 )
+# --- КОНЕЦ Импорта из PySide6 ---
+
+# --- НОВОЕ: Импорт из qfluentwidgets ---
+from qfluentwidgets import FluentWindow, SubtitleLabel, setFont
+# --- КОНЕЦ НОВОГО ---
 
 # Импортируем AppController
 from src.core.app_controller import AppController
 
 # Импортируем виджеты
-from src.constructor.widgets.project_explorer import ProjectExplorer
+# from src.constructor.widgets.project_explorer import ProjectExplorer # Пока не используем напрямую, FluentWindow управляет навигацией
 # from src.constructor.widgets.sheet_editor import SheetEditor # Пока не импортируем
 
 # Получаем логгер
 logger = logging.getLogger(__name__)
 
 
-class MainWindow(QMainWindow):
+class MainWindow(FluentWindow):
     """
-    Главное окно приложения Excel Micro DB.
+    Главное окно приложения Excel Micro DB с Fluent дизайном.
+    Наследуется от FluentWindow для использования Fluent Navigation Interface.
     """
 
     def __init__(self, app_controller: AppController):
         """
-        Инициализирует главное окно.
+        Инициализирует главное окно с Fluent дизайном.
 
         Args:
             app_controller (AppController): Экземпляр основного контроллера приложения.
         """
         super().__init__()
         self.app_controller: AppController = app_controller
-        self.project_explorer: Optional[ProjectExplorer] = None
-        # self.sheet_editor: Optional[SheetEditor] = None # Пока не создаём
+        # self.project_explorer: Optional[ProjectExplorer] = None # FluentWindow управляет
+        # self.sheet_editor: Optional[SheetEditor] = None # FluentWindow управляет
 
         self._setup_ui()
-        self._create_actions()
-        self._create_menus()
-        self._create_toolbars()
-        self._create_status_bar()
-        self._connect_signals()
+        # self._create_actions() # FluentWindow использует свои собственные действия
+        # self._create_menus() # FluentWindow использует NavigationInterface
+        # self._create_toolbars() # FluentWindow использует свои собственные панели
+        # self._create_status_bar() # FluentWindow использует InfoBar
+        # self._connect_signals() # Подключение сигналов остаётся
 
         self.setWindowTitle("Excel Micro DB")
         self.resize(1200, 800)
-        logger.debug("MainWindow инициализировано.")
+        logger.debug("MainWindow (Fluent) инициализировано.")
 
     def _setup_ui(self):
-        """Настраивает пользовательский интерфейс."""
-        logger.debug("Настройка UI главного окна...")
+        """Настраивает пользовательский интерфейс с Fluent Widgets."""
+        logger.debug("Настройка UI главного окна (Fluent)...")
 
-        # --- Центральный виджет ---
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        central_layout = QVBoxLayout(central_widget)
-        central_layout.setContentsMargins(0, 0, 0, 0)
+        # --- Пример: Добавление страницы "Главная" ---
+        home_interface = self._create_home_interface()
+        self.addSubInterface(home_interface, 'home_interface', 'Главная', icon=None) # QIcon.fromTheme('home')
 
-        # --- Project Explorer (Dock Widget) ---
-        self.project_explorer_dock = QDockWidget("Проект", self)
-        self.project_explorer_dock.setAllowedAreas(
-            QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea
-        )
-        self.project_explorer = ProjectExplorer(self.app_controller)
-        self.project_explorer_dock.setWidget(self.project_explorer)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.project_explorer_dock)
+        # --- Пример: Добавление страницы "Проект" ---
+        project_interface = self._create_project_interface()
+        self.addSubInterface(project_interface, 'project_interface', 'Проект', icon=None) # QIcon.fromTheme('folder')
 
-        # --- Splitter для центральной области ---
-        self.central_splitter = QSplitter(QtCore.Qt.Horizontal)
-        central_layout.addWidget(self.central_splitter)
+        # --- Пример: Добавление страницы "Редактор" ---
+        editor_interface = self._create_editor_interface()
+        self.addSubInterface(editor_interface, 'editor_interface', 'Редактор', icon=None) # QIcon.fromTheme('edit')
 
-        # --- Tab Widget для SheetEditor ---
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        # Добавляем tab_widget в splitter
-        self.central_splitter.addWidget(self.tab_widget)
-        
-        # --- Панель свойств (справа, например) ---
-        self.properties_dock = QDockWidget("Свойства", self)
-        properties_widget = QLabel("Панель свойств\n(Пока недоступна)")
-        properties_widget.setAlignment(QtCore.Qt.AlignCenter)
-        self.properties_dock.setWidget(properties_widget)
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.properties_dock)
+        # --- Пример: Добавление страницы "Настройки" ---
+        settings_interface = self._create_settings_interface()
+        self.addSubInterface(settings_interface, 'settings_interface', 'Настройки', icon=None) # QIcon.fromTheme('settings')
 
-        logger.debug("UI главного окна настроено.")
+        logger.debug("UI главного окна (Fluent) настроено.")
 
-    def _create_actions(self):
-        """Создаёт действия (QAction) для меню и панелей инструментов."""
-        logger.debug("Создание действий...")
-        # --- Файл ---
-        self.action_new_project = QAction("&Новый проект", self)
-        self.action_new_project.setShortcut("Ctrl+N")
-        # self.action_new_project.triggered.connect(self._on_new_project)
+    def _create_home_interface(self) -> QWidget:
+        """Создаёт интерфейс для главной страницы."""
+        interface = QWidget()
+        layout = QVBoxLayout(interface)
+        label = SubtitleLabel('Главная страница')
+        setFont(label, 24)
+        layout.addWidget(label)
+        layout.addWidget(QLabel('Добро пожаловать в Excel Micro DB!'))
+        # Здесь можно добавить кнопки быстрого доступа, последние проекты и т.д.
+        return interface
 
-        self.action_open_project = QAction("&Открыть проект", self)
-        self.action_open_project.setShortcut("Ctrl+O")
-        # self.action_open_project.triggered.connect(self._on_open_project)
+    def _create_project_interface(self) -> QWidget:
+        """Создаёт интерфейс для страницы проекта."""
+        interface = QWidget()
+        layout = QVBoxLayout(interface)
+        label = SubtitleLabel('Проект')
+        setFont(label, 24)
+        layout.addWidget(label)
+        layout.addWidget(QLabel('Здесь будет отображаться структура проекта и его данные.'))
+        # Здесь будет ProjectExplorer или аналогичный виджет
+        return interface
 
-        self.action_save_project = QAction("&Сохранить проект", self)
-        self.action_save_project.setShortcut("Ctrl+S")
-        # self.action_save_project.setEnabled(False) 
+    def _create_editor_interface(self) -> QWidget:
+        """Создаёт интерфейс для страницы редактора."""
+        interface = QWidget()
+        layout = QVBoxLayout(interface)
+        label = SubtitleLabel('Редактор')
+        setFont(label, 24)
+        layout.addWidget(label)
+        layout.addWidget(QLabel('Здесь будет редактор листов Excel.'))
+        # Здесь будет SheetEditor или аналогичный виджет
+        return interface
 
-        self.action_close_project = QAction("&Закрыть проект", self)
-        # self.action_close_project.triggered.connect(self._on_close_project)
-        # self.action_close_project.setEnabled(False) 
+    def _create_settings_interface(self) -> QWidget:
+        """Создаёт интерфейс для страницы настроек."""
+        interface = QWidget()
+        layout = QVBoxLayout(interface)
+        label = SubtitleLabel('Настройки')
+        setFont(label, 24)
+        layout.addWidget(label)
+        layout.addWidget(QLabel('Здесь будут настройки приложения.'))
+        # Здесь будут настройки приложения
+        return interface
 
-        self.action_exit = QAction("&Выход", self)
-        self.action_exit.setShortcut("Ctrl+Q")
-        self.action_exit.triggered.connect(self.close)
-
-        # --- Инструменты ---
-        self.action_analyze_excel = QAction("&Анализировать Excel-файл", self)
-        # self.action_analyze_excel.triggered.connect(self._on_analyze_excel)
-        # self.action_analyze_excel.setEnabled(False) 
-
-        self.action_export_to_excel = QAction("&Экспортировать в Excel", self)
-        # self.action_export_to_excel.triggered.connect(self._on_export_to_excel)
-        # self.action_export_to_excel.setEnabled(False) 
-
-        # --- Помощь ---
-        self.action_about = QAction("&О программе", self)
-        # self.action_about.triggered.connect(self._on_about)
-
-        logger.debug("Действия созданы.")
-
-    def _create_menus(self):
-        """Создаёт меню."""
-        logger.debug("Создание меню...")
-        menubar: QMenuBar = self.menuBar()
-
-        # --- Меню Файл ---
-        file_menu: QMenu = menubar.addMenu("&Файл")
-        file_menu.addAction(self.action_new_project)
-        file_menu.addAction(self.action_open_project)
-        file_menu.addAction(self.action_save_project)
-        file_menu.addSeparator()
-        file_menu.addAction(self.action_close_project)
-        file_menu.addAction(self.action_exit)
-
-        # --- Меню Инструменты ---
-        tools_menu: QMenu = menubar.addMenu("&Инструменты")
-        tools_menu.addAction(self.action_analyze_excel)
-        tools_menu.addAction(self.action_export_to_excel)
-
-        # --- Меню Помощь ---
-        help_menu: QMenu = menubar.addMenu("&Помощь")
-        help_menu.addAction(self.action_about)
-
-        logger.debug("Меню созданы.")
-
-    def _create_toolbars(self):
-        """Создаёт панели инструментов."""
-        logger.debug("Создание панелей инструментов...")
-        toolbar: QToolBar = self.addToolBar("Основные")
-        toolbar.setObjectName("main_toolbar") 
-        toolbar.addAction(self.action_new_project)
-        toolbar.addAction(self.action_open_project)
-        toolbar.addAction(self.action_analyze_excel)
-        toolbar.addAction(self.action_export_to_excel)
-        logger.debug("Панели инструментов созданы.")
-
-    def _create_status_bar(self):
-        """Создаёт строку состояния."""
-        logger.debug("Создание строки состояния...")
-        self.statusBar().showMessage("Готов")
-        logger.debug("Строка состояния создана.")
-
-    def _connect_signals(self):
-        """Подключает сигналы и слоты."""
-        logger.debug("Подключение сигналов...")
-        # Пример подключения сигнала из ProjectExplorer
-        # self.project_explorer.sheet_selected.connect(self._on_sheet_selected)
-        # ... другие подключения
-        logger.debug("Сигналы подключены.")
+    # def _create_actions(self): ...
+    # def _create_menus(self): ...
+    # def _create_toolbars(self): ...
+    # def _create_status_bar(self): ...
+    # def _connect_signals(self): ...
 
     # --- Слоты для действий ---
     # @Slot()
-    # def _on_new_project(self):
-    #     logger.debug("Выбрано действие: Новый проект")
-    #     # TODO: Реализовать
-
+    # def _on_new_project(self): ...
     # @Slot()
-    # def _on_open_project(self):
-    #     logger.debug("Выбрано действие: Открыть проект")
-    #     # TODO: Реализовать
-
+    # def _on_open_project(self): ...
     # @Slot()
-    # def _on_analyze_excel(self):
-    #     logger.debug("Выбрано действие: Анализировать Excel-файл")
-    #     # TODO: Реализовать
-
+    # def _on_analyze_excel(self): ...
     # @Slot()
-    # def _on_export_to_excel(self):
-    #     logger.debug("Выбрано действие: Экспортировать в Excel")
-    #     # TODO: Реализовать
-
+    # def _on_export_to_excel(self): ...
     # @Slot(str)
-    # def _on_sheet_selected(self, sheet_name: str):
-    #     """Слот для обработки выбора листа в ProjectExplorer."""
-    #     logger.debug(f"MainWindow получил сигнал о выборе листа: {sheet_name}")
-    #     # TODO: Открыть/обновить вкладку SheetEditor
-    #     # Например:
-    #     # if self.sheet_editor is None:
-    #     #     self.sheet_editor = SheetEditor(self.app_controller)
-    #     #     self.tab_widget.addTab(self.sheet_editor, sheet_name)
-    #     # self.sheet_editor.load_sheet(...) # Передать данные
+    # def _on_sheet_selected(self, sheet_name: str): ...
