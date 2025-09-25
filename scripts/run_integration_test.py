@@ -173,6 +173,29 @@ def main():
         else:
             logger.error(f"✗ Выходной Excel-файл НЕ НАЙДЕН: {output_file}")
             all_steps_passed = False
+        
+        # --- Копирование лога теста в папку экспорта ---
+        if all_steps_passed:
+            try:
+                import shutil
+                # Определяем путь к папке экспорта
+                output_exports_dir_path = output_file.parent
+                # Определяем путь к папке логов внутри экспорта
+                export_logs_dir = output_exports_dir_path / "logs"
+                export_logs_dir.mkdir(parents=True, exist_ok=True) # Создаем папку logs, если её нет
+                
+                # Определяем новое имя файла лога (такое же, как оригинальный)
+                copied_log_file_path = export_logs_dir / log_file_path.name
+                
+                # Копируем файл лога
+                shutil.copy2(log_file_path, copied_log_file_path)
+                logger.info(f"✓ Лог интеграционного теста скопирован в папку экспорта: {copied_log_file_path}")
+                print(f"[СКРИПТ] Лог интеграционного теста скопирован в: {copied_log_file_path}")
+            except Exception as copy_error:
+                logger.error(f"✗ Не удалось скопировать лог интеграционного теста в папку экспорта: {copy_error}")
+                print(f"[СКРИПТ] Ошибка при копировании лога теста: {copy_error}")
+                # Не считаем это критической ошибкой для всего теста, поэтому all_steps_passed не меняем
+        # --- Конец копирования лога ---
     else:
         logger.error("=== ТЕСТ ЗАВЕРШЕН С ОШИБКАМИ ===")
 
