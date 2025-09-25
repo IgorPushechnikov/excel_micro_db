@@ -2,6 +2,7 @@
 
 import sqlite3
 import logging
+import json # Импортируем json для сериализации
 # from typing import List, Dict, Any, Optional
 # import json # Понадобится, если мы будем сериализовать в JSON
 
@@ -47,21 +48,24 @@ def save_sheet_charts(connection: sqlite3.Connection, sheet_id: int, charts_list
         charts_to_insert = []
         for chart_data in charts_list:
             # chart_data_str = chart_data.get('chart_data')
-            chart_data_str = chart_data # Предполагаем, что сам словарь/объект уже сериализован или готов к хранению
-            # В реальной реализации нужно будет решить, как именно хранить chart_data.
-            # Если это словарь, его нужно сериализовать, например, в JSON.
-            # chart_data_str = json.dumps(chart_data, ensure_ascii=False) 
-            
-            if chart_data_str is None:
+            chart_data_dict = chart_data.get('chart_data') # Берём внутренний словарь
+            if chart_data_dict is None:
                  logger.warning("Найдена запись диаграммы без 'chart_data'. Пропущена.")
                  continue
 
+            # Сериализуем внутренний словарь в JSON строку
+            try:
+                chart_data_json_str = json.dumps(chart_data_dict, ensure_ascii=False)
+            except (TypeError, ValueError) as e:
+                logger.error(f"Ошибка сериализации данных диаграммы в JSON: {e}")
+                continue
+            
             # Можно добавить другие поля, если они есть и нужны
             # chart_id = chart_data.get('chart_id', None) # Если ID генерируется БД, можно не передавать
             # position = chart_data.get('position', None)
             
             # charts_to_insert.append((sheet_id, chart_id, chart_data_str, position))
-            charts_to_insert.append((sheet_id, str(chart_data_str))) # Простая вставка, адаптировать под схему
+            charts_to_insert.append((sheet_id, chart_data_json_str)) # Сохраняем JSON строку
 
         if charts_to_insert:
             # Вставляем новые диаграммы
