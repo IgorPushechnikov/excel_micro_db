@@ -16,6 +16,9 @@ from src.storage.base import ProjectDBStorage
 # Импортируем вспомогательные функции для конвертации стилей
 from src.exporter.excel.style_handlers.db_style_converter import json_style_to_xlsxwriter_format
 
+# Импортируем ProjectDBStorage для загрузки диаграмм
+from src.storage.base import ProjectDBStorage
+
 logger = logging.getLogger(__name__)
 
 
@@ -111,9 +114,12 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
                 logger.debug(f"[ЭКСПОРТ] Перед вызовом _apply_merged_cells для листа '{sheet_name}' с данными: {merged_cells}")
                 _apply_merged_cells(worksheet, merged_cells)
 
-                # 4g. (Опционально) Обработка объединенных ячеек, диаграмм и т.д.
-                # merged_cells = storage.load_sheet_merged_cells(sheet_id)
-                # _apply_merged_cells(worksheet, merged_cells)
+                # 4g. Экспорт диаграмм
+                logger.debug(f"[ЭКСПОРТ] Перед вызовом _export_charts_for_sheet для листа '{sheet_name}' (ID: {sheet_id})")
+                _export_charts_for_sheet(workbook, worksheet, sheet_id, project_db_path)
+
+                # 4h. (Опционально) Обработка других элементов (диаграмм, изображений и т.д.)
+                # ...
 
         # 5. Закрытие книги (сохранение файла)
         logger.info("Закрытие книги и сохранение файла...")
@@ -306,6 +312,161 @@ def _xl_range_to_coords(range_str: str) -> tuple[int, int, int, int]:
     logger.debug(f"[КООРД] Результат для диапазона '{range_str}': {coords}")
     return coords
 
+
+def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path: Union[str, Path]):
+    """
+    Экспортирует диаграммы для указанного листа, используя xlsxwriter.
+
+    Args:
+        workbook: Объект книги xlsxwriter.
+        worksheet: Объект листа xlsxwriter.
+        sheet_id (int): ID листа в БД проекта.
+        project_db_path (Union[str, Path]): Путь к файлу БД проекта.
+    """
+    logger.info(f"[ДИАГРАММА] Начало экспорта диаграмм для листа ID {sheet_id}.")
+    
+    try:
+        # 1. Подключаемся к БД проекта для загрузки диаграмм
+        storage = ProjectDBStorage(str(project_db_path))
+        if not storage.connect():
+            logger.error(f"[ДИАГРАММА] Не удалось подключиться к БД проекта для загрузки диаграмм листа ID {sheet_id}.")
+            return
+        
+        # 2. Загружаем диаграммы из БД
+        charts_data = storage.load_sheet_charts(sheet_id)
+        logger.debug(f"[ДИАГРАММА] Загружено {len(charts_data)} диаграмм для листа ID {sheet_id}.")
+        
+        if not charts_data:
+            logger.info(f"[ДИАГРАММА] Нет диаграмм для экспорта на листе ID {sheet_id}.")
+            storage.disconnect()
+            return
+        
+        # 3. Итерация по диаграммам и их экспорт
+        for chart_entry in charts_data:
+            chart_data_json_str = chart_entry.get('chart_data')
+            if not chart_data_json_str:
+                logger.warning(f"[ДИАГРАММА] Найдена запись диаграммы без данных. Пропущена.")
+                continue
+            
+            try:
+                # Десериализуем JSON-строку в словарь
+                chart_data = json.loads(chart_data_json_str)
+                logger.debug(f"[ДИАГРАММА] Обработка диаграммы типа: {chart_data.get('type', 'Unknown')}.")
+                
+                # 4. Создаем объект диаграммы xlsxwriter
+                # Сопоставляем тип диаграммы из openpyxl с типом xlsxwriter
+                chart_type_map = {
+                    'BarChart': 'column', # xlsxwriter использует 'column' для столбчатых диаграмм
+                    'LineChart': 'line',
+                    'PieChart': 'pie',
+                    'PieChart3D': 'pie', # xlsxwriter не поддерживает 3D pie напрямую через тип, но можно установить 3D опции
+                    # ... другие типы
+                }
+                xlsxwriter_chart_type = chart_type_map.get(chart_data['type'], 'column') # Дефолт 'column'
+                
+                chart_options = {'type': xlsxwriter_chart_type}
+                # Для 3D диаграмм добавляем опции
+                if chart_data['type'] == 'PieChart3D':
+                    chart_options['subtype'] = '3d'
+                
+                chart = workbook.add_chart(chart_options)
+                logger.debug(f"[ДИАГРАММА] Создан объект xlsxwriter.Chart типа: {xlsxwriter_chart_type}.")
+                
+                # 5. Настраиваем данные диаграммы (series)
+                series_list = chart_data.get('series', [])
+                for series in series_list:
+                    val_range = series.get('val_range')
+                    cat_range = series.get('cat_range')
+                    name = series.get('name')
+                    
+                    if not val_range:
+                        logger.warning(f"[ДИАГРАММА] Серия диаграммы не содержит диапазон значений (val_range). Пропущена.")
+                        continue
+                    
+                    series_options = {'values': val_range}
+                    if cat_range:
+                        series_options['categories'] = cat_range
+                    if name:
+                        series_options['name'] = name
+                    
+                    chart.add_series(series_options)
+                    logger.debug(f"[ДИАГРАММА] Добавлена серия: values={val_range}, categories={cat_range}, name={name}")
+                
+                # 6. Настраиваем заголовок диаграммы
+                title = chart_data.get('title')
+                title_ref = chart_data.get('title_ref')
+                if title is not None: # Даже если title == ""
+                    chart.set_title({'name': title})
+                    logger.debug(f"[ДИАГРАММА] Установлен заголовок: '{title}'")
+                elif title_ref:
+                    chart.set_title({'name': title_ref}) # xlsxwriter может интерпретировать ссылку
+                    logger.debug(f"[ДИАГРАММА] Установлена ссылка на заголовок: '{title_ref}'")
+                
+                # 7. Настраиваем размеры диаграммы
+                width_emu = chart_data.get('width_emu')
+                height_emu = chart_data.get('height_emu')
+                if width_emu is not None and height_emu is not None:
+                    # xlsxwriter.set_size ожидает размеры в пикселях
+                    # Конвертируем EMU в пиксели (приблизительно, 914400 EMU = 1 дюйм, 96 DPI)
+                    # pixels = emu / 914400 * 96
+                    # Упрощаем: 1 EMU = 1/914400 дюйма, 1 дюйм = 96 пикселей => 1 EMU = 96/914400 пикселей
+                    # 96/914400 = 1/9525
+                    width_px = int(width_emu / 9525)
+                    height_px = int(height_emu / 9525)
+                    chart.set_size({'width': width_px, 'height': height_px})
+                    logger.debug(f"[ДИАГРАММА] Установлен размер: {width_px}x{height_px} пикселей (из EMU {width_emu}x{height_emu})")
+                
+                # 8. Настраиваем позицию диаграммы
+                position_info = chart_data.get('position')
+                if position_info:
+                    from_col = position_info.get('from_col')
+                    from_row = position_info.get('from_row')
+                    from_col_offset_emu = position_info.get('from_col_offset')
+                    from_row_offset_emu = position_info.get('from_row_offset')
+                    
+                    if from_col is not None and from_row is not None:
+                        # xlsxwriter.set_position требует (row, col) и, опционально, (x_offset, y_offset) в пикселях
+                        # Конвертируем EMU в пиксели для смещений
+                        x_offset_px = int(from_col_offset_emu / 9525) if from_col_offset_emu is not None else 0
+                        y_offset_px = int(from_row_offset_emu / 9525) if from_row_offset_emu is not None else 0
+                        
+                        chart.set_position(from_row, from_col, x_offset=x_offset_px, y_offset=y_offset_px)
+                        logger.debug(f"[ДИАГРАММА] Установлена позиция: row={from_row}, col={from_col}, x_offset={x_offset_px}px, y_offset={y_offset_px}px")
+                    else:
+                        logger.warning(f"[ДИАГРАММА] Неполные данные позиции: from_col={from_col}, from_row={from_row}")
+                else:
+                    logger.warning(f"[ДИАГРАММА] У диаграммы нет информации о позиции. Будет размещена по умолчанию.")
+                
+                # 9. Вставляем диаграмму на лист
+                # worksheet.insert_chart(row, col, chart, options=None)
+                # Если позиция уже установлена через chart.set_position, insert_chart может использовать её.
+                # Но для надежности передадим координаты из position_info, если они есть.
+                if position_info and 'from_row' in position_info and 'from_col' in position_info:
+                    insert_row = position_info['from_row']
+                    insert_col = position_info['from_col']
+                    # Смещения уже заданы через set_position, передавать их в insert_chart не обязательно
+                    worksheet.insert_chart(insert_row, insert_col, chart)
+                else:
+                    # Если позиция неизвестна, вставляем в ячейку A1 (или другую по умолчанию)
+                    worksheet.insert_chart(0, 0, chart) # Вставляем в A1
+                    logger.warning(f"[ДИАГРАММА] Диаграмма вставлена в A1 (0, 0) из-за отсутствия позиции.")
+                
+                logger.info(f"[ДИАГРАММА] Диаграмма типа '{chart_data['type']}' успешно экспортирована на лист ID {sheet_id}.")
+                
+            except json.JSONDecodeError as je:
+                logger.error(f"[ДИАГРАММА] Ошибка разбора JSON данных диаграммы: {je}")
+            except Exception as e_inner:
+                logger.error(f"[ДИАГРАММА] Ошибка при обработке одной из диаграмм для листа ID {sheet_id}: {e_inner}", exc_info=True)
+        
+        # 10. Закрываем соединение с БД
+        storage.disconnect()
+        logger.info(f"[ДИАГРАММА] Экспорт диаграмм для листа ID {sheet_id} завершен.")
+        
+    except Exception as e_outer:
+        logger.error(f"[ДИАГРАММА] Критическая ошибка при экспорте диаграмм для листа ID {sheet_id}: {e_outer}", exc_info=True)
+        # Пытаемся закрыть соединение, если оно было открыто
+        if 'storage' in locals() and storage:
+            storage.disconnect()
 
 def _apply_merged_cells(worksheet, merged_ranges: List[str]):
     """
