@@ -159,7 +159,12 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
 
         # --- Извлечение позиции и размера ---
         # Привязка диаграммы к листу (anchor) определяет её позицию и размер
-        if hasattr(chart_obj, 'anchor'):
+        # Инициализируем переменные, которые могут не быть установлены, если не будет 'anchor'
+        position_info = None
+        width_emu = None
+        height_emu = None
+
+        if hasattr(chart_obj, 'anchor'): 
             anchor = chart_obj.anchor
             logger.debug(f"[ДИАГРАММА] Найден anchor типа: {type(anchor).__name__} для {chart_data['type']}")
             
@@ -231,7 +236,8 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
         else:
             logger.warning(f"[ДИАГРАММА] У диаграммы {chart_data['type']} нет атрибута 'anchor'")
         # --- Конец извлечения позиции и размера ---
-        # Сохраняем позицию и размеры в chart_data
+        # Сохраняем позицию и размеры в chart_data, если они были извлечены
+        # (переменные уже инициализированы, проблем с 'possibly unbound' не будет)
         if position_info:
             chart_data['position'] = position_info
         if width_emu is not None:
@@ -241,17 +247,21 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
 
         # Пример: сохранение ссылок на данные
         if hasattr(chart_obj, 'ser') and chart_obj.ser:
-            series_data = []
-            for idx, s in enumerate(chart_obj.ser):
-                ser_dict = {}
+        series_data = [] # Инициализация списка серий
+        for idx, s in enumerate(chart_obj.ser):
+        ser_dict = {} # Инициализация словаря для каждой серии
             # Сохраняем адреса диапазонов данных
-            if hasattr(s, 'val') and s.val and hasattr(s.val, 'numRef') and s.val.numRef:
-                ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
-            if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
-                ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
-        # ... другие атрибуты серии (название, цвета и т.д.)
-        series_data.append(ser_dict)
-        chart_data['series'] = series_data
+                if hasattr(s, 'val') and s.val and hasattr(s.val, 'numRef') and s.val.numRef:
+                    ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
+                if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
+                    ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
+                # ... другие атрибуты серии (название, цвета и т.д.)
+                series_data.append(ser_dict) # Добавляем словарь серии в список
+            # После цикла устанавливаем 'series' в chart_data
+            chart_data['series'] = series_data
+        else:
+            # Если серий нет, устанавливаем пустой список
+            chart_data['series'] = []
 
         # --- Улучшенное извлечение заголовка ---
         if hasattr(chart_obj, 'title') and chart_obj.title:
