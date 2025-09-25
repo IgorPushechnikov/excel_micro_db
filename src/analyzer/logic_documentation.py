@@ -176,6 +176,10 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                     "from_row_offset": from_cell.rowOff,
                 }
                 
+                # Инициализируем переменные для размеров
+                width_emu = None
+                height_emu = None
+                
                 if to_cell:
                     # TwoCellAnchor: позиция определяется двумя ячейками
                     position_info.update({
@@ -184,32 +188,44 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                         "to_col_offset": to_cell.colOff,
                         "to_row_offset": to_cell.rowOff,
                     })
-                    # Для TwoCellAnchor размер можно вычислить, но xlsxwriter обычно использует from/to напрямую.
-                    # Тем не менее, сохраним вычисленные размеры в EMU для полноты информации.
+                    # Для TwoCellAnchor размер можно вычислить из разности координат
                     # Ширина = (to_col - from_col) * ширина_ячейки + (to_col_offset - from_col_offset)
                     # Высота = (to_row - from_row) * высота_ячейки + (to_row_offset - from_row_offset)
-                    # Это сложно, так как ширина/высота ячеек переменна. Проще сохранить from/to.
-                    # Но если chart_obj имеет width/height, сохраним их.
-                    width_emu = getattr(chart_obj, 'width', None)
-                    height_emu = getattr(chart_obj, 'height', None)
-                    if width_emu is not None:
-                        chart_data['width_emu'] = width_emu
-                    if height_emu is not None:
-                        chart_data['height_emu'] = height_emu
+                    # Это сложно, так как ширина/высота ячеек переменна. 
+                    # xlsxwriter использует from/to напрямую, поэтому сохраняем их.
+                    # Но для полноты информации попробуем вычислить размеры в EMU.
+                    # Приблизительное вычисление (не учитывает ширину/высоту отдельных ячеек):
+                    # Ширина в EMU = (to_col - from_col) * 640000 + (to_col_offset - from_col_offset)
+                    # Высота в EMU = (to_row - from_row) * 640000 + (to_row_offset - from_row_offset)
+                    # 640000 EMU = 1/914400 дюйма * 96 DPI * 6 (приблизительная ширина/высота ячейки в символах)
+                    # Это грубое приближение. Лучше использовать anchor.ext, если он есть.
+                    try:
+                        ext = getattr(anchor, 'ext', None)
+                        if ext:
+                            width_emu = ext.width
+                            height_emu = ext.height
+                        else:
+                            # Грубое приближение, если ext недоступен
+                            width_emu = (to_cell.col - from_cell.col) * 640000 + (to_cell.colOff - from_cell.colOff)
+                            height_emu = (to_cell.row - from_cell.row) * 640000 + (to_cell.rowOff - from_cell.rowOff)
+                    except Exception as calc_e:
+                        logger.warning(f"[ДИАГРАММА] Не удалось вычислить размеры для TwoCellAnchor: {calc_e}")
+                        # Если вычисление не удалось, оставляем width_emu/height_emu как None
                 else:
                     # OneCellAnchor: позиция определяется одной ячейкой и размером
-                    # Размеры могут быть в chart_obj.width/height или в anchor.ext
+                    # Размеры берём из chart_obj.width/height или anchor.ext
                     ext = getattr(anchor, 'ext', None)
                     width_emu = getattr(chart_obj, 'width', None) or (ext.width if ext else None)
                     height_emu = getattr(chart_obj, 'height', None) or (ext.height if ext else None)
-                    
-                    # Сохраняем размеры в EMU
-                    if width_emu is not None:
-                        chart_data['width_emu'] = width_emu
-                    if height_emu is not None:
-                        chart_data['height_emu'] = height_emu
                 
+                # Сохраняем позицию
                 chart_data['position'] = position_info
+                
+                # Сохраняем размеры в EMU, если они были извлечены
+                if width_emu is not None:
+                    chart_data['width_emu'] = width_emu
+                if height_emu is not None:
+                    chart_data['height_emu'] = height_emu
             else:
                 logger.warning(f"[ДИАГРАММА] Anchor не имеет атрибута _from: {type(anchor).__name__}")
         else:
