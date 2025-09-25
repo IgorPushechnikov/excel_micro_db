@@ -184,17 +184,30 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                         "to_col_offset": to_cell.colOff,
                         "to_row_offset": to_cell.rowOff,
                     })
+                    # Для TwoCellAnchor размер можно вычислить, но xlsxwriter обычно использует from/to напрямую.
+                    # Тем не менее, сохраним вычисленные размеры в EMU для полноты информации.
+                    # Ширина = (to_col - from_col) * ширина_ячейки + (to_col_offset - from_col_offset)
+                    # Высота = (to_row - from_row) * высота_ячейки + (to_row_offset - from_row_offset)
+                    # Это сложно, так как ширина/высота ячеек переменна. Проще сохранить from/to.
+                    # Но если chart_obj имеет width/height, сохраним их.
+                    width_emu = getattr(chart_obj, 'width', None)
+                    height_emu = getattr(chart_obj, 'height', None)
+                    if width_emu is not None:
+                        chart_data['width_emu'] = width_emu
+                    if height_emu is not None:
+                        chart_data['height_emu'] = height_emu
                 else:
                     # OneCellAnchor: позиция определяется одной ячейкой и размером
                     # Размеры могут быть в chart_obj.width/height или в anchor.ext
                     ext = getattr(anchor, 'ext', None)
-                    width = getattr(chart_obj, 'width', None) or (ext.width if ext else None)
-                    height = getattr(chart_obj, 'height', None) or (ext.height if ext else None)
+                    width_emu = getattr(chart_obj, 'width', None) or (ext.width if ext else None)
+                    height_emu = getattr(chart_obj, 'height', None) or (ext.height if ext else None)
                     
-                    position_info.update({
-                        "width": width,
-                        "height": height,
-                    })
+                    # Сохраняем размеры в EMU
+                    if width_emu is not None:
+                        chart_data['width_emu'] = width_emu
+                    if height_emu is not None:
+                        chart_data['height_emu'] = height_emu
                 
                 chart_data['position'] = position_info
             else:
