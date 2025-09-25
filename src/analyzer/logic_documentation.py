@@ -297,6 +297,27 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                 chart_data['title'] = title_text
             # --- Конец улучшенного извлечения заголовка ---
 
+            # --- Улучшенное извлечение легенды ---
+            if hasattr(chart_obj, 'legend') and chart_obj.legend:
+                legend_obj = chart_obj.legend
+                legend_data = {}
+                
+                # Извлекаем позицию легенды, если она задана
+                if hasattr(legend_obj, 'position') and legend_obj.position:
+                    legend_data['position'] = legend_obj.position
+                
+                # Можно добавить другие атрибуты легенды, если потребуется
+                # Например, видимость (хотя если объект legend существует, она, скорее всего, True)
+                # if hasattr(legend_obj, 'show_legend') and legend_obj.show_legend is not None:
+                #     legend_data['show_legend'] = legend_obj.show_legend
+                
+                # Добавляем извлечённые данные легенды в основной словарь chart_data
+                chart_data['legend'] = legend_data
+                logger.debug(f"[ДИАГРАММА] Извлечена информация о легенде: {legend_data}")
+            else:
+                logger.debug(f"[ДИАГРАММА] У диаграммы нет объекта легенды или он пуст.")
+            # --- Конец улучшенного извлечения легенды ---
+
         logger.debug(f"Сериализована диаграмма типа {chart_data.get('type', 'Unknown')}")
         return chart_data
 
