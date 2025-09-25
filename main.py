@@ -99,7 +99,23 @@ def process_data(config_path: str) -> None:
 
 def export_results_cli(export_type: str, output_path: str, project_path: str) -> None:
     """Экспорт результатов проекта через CLI."""
+    # --- НОВЫЙ КОД: Настройка лога в подпапке ---
+    output_path_obj = Path(output_path)
+    export_logs_dir = output_path_obj.parent / "logs"  # Создаём путь к подпапке logs в директории output
+    export_logs_dir.mkdir(parents=True, exist_ok=True) # Создаём подпапку logs, если её нет
+
+    log_file_path = export_logs_dir / f"export_{output_path_obj.stem}.log" # Имя файла лога
+
+    # Создаём FileHandler
+    export_file_handler = logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
+    export_file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    export_file_handler.setFormatter(export_file_formatter)
+
+    # Добавляем FileHandler к логгеру
+    logger.addHandler(export_file_handler)
     logger.info(f"Экспорт результатов типа '{export_type}' в: {output_path}")
+    # --- КОНЕЦ НОВОГО КОДА ---
+
     try:
         logger.debug(f"[export_results_cli] Создание AppController с project_path: {project_path}")
         # Создаем и инициализируем контроллер
@@ -125,6 +141,24 @@ def export_results_cli(export_type: str, output_path: str, project_path: str) ->
 
         if success:
             logger.info("Экспорт через CLI завершен успешно.")
+            # --- НОВЫЙ КОД: Вызов дампа БД ---
+            # Определяем путь к БД проекта
+            project_db_path = Path(project_path) / "project_data.db"
+            # Определяем папку для SQL-дампа (например, sql_export в той же папке, что и output)
+            sql_export_dir = output_path_obj.parent / "sql_export"
+            sql_export_dir.mkdir(parents=True, exist_ok=True) # Создаём подпапку sql_export, если её нет
+            # Определяем путь к SQL-файлу
+            sql_output_path = sql_export_dir / f"{project_db_path.name}.sql"
+            logger.info(f"Начинается создание SQL-дампа БД в: {sql_output_path}")
+
+            # Импортируем функцию dump_db_to_sql
+            from src.utils.db_utils import dump_db_to_sql
+            dump_success = dump_db_to_sql(str(project_db_path), str(sql_output_path))
+            if dump_success:
+                logger.info(f"SQL-дамп БД успешно создан: {sql_output_path}")
+            else:
+                logger.error(f"Не удалось создать SQL-дамп БД: {sql_output_path}")
+            # --- КОНЕЦ НОВОГО КОДА ---
         else:
             logger.error("Экспорт через CLI завершился с ошибкой.")
             raise Exception("Ошибка экспорта")
@@ -132,6 +166,11 @@ def export_results_cli(export_type: str, output_path: str, project_path: str) ->
     except Exception as e:
         logger.error(f"Ошибка при экспорте через CLI: {e}", exc_info=True) # exc_info=True для трассировки
         raise
+    finally:
+        # --- НОВЫЙ КОД: Удаляем FileHandler после завершения ---
+        logger.removeHandler(export_file_handler)
+        export_file_handler.close()
+        # --- КОНЕЦ НОВОГО КОДА ---
 
 
 def start_interactive_mode() -> None:
