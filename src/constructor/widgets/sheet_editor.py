@@ -1,16 +1,14 @@
 # src/constructor/widgets/sheet_editor.py
 """
-Модуль для виджета редактора листа.
+Модуль для виджета редактора листа с Fluent Widgets.
 """
 
 import logging
 from typing import Optional, List, Dict, Any
 
-from PySide6.QtCore import Qt, Slot, Signal
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTableView, QHeaderView,
-    QMessageBox, QLabel
-)
+# --- НОВОЕ: Импорт из qfluentwidgets ---
+from qfluentwidgets import TableWidget
+# --- КОНЕЦ НОВОГО ---
 
 # Импортируем AppController
 from src.core.app_controller import AppController
@@ -19,9 +17,11 @@ from src.core.app_controller import AppController
 logger = logging.getLogger(__name__)
 
 
-class SheetEditor(QWidget):
+# --- НОВОЕ: SheetEditor наследуется от TableWidget ---
+class SheetEditor(TableWidget):
     """
-    Виджет для отображения и редактирования содержимого листа.
+    Виджет для отображения и редактирования содержимого листа с Fluent дизайном.
+    Наследуется от TableWidget из qfluentwidgets.
     """
 
     def __init__(self, app_controller: AppController):
@@ -34,32 +34,24 @@ class SheetEditor(QWidget):
         super().__init__()
         self.app_controller: AppController = app_controller
         self.sheet_name: Optional[str] = None
-        self._table_view: Optional[QTableView] = None
+        # self._table_view: Optional[QTableView] = None # Уже есть self (TableWidget)
         # TODO: Добавить модель данных (QAbstractItemModel)
         # self._model = None
         self._setup_ui()
-        logger.debug("SheetEditor инициализирован.")
+        logger.debug("SheetEditor (Fluent) инициализирован.")
 
     def _setup_ui(self):
         """Настраивает UI виджета."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self._label_sheet_name = QLabel("Лист: <Не выбран>")
-        self._label_sheet_name.setStyleSheet("font-weight: bold; padding: 5px;")
-        layout.addWidget(self._label_sheet_name)
-
-        self._table_view = QTableView()
-        self._table_view.setAlternatingRowColors(True)
+        logger.debug("Настройка UI SheetEditor (Fluent)...")
+        # TableWidget уже настроен, просто установим параметры
+        self.setAlternatingRowColors(True)
         # Настройка заголовков
-        horizontal_header = self._table_view.horizontalHeader()
-        horizontal_header.setSectionResizeMode(QHeaderView.Interactive)
-        vertical_header = self._table_view.verticalHeader()
-        vertical_header.setSectionResizeMode(QHeaderView.Fixed)
+        horizontal_header = self.horizontalHeader()
+        # horizontal_header.setSectionResizeMode(QHeaderView.Interactive) # По умолчанию Interactive
+        vertical_header = self.verticalHeader()
+        # vertical_header.setSectionResizeMode(QHeaderView.Fixed) # По умолчанию Fixed
         vertical_header.setDefaultSectionSize(20) # Высота строки
-
-        layout.addWidget(self._table_view)
-        logger.debug("UI SheetEditor настроено.")
+        logger.debug("UI SheetEditor (Fluent) настроено.")
 
     def load_sheet(self, sheet_name: str):
         """
@@ -68,9 +60,9 @@ class SheetEditor(QWidget):
         Args:
             sheet_name (str): Имя листа для загрузки.
         """
-        logger.info(f"Загрузка листа '{sheet_name}' в SheetEditor...")
+        logger.info(f"Загрузка листа '{sheet_name}' в SheetEditor (Fluent)...")
         self.sheet_name = sheet_name
-        self._label_sheet_name.setText(f"Лист: {sheet_name}")
+        # self._label_sheet_name.setText(f"Лист: {sheet_name}") # Убираем, так как это TableWidget
 
         # TODO: Получить данные листа из AppController
         # Например: self.app_controller.get_sheet_editable_data(sheet_name)
@@ -105,9 +97,9 @@ class SheetEditor(QWidget):
                  raw_data = storage.load_sheet_raw_data(sheet_name)
                  logger.debug(f"Загружены сырые данные для листа '{sheet_name}': {len(raw_data) if raw_data else 0} записей.")
                  
-                 # TODO: Создать модель данных и привязать её к _table_view
+                 # TODO: Создать модель данных и привязать её к self (TableWidget)
                  # self._model = SomeDataModel(raw_data) # Пока нет модели
-                 # self._table_view.setModel(self._model)
+                 # self.setModel(self._model)
                  
                  # Временное решение: просто покажем сообщение
                  QMessageBox.information(self, "Заглушка", f"Лист '{sheet_name}' выбран.\nДанные: {len(raw_data) if raw_data else 0} записей.\n(Редактор пока в разработке)")
