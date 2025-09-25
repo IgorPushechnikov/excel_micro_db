@@ -8,6 +8,7 @@ CLI точка входа в Excel Micro DB.
 import argparse
 import sys
 import os
+import logging
 from pathlib import Path
 
 # Добавляем src в путь поиска модулей
