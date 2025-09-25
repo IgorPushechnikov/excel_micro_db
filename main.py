@@ -200,8 +200,8 @@ def start_interactive_mode() -> None:
         logger.error(f"Ошибка в интерактивном режиме: {e}")
         raise
 
-def main():
-    """Главная функция точки входа."""
+def main() -> int:
+    """Главная функция точки входа. Возвращает код завершения."""
     parser = argparse.ArgumentParser(
         description="Excel Micro DB - микро-СУБД для анализа и воссоздания логики Excel файлов",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -212,6 +212,7 @@ def main():
   python main.py --export excel --output ./output/result.xlsx --project-path ./my_project
   python main.py --process --config config/batch.yaml
   python main.py --interactive
+  python main.py --gui
         """
     )
     
@@ -251,6 +252,12 @@ def main():
         help='Запуск интерактивного режима (REPL)'
     )
     
+    mode_group.add_argument(
+        '--gui',
+        action='store_true',
+        help='Запуск графического интерфейса пользователя (GUI)'
+    )
+    
     # Дополнительные аргументы
     parser.add_argument(
         '--project-path',
@@ -276,34 +283,64 @@ def main():
     
     try:
         # Обработка выбранных режимов
-        if args.init:
+        if args.gui:
+            # --- НОВОЕ: Запуск GUI ---
+            logger.info("Запуск графического интерфейса...")
+            # Импортируем и запускаем GUI
+            try:
+                from src.constructor.gui_app import main as gui_main
+                logger.debug("Модуль GUI успешно импортирован.")
+                # Передаём управление в GUI
+                # gui_main() не принимает аргументы, как и CLI main()
+                # Если нужно передать project_path из CLI, это нужно предусмотреть в gui_main
+                # Пока просто запускаем
+                return gui_main() # Возвращаем код завершения из GUI
+            except ImportError as ie:
+                logger.critical(f"Не удалось импортировать GUI: {ie}")
+                print("Ошибка: Не удалось загрузить графический интерфейс. Убедитесь, что PySide6 установлен.")
+                return 1
+            except Exception as e_gui:
+                logger.critical(f"Критическая ошибка при запуске GUI: {e_gui}", exc_info=True)
+                print(f"Ошибка: Критическая ошибка при запуске GUI: {e_gui}")
+                return 1
+            # --- КОНЕЦ НОВОГО ---
+            
+        elif args.init:
             if not args.project_path:
                 parser.error("--init требует указания --project-path")
             initialize_project(args.project_path)
+            return 0 # Успех
             
         elif args.analyze:
             # --analyze теперь требует --project-path
             if not args.project_path:
                 parser.error("--analyze требует указания --project-path")
             analyze_excel(args.analyze, args.project_path)
+            return 0 # Успех
             
         elif args.export:
             # --export требует --output и --project-path
             if not args.output or not args.project_path:
                 parser.error("--export требует указания --output и --project-path")
             export_results_cli(args.export, args.output, args.project_path)
+            return 0 # Успех
             
         elif args.process:
             if not args.config:
                 parser.error("--process требует указания --config")
             process_data(args.config)
+            return 0 # Успех
             
         elif args.interactive:
             start_interactive_mode()
+            return 0 # Успех
             
     except Exception as e:
         logger.critical(f"Критическая ошибка приложения: {e}")
-        sys.exit(1)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    # main() возвращает код, который мы передаём в sys.exit()
+    exit_code = main() 
+    # Если main() не вернул ничего (None), sys.exit() интерпретирует это как 0
+    sys.exit(exit_code)
