@@ -1,6 +1,6 @@
 # src/constructor/gui_app.py
 """
-Точка входа для графического интерфейса Excel Micro DB.
+Точка входа для графического интерфейса Excel Micro DB с Fluent Widgets.
 """
 
 import sys
@@ -10,6 +10,10 @@ from pathlib import Path
 # Добавляем корень проекта в sys.path, чтобы можно было импортировать модули
 project_root = Path(__file__).parent.parent.parent.resolve()
 sys.path.insert(0, str(project_root))
+
+# --- НОВОЕ: Импорт из qfluentwidgets для установки стиля ---
+from qfluentwidgets import FluentLightStyle, FluentDarkStyle, setTheme, Theme
+# --- КОНЕЦ НОВОГО ---
 
 from PySide6.QtWidgets import QApplication
 # from PySide6.QtCore import Qt # Пока не используем
@@ -31,10 +35,15 @@ def main():
     app.setApplicationVersion("0.1.0")
     # app.setStyle("Fusion") # Можно включить позже
 
+    # --- НОВОЕ: Установка стиля Fluent ---
+    # setTheme(Theme.LIGHT) # или Theme.DARK
+    # FluentLightStyle().polish(app) # или FluentDarkStyle()
+    # --- КОНЕЦ НОВОГО ---
+
     # 2. Создаём AppController
     # Передаём путь к рабочей области, если нужно, или None для дефолтного
     # project_path = Path.home() / "excel_micro_db_workspace" # Пример
-    project_path = None
+    project_path = None # Или Path("путь/к/проекту")
     app_controller = create_app_controller(project_path=project_path)
     if not app_controller.initialize():
          print("Ошибка инициализации AppController.")
@@ -56,7 +65,7 @@ def main():
 
 if __name__ == "__main__":
     # Для корректного отображения SVG и других ресурсов
-    # QCoreApplication.setAttribute(Qt.AA_UseSoftwareOpenGL)
-    # QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling) # Обычно включено по умолчанию
-    # QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps) # Обычно включено по умолчанию
+    # QApplication.setAttribute(Qt.AA_UseSoftwareOpenGL)
+    # QApplication.setAttribute(Qt.AA_EnableHighDpiScaling) # Обычно включено по умолчанию
+    # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps) # Обычно включено по умолчанию
     sys.exit(main())
