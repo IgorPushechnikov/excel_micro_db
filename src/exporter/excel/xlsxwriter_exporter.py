@@ -325,13 +325,13 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
     """
     logger.info(f"[ДИАГРАММА] Начало экспорта диаграмм для листа ID {sheet_id}.")
     
+    # 1. Подключаемся к БД проекта для загрузки диаграмм
+    storage = ProjectDBStorage(str(project_db_path))
+    if not storage.connect():
+        logger.error(f"[ДИАГРАММА] Не удалось подключиться к БД проекта для загрузки диаграмм листа ID {sheet_id}.")
+        return
+    
     try:
-        # 1. Подключаемся к БД проекта для загрузки диаграмм
-        storage = ProjectDBStorage(str(project_db_path))
-        if not storage.connect():
-            logger.error(f"[ДИАГРАММА] Не удалось подключиться к БД проекта для загрузки диаграмм листа ID {sheet_id}.")
-            return
-        
         # 2. Загружаем диаграммы из БД
         charts_data = storage.load_sheet_charts(sheet_id)
         logger.debug(f"[ДИАГРАММА] Загружено {len(charts_data)} диаграмм для листа ID {sheet_id}.")
@@ -465,7 +465,7 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
     except Exception as e_outer:
         logger.error(f"[ДИАГРАММА] Критическая ошибка при экспорте диаграмм для листа ID {sheet_id}: {e_outer}", exc_info=True)
         # Пытаемся закрыть соединение, если оно было открыто
-        if 'storage' in locals() and storage:
+        if storage:
             storage.disconnect()
 
 def _apply_merged_cells(worksheet, merged_ranges: List[str]):
