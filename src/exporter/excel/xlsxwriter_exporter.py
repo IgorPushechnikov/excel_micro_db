@@ -417,29 +417,24 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     logger.debug(f"[ДИАГРАММА] Установлен размер: {width_px}x{height_px} пикселей (из EMU {width_emu}x{height_emu})")
                 
                 # 8. Настраиваем позицию и вставляем диаграмму на лист
+                # Используем только from_row и from_col для грубой позиции, игнорируем смещения EMU
                 position_info = chart_data.get('position')
                 if position_info:
                     from_col = position_info.get('from_col')
                     from_row = position_info.get('from_row')
-                    from_col_offset_emu = position_info.get('from_col_offset')
-                    from_row_offset_emu = position_info.get('from_row_offset')
 
                     if from_col is not None and from_row is not None:
-                        # xlsxwriter.insert_chart может принимать смещения в опциях
-                        # Конвертируем EMU в пиксели для смещений
-                        x_offset_px = int(from_col_offset_emu / 9525) if from_col_offset_emu is not None else 0
-                        y_offset_px = int(from_row_offset_emu / 9525) if from_row_offset_emu is not None else 0
-
-                        # Вставляем с опциями смещения
-                        insert_options = {'x_offset': x_offset_px, 'y_offset': y_offset_px}
-                        worksheet.insert_chart(from_row, from_col, chart, insert_options)
-                        logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в ({from_row}, {from_col}) с опциями: {insert_options}")
+                        # Вставляем диаграмму в ячейку (from_row, from_col) без смещения
+                        # Это дает приблизительное, но стабильное позиционирование
+                        worksheet.insert_chart(from_row, from_col, chart)
+                        logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в ({from_row}, {from_col}) без смещения.")
                     else:
                         logger.warning(f"[ДИАГРАММА] Неполные данные позиции: from_col={from_col}, from_row={from_row}")
-                        # Вставляем без смещения, если данные неполные
-                        worksheet.insert_chart(from_row, from_col, chart)
+                        # Вставляем в A1 (0, 0), если данные неполные
+                        worksheet.insert_chart(0, 0, chart)
+                        logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в (0, 0) по умолчанию.")
                 else:
-                    logger.warning(f"[ДИАГРАММА] У диаграммы нет информации о позиции. Будет размещена по умолчанию.")
+                    logger.warning(f"[ДИАГРАММА] У диаграммы нет информации о позиции. Вставляется в (0, 0) по умолчанию.")
                     # Если позиция неизвестна, вставляем в ячейку A1 (0, 0)
                     worksheet.insert_chart(0, 0, chart) # Вставляем в A1
                 
