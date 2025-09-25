@@ -430,10 +430,35 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     logger.debug(f"[ДИАГРАММА] Установлен 3D стиль (10) для PieChart3D.")
                 # --- КОНЕЦ НОВОГО КОДА ---
 
-                # --- НОВОЕ (или обновление существующего): Настраиваем легенду диаграммы ---
-                # xlsxwriter по умолчанию может включать легенду, но явно указываем, что она нужна.
-                chart.set_legend({'position': 'bottom'}) # Можно изменить позицию по необходимости
-                logger.debug(f"[ДИАГРАММА] Установлена легенда диаграммы (позиция: bottom).")
+                # --- НОВОЕ (улучшенное): Настраиваем легенду диаграммы ---
+                # Проверяем, есть ли информация о легенде в данных из БД
+                legend_info = chart_data.get('legend')
+                legend_options = {}
+
+                if legend_info:
+                    # Используем настройки легенды из БД
+                    # Позиция
+                    db_position = legend_info.get('position')
+                    # xlsxwriter использует немного другие названия позиций, иногда
+                    # Нужно сопоставить. Например, openpyxl 'b' -> xlsxwriter 'bottom'
+                    position_mapping = {
+                        'b': 'bottom',
+                        't': 'top',
+                        'l': 'left',
+                        'r': 'right',
+                        'tr': 'top_right',
+                        # Добавить другие сопоставления при необходимости
+                    }
+                    xlsxwriter_position = position_mapping.get(db_position, db_position) # Используем сопоставление или оригинальное значение
+                    if xlsxwriter_position:
+                        legend_options['position'] = xlsxwriter_position
+                
+                # Если из БД не пришло никаких опций, xlsxwriter может показать легенду по умолчанию.
+                # Но чтобы быть уверенным, что легенда всегда отображается (если она была в оригинале),
+                # и управлять её поведением, мы всегда вызываем set_legend.
+                # Если legend_options пуст, будут применены настройки по умолчанию xlsxwriter.
+                chart.set_legend(legend_options)
+                logger.debug(f"[ДИАГРАММА] Установлена легенда диаграммы с опциями: {legend_options if legend_options else '(по умолчанию)'}")
                 # --- КОНЕЦ НОВОГО КОДА ---
                 
                 # 7. Настраиваем позицию и размер диаграммы, используя ячейки
