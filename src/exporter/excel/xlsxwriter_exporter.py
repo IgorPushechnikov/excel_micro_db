@@ -419,23 +419,23 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                 # 8. Настраиваем позицию и вставляем диаграмму на лист
                 position_info = chart_data.get('position')
                 if position_info:
-                from_col = position_info.get('from_col')
-                from_row = position_info.get('from_row')
-                from_col_offset_emu = position_info.get('from_col_offset')
-                from_row_offset_emu = position_info.get('from_row_offset')
+                    from_col = position_info.get('from_col')
+                    from_row = position_info.get('from_row')
+                    from_col_offset_emu = position_info.get('from_col_offset')
+                    from_row_offset_emu = position_info.get('from_row_offset')
 
-                if from_col is not None and from_row is not None:
-                # xlsxwriter.insert_chart может принимать смещения в опциях
-                # Конвертируем EMU в пиксели для смещений
-                x_offset_px = int(from_col_offset_emu / 9525) if from_col_offset_emu is not None else 0
-                y_offset_px = int(from_row_offset_emu / 9525) if from_row_offset_emu is not None else 0
+                    if from_col is not None and from_row is not None:
+                        # xlsxwriter.insert_chart может принимать смещения в опциях
+                        # Конвертируем EMU в пиксели для смещений
+                        x_offset_px = int(from_col_offset_emu / 9525) if from_col_offset_emu is not None else 0
+                        y_offset_px = int(from_row_offset_emu / 9525) if from_row_offset_emu is not None else 0
 
-                # Вставляем с опциями смещения
-                insert_options = {'x_offset': x_offset_px, 'y_offset': y_offset_px}
-                    worksheet.insert_chart(from_row, from_col, chart, insert_options)
-                logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в ({from_row}, {from_col}) с опциями: {insert_options}")
+                        # Вставляем с опциями смещения
+                        insert_options = {'x_offset': x_offset_px, 'y_offset': y_offset_px}
+                        worksheet.insert_chart(from_row, from_col, chart, insert_options)
+                        logger.debug(f"[ДИАГРАММА] Диаграмма вставлена в ({from_row}, {from_col}) с опциями: {insert_options}")
                     else:
-                    logger.warning(f"[ДИАГРАММА] Неполные данные позиции: from_col={from_col}, from_row={from_row}")
+                        logger.warning(f"[ДИАГРАММА] Неполные данные позиции: from_col={from_col}, from_row={from_row}")
                         # Вставляем без смещения, если данные неполные
                         worksheet.insert_chart(from_row, from_col, chart)
                 else:
