@@ -233,7 +233,7 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
         # --- Конец извлечения позиции и размера ---
         # Сохраняем позицию и размеры в chart_data
         if position_info:
-        chart_data['position'] = position_info
+            chart_data['position'] = position_info
         if width_emu is not None:
             chart_data['width_emu'] = width_emu
         if height_emu is not None:
@@ -245,10 +245,10 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
             for idx, s in enumerate(chart_obj.ser):
                 ser_dict = {}
             # Сохраняем адреса диапазонов данных
-        if hasattr(s, 'val') and s.val and hasattr(s.val, 'numRef') and s.val.numRef:
-        ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
-        if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
-        ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
+            if hasattr(s, 'val') and s.val and hasattr(s.val, 'numRef') and s.val.numRef:
+                ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
+            if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
+                ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
         # ... другие атрибуты серии (название, цвета и т.д.)
         series_data.append(ser_dict)
         chart_data['series'] = series_data
