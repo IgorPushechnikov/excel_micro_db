@@ -1,19 +1,23 @@
 # src/core/app_controller.py
+"""
+Модуль для центрального контроллера приложения.
+Управляет жизненным циклом приложения и координирует работу
+между различными менеджерами (DataManager, AnalysisManager и т.д.).
+"""
 
 import os
-import sqlite3
 import logging
 from typing import Dict, Any, List, Optional, Tuple, Union
+from pathlib import Path
 
 # Импортируем анализатор
-from src.analyzer.logic_documentation import analyze_excel_file
+# from src.analyzer.logic_documentation import analyze_excel_file # Импорт будет в AnalysisManager
 
 # Импортируем хранилище
 from src.storage.base import ProjectDBStorage
 
 # Импортируем экспортёры
-from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter  # Основной
-# from src.exporter.fallback.direct_db_exporter import export_project as export_with_openpyxl  # Аварийный (отключен)
+# from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # Импорт будет в ExportManager
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -21,8 +25,17 @@ from src.utils.logger import get_logger
 # --- Исключения ---
 from src.exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
 
-logger = get_logger(__name__)
+# Импорты для новых менеджеров (теперь из поддиректории)
+from .controller.data_manager import DataManager
+from .controller.project_manager import ProjectManager # Предполагается, что он тоже будет в controller
+# from .controller.format_manager import FormatManager # Пока не реализован
+# from .controller.chart_manager import ChartManager # Пока не реализован
+# from .controller.analysis_manager import AnalysisManager # Пока не реализован
+# from .controller.export_manager import ExportManager # Пока не реализован
+# from .controller.node_manager import NodeManager # Пока не реализован
+# from .controller.processor_bridge import ProcessorBridge # Пока не реализован
 
+logger = get_logger(__name__)
 
 class AppController:
     """
@@ -43,6 +56,16 @@ class AppController:
         self.storage: Optional[ProjectDBStorage] = None
         self._current_project_data: Optional[Dict[str, Any]] = None  # Кэш метаданных проекта
 
+        # Инициализация менеджеров (теперь из поддиректории controller)
+        self.project_manager = ProjectManager(self)
+        self.data_manager = DataManager(self)
+        # self.format_manager = FormatManager(self) # Пока не реализован
+        # self.chart_manager = ChartManager(self) # Пока не реализован
+        # self.analysis_manager = AnalysisManager(self) # Пока не реализован
+        # self.export_manager = ExportManager(self) # Пока не реализован
+        # self.node_manager = NodeManager(self) # Пока не реализован
+        # self.processor_bridge = ProcessorBridge(self) # Пока не реализован
+
         logger.debug(f"AppController инициализирован для проекта: {project_path}")
 
     def initialize(self) -> bool:
@@ -55,19 +78,7 @@ class AppController:
         Returns:
             bool: True, если инициализация прошла успешно.
         """
-        if not self.project_path:
-            # Режим без проекта (например, для создания нового)
-            logger.info("AppController инициализирован в режиме без проекта.")
-            return True
-            
-        project_db_path = os.path.join(self.project_path, "project_data.db")
-        if os.path.exists(project_db_path):
-            # Пытаемся загрузить существующий проект
-            return self.load_project()
-        else:
-            # Проект еще не создан, но путь задан. Готовы к созданию.
-            logger.info(f"AppController инициализирован для нового проекта в: {self.project_path}")
-            return True
+        return self.project_manager.initialize()
 
     @property
     def is_project_loaded(self) -> bool:
@@ -79,110 +90,55 @@ class AppController:
         """Возвращает текущие метаданные проекта."""
         return self._current_project_data
 
-    # --- Управление проектом ---
-
+    # --- Управление проектом (делегировано ProjectManager) ---
     def create_project(self, project_path: str) -> bool:
-        """
-        Создает новую структуру проекта и инициализирует БД.
-        Этот метод вызывается из CLI.
-
-        Args:
-            project_path (str): Путь к новой директории проекта.
-
-        Returns:
-            bool: True, если проект создан успешно, иначе False.
-        """
-        # Обновляем пути контроллера
-        self.project_path = project_path
-        self.project_db_path = os.path.join(project_path, "project_data.db")
-        
-        project_name = os.path.basename(os.path.abspath(project_path))
-        return self.create_new_project(project_name)
+        """Создает новый проект."""
+        return self.project_manager.create_project(project_path)
 
     def create_new_project(self, project_name: str) -> bool:
-        """
-        Создает новую структуру проекта и инициализирует БД.
-
-        Args:
-            project_name (str): Имя нового проекта.
-
-        Returns:
-            bool: True, если проект создан успешно, иначе False.
-        """
-        logger.info(f"Создание нового проекта: {project_name}")
-        try:
-            # Создаем директорию проекта, если её нет
-            os.makedirs(self.project_path, exist_ok=True)
-            logger.debug(f"Директория проекта создана/проверена: {self.project_path}")
-
-            # Инициализируем хранилище и схему БД
-            self.storage = ProjectDBStorage(self.project_db_path)
-            if not self.storage.initialize_project_tables():
-                logger.error("Не удалось инициализировать схему БД проекта.")
-                return False
-
-            # TODO: Сохранить метаданные проекта (имя, дата создания) в БД
-            # Это может быть сделано через storage или напрямую
-
-            logger.info(f"Проект '{project_name}' успешно создан в {self.project_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Ошибка при создании проекта '{project_name}': {e}", exc_info=True)
-            return False
+        """Создает новую структуру проекта."""
+        return self.project_manager.create_new_project(project_name)
 
     def load_project(self) -> bool:
-        """
-        Загружает существующий проект.
-
-        Returns:
-            bool: True, если проект загружен успешно, иначе False.
-        """
-        logger.info(f"Загрузка проекта из: {self.project_path}")
-        if not os.path.exists(self.project_db_path):
-            logger.error(f"Файл БД проекта не найден: {self.project_db_path}")
-            return False
-
-        try:
-            self.storage = ProjectDBStorage(self.project_db_path)
-            if not self.storage.connect():
-                logger.error("Не удалось подключиться к БД проекта.")
-                return False
-
-            # TODO: Загрузить метаданные проекта в self._current_project_data
-
-            logger.info("Проект успешно загружен.")
-            return True
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке проекта из {self.project_path}: {e}", exc_info=True)
-            return False
+        """Загружает существующий проект."""
+        return self.project_manager.load_project()
 
     def close_project(self):
-        """Закрывает текущий проект и освобождает ресурсы."""
-        logger.info("Закрытие проекта.")
-        if self.storage:
-            self.storage.disconnect()
-            self.storage = None
+        """Закрывает текущий проект."""
+        self.project_manager.close_project()
         self._current_project_data = None
-        logger.debug("Проект закрыт.")
 
     def shutdown(self):
         """Полное завершение работы контроллера."""
         self.close_project()
         logger.info("AppController завершил работу.")
 
-    # --- Анализ Excel-файлов ---
+    # --- Работа с данными листа (делегировано DataManager) ---
+    def get_sheet_data(self, sheet_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Получает данные листа для отображения."""
+        return self.data_manager.get_sheet_data(sheet_name)
 
+    def get_sheet_editable_data(self, sheet_name: str) -> Optional[Dict[str, Any]]:
+        """Получает редактируемые данные листа."""
+        return self.data_manager.get_sheet_editable_data(sheet_name)
+
+    def update_sheet_cell_in_project(self, sheet_name: str, row_index: int, column_name: str, new_value: str) -> bool:
+        """Обновляет значение ячейки в проекте."""
+        return self.data_manager.update_sheet_cell_in_project(sheet_name, row_index, column_name, new_value)
+
+    def update_cell_value(self, sheet_name: str, cell_address: str, new_value: Any) -> bool:
+        """Обновляет значение ячейки."""
+        return self.data_manager.update_cell_value(sheet_name, cell_address, new_value)
+
+    def get_edit_history(self, sheet_name: Optional[str] = None, limit: Optional[int] = 10) -> List[Dict[str, Any]]:
+        """Получает историю редактирования."""
+        return self.data_manager.get_edit_history(sheet_name, limit)
+
+    # --- Анализ Excel-файлов (делегировано AnalysisManager - заглушка) ---
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Анализирует Excel-файл и сохраняет результаты в БД проекта.
-
-        Args:
-            file_path (str): Путь к анализируемому .xlsx файлу.
-            options (Optional[Dict[str, Any]]): Опции анализа.
-
-        Returns:
-            bool: True, если анализ и сохранение успешны, иначе False.
-        """
+        """Анализирует Excel-файл и сохраняет результаты в БД проекта."""
+        # Пока вызываем напрямую, но в будущем будет через AnalysisManager
+        from src.analyzer.logic_documentation import analyze_excel_file
         if not self.storage:
             logger.error("Проект не загружен. Невозможно выполнить анализ.")
             return False
@@ -193,7 +149,6 @@ class AppController:
 
         logger.info(f"Начало анализа Excel-файла: {file_path}")
         try:
-            # 1. Анализ файла
             analysis_results = analyze_excel_file(file_path)
             logger.debug("Анализ Excel-файла завершен.")
 
@@ -293,302 +248,30 @@ class AppController:
             logger.error(f"Неожиданная ошибка при получении/создании sheet_id для '{sheet_name}': {e}", exc_info=True)
             return None
 
-    # --- Работа с данными листа (для GUI) ---
-
-    def get_sheet_data(self, sheet_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """
-        Получает данные листа для отображения в GUI.
-
-        Возвращает кортеж (raw_data, editable_data).
-
-        Args:
-            sheet_name (str): Имя листа.
-
-        Returns:
-            Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-            Кортеж из списков сырых и редактируемых данных.
-        """
-        if not self.storage:
-            logger.error("Проект не загружен.")
-            return ([], [])
-
-        try:
-            logger.debug(f"Загрузка данных для листа '{sheet_name}'...")
-
-            # Загружаем "сырые данные"
-            raw_data = self.storage.load_sheet_raw_data(sheet_name)
-            logger.debug(f"Загружено {len(raw_data)} записей сырых данных.")
-
-            # Получаем sheet_id для загрузки редактируемых данных
-            sheet_id = self._get_sheet_id_by_name(sheet_name)
-            if sheet_id is None:
-                logger.warning(f"Не найден sheet_id для листа '{sheet_name}'. Редактируемые данные не загружены.")
-                editable_data = []
-            else:
-                # Загружаем редактируемые данные
-                # --- Используем исправленный метод из storage ---
-                editable_data = self.storage.load_sheet_editable_data(sheet_id, sheet_name)
-                logger.debug(f"Загружено {len(editable_data)} записей редактируемых данных.")
-
-            return (raw_data, editable_data)
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке данных для листа '{sheet_name}': {e}", exc_info=True)
-            return ([], [])
-
-    def get_sheet_editable_data(self, sheet_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Получает редактируемые данные листа в формате, ожидаемом SheetDataModel.
-        Этот метод вызывается из SheetEditor.
-
-        Args:
-            sheet_name (str): Имя листа.
-
-        Returns:
-            Optional[Dict[str, Any]]: Словарь с 'column_names' и 'rows', или None в случае ошибки.
-        """
-        if not self.storage:
-            logger.error("Проект не загружен.")
-            return None
-
-        try:
-            logger.debug(f"Загрузка редактируемых данных для листа '{sheet_name}' для GUI...")
-
-            # Для MVP предположим, что имена столбцов - это стандартные имена Excel (A, B, C...)
-            # В будущем их нужно будет загружать из метаданных листа
-            from src.constructor.widgets.sheet_editor import SheetDataModel
-            dummy_model = SheetDataModel({"column_names": [], "rows": []})
-            max_columns = 20  # Временное значение, в реальности нужно из метаданных
-            column_names = dummy_model._generate_excel_column_names(max_columns)
-
-            # Получаем sheet_id
-            sheet_id = self._get_sheet_id_by_name(sheet_name)
-            if sheet_id is None:
-                logger.warning(f"Не найден sheet_id для листа '{sheet_name}'.")
-                # Возвращаем структуру с пустыми данными
-                return {"column_names": column_names, "rows": []}
-
-            # Загружаем редактируемые данные
-            editable_data_list = self.storage.load_sheet_editable_data(sheet_id, sheet_name)
-            
-            # Преобразуем список словарей в список кортежей для модели
-            # Предполагаем, что данные хранятся по адресам, и нам нужно создать матрицу
-            # Это упрощенная реализация для MVP
-            rows = []
-            if editable_data_list:
-                # Найдем максимальный номер строки и столбца
-                max_row = 0
-                max_col = 0
-                cell_dict = {}
-                for item in editable_data_list:
-                    addr = item["cell_address"]
-                    # Простой парсер адреса (только для A1, B2 и т.д., без диапазонов)
-                    col_part = ""
-                    row_part = ""
-                    for char in addr:
-                        if char.isalpha():
-                            col_part += char
-                        else:
-                            row_part += char
-                    if row_part and col_part:
-                        row_idx = int(row_part) - 1  # 0-based
-                        col_idx = self._column_letter_to_index(col_part)
-                        max_row = max(max_row, row_idx)
-                        max_col = max(max_col, col_idx)
-                        cell_dict[(row_idx, col_idx)] = item["value"]
-                
-                # Создаем матрицу данных
-                for r in range(max_row + 1):
-                    row = []
-                    for c in range(max(max_col + 1, len(column_names))):
-                        row.append(cell_dict.get((r, c), ""))
-                    rows.append(tuple(row))
-            else:
-                # Если данных нет, создаем одну пустую строку
-                rows = [tuple([""] * len(column_names))]
-
-            result = {
-                "column_names": column_names,
-                "rows": rows
-            }
-            logger.debug(f"Редактируемые данные для листа '{sheet_name}' подготовлены для GUI.")
-            return result
-
-        except Exception as e:
-            logger.error(f"Ошибка при подготовке редактируемых данных для листа '{sheet_name}': {e}", exc_info=True)
-            return None
-
-    def _column_letter_to_index(self, letter: str) -> int:
-        """Преобразует букву столбца Excel (например, 'A', 'Z', 'AA') в 0-базовый индекс."""
-        result = 0
-        for char in letter:
-            result = result * 26 + (ord(char.upper()) - ord('A') + 1)
-        return result - 1  # 0-based index
-
-    def _get_sheet_id_by_name(self, sheet_name: str) -> Optional[int]:
-        """Вспомогательный метод для получения sheet_id по имени листа."""
-        if not self.storage or not self.storage.connection:
-            return None
-
-        try:
-            cursor = self.storage.connection.cursor()
-            # Предполагаем project_id = 1
-            cursor.execute("SELECT sheet_id FROM sheets WHERE name = ? AND project_id = 1", (sheet_name,))
-            result = cursor.fetchone()
-            return result[0] if result else None
-        except sqlite3.Error:
-            return None
-
-    def update_sheet_cell_in_project(self, sheet_name: str, row_index: int, column_name: str, new_value: str) -> bool:
-        """
-        Обновляет значение ячейки в проекте. Этот метод вызывается из SheetEditor.
-        Он преобразует координаты из GUI в адрес ячейки Excel и вызывает update_cell_value.
-
-        Args:
-            sheet_name (str): Имя листа.
-            row_index (int): Индекс строки (0-based).
-            column_name (str): Имя столбца (например, 'A', 'B', 'AA').
-            new_value (str): Новое значение ячейки.
-
-        Returns:
-            bool: True, если обновление успешно, иначе False.
-        """
-        try:
-            # Преобразуем координаты в адрес ячейки Excel (например, A1)
-            cell_address = f"{column_name}{row_index + 1}"  # row_index 0-based -> Excel 1-based
-            return self.update_cell_value(sheet_name, cell_address, new_value)
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении ячейки в проекте: {e}", exc_info=True)
-            return False
-
-    def update_cell_value(self, sheet_name: str, cell_address: str, new_value: Any) -> bool:
-        """
-        Обновляет значение ячейки и записывает изменение в историю.
-
-        Args:
-            sheet_name (str): Имя листа.
-            cell_address (str): Адрес ячейки (например, 'A1').
-            new_value (Any): Новое значение ячейки.
-
-        Returns:
-            bool: True, если обновление успешно, иначе False.
-        """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно обновить ячейку.")
-            return False
-
-        try:
-            logger.debug(f"Обновление ячейки {cell_address} на листе '{sheet_name}' на значение '{new_value}'.")
-
-            # 1. Получаем sheet_id
-            sheet_id = self._get_sheet_id_by_name(sheet_name)
-            if sheet_id is None:
-                logger.error(f"Не найден sheet_id для листа '{sheet_name}'. Обновление невозможно.")
-                return False
-
-            # 2. Получаем старое значение (для истории)
-            # Это может быть сложно, так как оно может быть в raw_data или editable_data
-            # Для простоты MVP, предположим, что мы можем получить его из editable_data
-            # или установить None. Более точная логика может потребоваться.
-            old_value = None  # TODO: Получить реальное старое значение
-
-            # 3. Обновляем редактируемые данные
-            # --- Используем исправленный метод из storage ---
-            if not self.storage.update_editable_cell(sheet_id, sheet_name, cell_address, new_value):
-                logger.error(f"Не удалось обновить редактируемую ячейку {cell_address} на листе '{sheet_name}'.")
-                return False
-
-            # 4. Записываем в историю редактирования
-            # --- Используем метод из storage ---
-            if not self.storage.save_edit_history_record(sheet_id, cell_address, old_value, new_value):
-                logger.warning(f"Не удалось записать изменение ячейки {cell_address} в историю.")
-
-            logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена.")
-            return True
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении ячейки {cell_address} на листе '{sheet_name}': {e}", exc_info=True)
-            return False
-
-    # --- Экспорт ---
-
+    # --- Экспорт (делегировано ExportManager - заглушка) ---
     def export_results(self, export_type: str, output_path: str) -> bool:
-        """
-        Универсальный метод для экспорта результатов проекта.
-        Вызывается из CLI и GUI.
-
-        Args:
-            export_type (str): Тип экспорта ('excel').
-            output_path (str): Путь к выходному файлу.
-
-        Returns:
-            bool: True, если экспорт успешен, иначе False.
-        """
+        """Универсальный метод для экспорта результатов проекта."""
+        # Пока вызываем напрямую, но в будущем будет через ExportManager
         if export_type.lower() == 'excel':
-            return self.export_project(output_path, use_xlsxwriter=True) # <-- Изменение: теперь True
+            return self.export_project(output_path, use_xlsxwriter=True)
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
             return False
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
-        """
-        Экспортирует проект в Excel-файл.
-
-        Args:
-            output_path (str): Путь к выходному .xlsx файлу.
-            use_xlsxwriter (bool): Если True, использует основной экспортер (xlsxwriter).
-                                   Ранее использовал аварийный (openpyxl), но он отключен.
-
-        Returns:
-            bool: True, если экспорт успешен, иначе False.
-        """
+        """Экспортирует проект в Excel-файл."""
         logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
-
         try:
-            if use_xlsxwriter:
-                # Используем основной экспортёр xlsxwriter
-                success = export_with_xlsxwriter(self.project_db_path, output_path)
-            else:
-                # Используем аварийный экспортёр openpyxl
-                # Этот блок отключен, так как direct_db_exporter не работает.
-                logger.warning("Попытка использовать отключенный аварийный экспортёр openpyxl.")
-                return False
-                # success = export_with_openpyxl(self.project_db_path, output_path)
-
+            from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
+            success = export_with_xlsxwriter(self.project_db_path, output_path)
             if success:
                 logger.info(f"Проект успешно экспортирован в '{output_path}'.")
             else:
                 logger.error(f"Ошибка при экспорте проекта в '{output_path}'.")
-
             return success
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
             return False
-
-    # --- История редактирования (Undo/Redo) ---
-
-    def get_edit_history(self, sheet_name: Optional[str] = None, limit: Optional[int] = 10) -> List[Dict[str, Any]]:
-        """
-        Получает историю редактирования.
-
-        Args:
-            sheet_name (Optional[str]): Имя листа для фильтрации. Если None, вся история.
-            limit (Optional[int]): Максимальное количество записей.
-
-        Returns:
-            List[Dict[str, Any]]: Список записей истории.
-        """
-        if not self.storage:
-            logger.error("Проект не загружен.")
-            return []
-
-        try:
-            sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
-            return self.storage.load_edit_history(sheet_id, limit)
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
-            return []
-
-    # Другие методы AppController (например, для processor, AppData) будут добавлены позже
-
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
