@@ -7,8 +7,8 @@ import logging
 from typing import Dict, Any, List, Optional, Tuple
 import sqlite3  # Для аннотаций типов, если нужно
 
-# Импортируем AppController для аннотаций типов и доступа к storage
-from .app_controller import AppController
+# Импортируем AppController из родительского пакета core для аннотаций типов и доступа к storage
+from ..app_controller import AppController
 
 # Импортируем ProjectDBStorage
 from src.storage.base import ProjectDBStorage
