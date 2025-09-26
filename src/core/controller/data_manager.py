@@ -2,7 +2,7 @@
 """
 Модуль для управления данными листа.
 Отвечает за загрузку, обновление и историю редактирования данных листа.
-""
+"""
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 import sqlite3  # Для аннотаций типов, если нужно
