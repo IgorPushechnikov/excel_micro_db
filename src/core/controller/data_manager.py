@@ -95,7 +95,7 @@ class DataManager:
 
             # Для MVP предположим, что имена столбцов - это стандартные имена Excel (A, B, C...)
             # В будущем их нужно будет загружать из метаданных листа
-            from src.constructor.widgets.sheet_editor import SheetDataModel
+            from src.constructor.components.sheet_editor import SheetDataModel
             dummy_model = SheetDataModel({"column_names": [], "rows": []})
             max_columns = 20  # Временное значение, в реальности нужно из метаданных
             column_names = dummy_model._generate_excel_column_names(max_columns)
