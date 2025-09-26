@@ -8,7 +8,7 @@
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 
-from PySide6.QtWidgets import QTableView, QAbstractItemDelegate, QStyledItemDelegate, QItemEditorFactory, QWidget, QVBoxLayout, QFrame
+from PySide6.QtWidgets import QTableView, QAbstractItemDelegate, QStyledItemDelegate, QItemEditorFactory, QWidget, QVBoxLayout, QFrame, QAbstractItemView
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal, QItemSelectionModel
 from PySide6.QtGui import QColor, QBrush, QFont, QPainter
 
@@ -258,6 +258,8 @@ class SheetEditor(QFrame):
     """
     Виджет редактора листа (новый GUI).
     """
+    # Сигнал, эмитируемый при изменении выделения ячейки
+    cellSelectionChanged = Signal(str, str) # (cell_address, cell_value)
 
     def __init__(self, app_controller: AppController, sheet_name: str, parent=None):
         """
@@ -321,10 +323,8 @@ class SheetEditor(QFrame):
             # Это можно сделать через сигнал или напрямую, если MainWindow знает о SheetEditor
             # Пока просто логируем.
             logger.debug(f"Выделена ячейка: {cell_address}, значение: '{cell_value}'")
-            # Предположим, MainWindow имеет метод update_formula_bar
-            main_window = self.window() # Получаем главное окно
-            if hasattr(main_window, 'update_formula_bar'):
-                main_window.update_formula_bar(cell_address, cell_value)
+            # Эмитим сигнал
+            self.cellSelectionChanged.emit(cell_address, cell_value)
 
     def _col_idx_to_name(self, idx: int) -> str:
         """
