@@ -95,10 +95,10 @@ class DataManager:
 
             # Для MVP предположим, что имена столбцов - это стандартные имена Excel (A, B, C...)
             # В будущем их нужно будет загружать из метаданных листа
-            from src.constructor.components.sheet_editor import SheetDataModel
-            dummy_model = SheetDataModel({"column_names": [], "rows": []})
+            # from src.constructor.components.sheet_editor import SheetDataModel # <-- УБРАНО
+            # dummy_model = SheetDataModel({"column_names": [], "rows": []}) # <-- УБРАНО
             max_columns = 20  # Временное значение, в реальности нужно из метаданных
-            column_names = dummy_model._generate_excel_column_names(max_columns)
+            column_names = self._generate_excel_column_names(max_columns) # <-- ИСПОЛЬЗУЕМ МЕТОД DataManager
 
             # Получаем sheet_id
             sheet_id = self._get_sheet_id_by_name(sheet_name)
@@ -266,6 +266,29 @@ class DataManager:
             logger.error("Проект не загружен.")
             return []
 
+    def _generate_excel_column_names(self, num_cols: int) -> List[str]:
+        """
+        Генерирует список имён столбцов Excel (A, B, ..., Z, AA, AB, ...).
+
+        Args:
+            num_cols (int): Количество столбцов.
+
+        Returns:
+            List[str]: Список имён столбцов.
+        """
+        if num_cols <= 0:
+            return []
+        names = []
+        for i in range(num_cols):
+            name = ""
+            j = i
+            while j >= 0:
+                name = chr(j % 26 + ord('A')) + name
+                j = j // 26 - 1
+            names.append(name)
+        return names
+
+    # ... (остальной код get_edit_history без изменений)
         try:
             sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
             return storage.load_edit_history(sheet_id, limit)
