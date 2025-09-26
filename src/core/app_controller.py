@@ -261,7 +261,7 @@ class AppController:
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """Экспортирует проект в Excel-файл."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."))
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."
         try:
             from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
