@@ -32,35 +32,28 @@ def main():
     app.setApplicationName("Excel Micro DB New GUI")
     app.setApplicationVersion("0.1.0")
 
-    # --- НОВОЕ: Загрузка и применение темы ---
+    # --- НОВОЕ: Загрузка и применение темы (qt-material) ---
     settings = QSettings("ExcelMicroDB", "NewGUI") # Используем QSettings для хранения настроек
-    theme_name = settings.value("theme", "default") # "default", "dark", "light", или имя .qss файла
+    theme_name = settings.value("theme", "default") # "default", "dark", "light"
 
     if theme_name and theme_name != "default":
         try:
-            # Путь к файлу темы, например, в папке resources/themes/
-            # theme_file_path = Path(__file__).parent.parent / "resources" / "themes" / f"{theme_name}.qss"
-            # Для простоты, пока используем имя темы напрямую, если это стандартная тема qt-material
-            # или путь к .qss файлу.
-            # Пока оставим заглушку для QSS.
-            theme_file_path = Path(f"themes/{theme_name}.qss") # Пример пути
-            if theme_file_path.exists():
-                with open(theme_file_path, 'r', encoding='utf-8') as f:
-                    app.setStyleSheet(f.read())
-                print(f"Применена тема из файла: {theme_file_path}")
+            # Импортируем qt_material внутри блока try, чтобы избежать ошибок, если пакет не установлен
+            import qt_material
+            # Применяем тему в зависимости от значения в настройках
+            if theme_name == "dark":
+                qt_material.apply_stylesheet(app, theme='dark_teal.xml')
+                print("Применена тема: dark_teal")
+            elif theme_name == "light":
+                qt_material.apply_stylesheet(app, theme='light_blue.xml')
+                print("Применена тема: light_blue")
             else:
-                print(f"Файл темы {theme_file_path} не найден. Используется тема по умолчанию.")
+                print(f"Неизвестная тема '{theme_name}'. Используется тема по умолчанию.")
+        except ImportError:
+            print("Пакет qt_material не установлен. Используется тема по умолчанию.")
         except Exception as e:
-            print(f"Ошибка при загрузке темы {theme_name}: {e}")
+            print(f"Ошибка при применении темы {theme_name}: {e}")
     # --- КОНЕЦ НОВОГО ---
-    # --- АЛЬТЕРНАТИВА: Использование qt-material ---
-    # if theme_name == "dark":
-    #     import qt_material
-    #     qt_material.apply_stylesheet(app, theme='dark_teal.xml')
-    # elif theme_name == "light":
-    #     import qt_material
-    #     qt_material.apply_stylesheet(app, theme='light_blue.xml')
-    # --- КОНЕЦ АЛЬТЕРНАТИВЫ ---
 
     # 2. Создаём AppController
     # Передаём путь к рабочей области, если нужно, или None для дефолтного
