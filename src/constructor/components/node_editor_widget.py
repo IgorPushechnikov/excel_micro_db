@@ -122,28 +122,40 @@ class NodeEditorWidget(QWidget):
         else:
             # Создаем экземпляр NodeGraph
             self.graph = NodeGraph()
-            # Получаем виджет Qt для отображения (NodeGraphQt обычно предоставляет его)
-            # NodeGraph сам является виджетом в некоторых реализациях, либо есть метод get_qt_widget()
-            # Уточнение: NodeGraphQt.NodeGraph имеет метод viewer(), который возвращает GraphicsScene,
-            # а сам NodeGraphQt.NodeGraph является QGraphicsView подклассом.
-            # Для встраивания в PySide6 QWidget, нужно использовать сам NodeGraph как виджет.
-            # Проверим, является ли экземпляр graph подклассом QWidget.
-            if isinstance(self.graph, QWidget):
-                self.node_graph_widget = self.graph
+            
+            # --- ИСПРАВЛЕНИЕ ---
+            # NodeGraphQt.NodeGraph предоставляет метод viewer(), 
+            # который возвращает QGraphicsView (подкласс QWidget), пригодный для addWidget.
+            # Проверяем его наличие и тип.
+            viewer = getattr(self.graph, 'viewer', None)
+            if viewer and callable(viewer):
+                self.node_graph_widget = viewer()
+                logger.debug(f"Получен viewer из NodeGraph: {type(self.node_graph_widget)}")
             else:
-                # Если нет, попробуем получить viewer (QGraphicsView) или другой виджет.
-                # Это зависит от конкретной реализации NodeGraphQt.
-                # Документация NodeGraphQt покажет правильный способ.
-                # Пока предположим, что сам graph можно использовать как виджет.
-                # ВАЖНО: Проверьте документацию NodeGraphQt для правильного способа получения виджета.
-                logger.warning("NodeGraph может не являться напрямую QWidget. Проверьте документацию NodeGraphQt.")
-                self.node_graph_widget = self.graph # Попытка использовать напрямую
-
-            if self.node_graph_widget:
+                # Альтернативный способ: сам NodeGraph может быть QGraphicsView
+                # Проверим, является ли self.graph QGraphicsView или QWidget
+                if isinstance(self.graph, QWidget):
+                     self.node_graph_widget = self.graph
+                     logger.debug("NodeGraph напрямую является QWidget.")
+                else:
+                     self.node_graph_widget = None
+                     logger.error("Не удалось получить QWidget из NodeGraph. viewer() не найден или не вызываем.")
+            
+            # Проверяем, что виджет получен и является QWidget
+            if self.node_graph_widget and isinstance(self.node_graph_widget, QWidget):
                 layout.addWidget(self.node_graph_widget)
-                logger.debug("Виджет NodeGraphQt добавлен в layout NodeEditorWidget.")
+                logger.debug("Виджет NodeGraphQt (QGraphicsView) добавлен в layout NodeEditorWidget.")
             else:
-                logger.error("Не удалось получить виджет NodeGraphQt для отображения.")
+                # Отображаем сообщение об ошибке, если виджет не получен
+                error_msg = "Не удалось получить виджет NodeGraphQt для отображения."
+                logger.error(error_msg)
+                error_label = QMessageBox(self)
+                error_label.setIcon(QMessageBox.Critical)
+                error_label.setText("Ошибка инициализации NodeGraphQt")
+                error_label.setInformativeText(error_msg)
+                error_label.setStandardButtons(QMessageBox.Ok)
+                layout.addWidget(error_label)
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
     def _setup_graph(self):
         """
