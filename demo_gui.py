@@ -5,18 +5,28 @@
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Добавляем корень проекта в sys.path, чтобы можно было импортировать модули
 project_root = Path(__file__).parent.resolve()
 sys.path.insert(0, str(project_root))
 
+# --- ИСПРАВЛЕНО: Импорт QtCore для доступа к атрибутам Qt ---
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox, QSlider,
     QCheckBox, QRadioButton, QGroupBox, QMenuBar, QMenu, QToolBar, QStatusBar,
     QTabWidget, QTextEdit, QListWidget, QTreeWidget, QTreeWidgetItem
 )
-from PySide6.QtCore import Qt, Slot
+# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 class DemoMainWindow(QMainWindow):
@@ -30,21 +40,25 @@ class DemoMainWindow(QMainWindow):
         # --- Меню ---
         menubar = self.menuBar()
         file_menu = menubar.addMenu("&Файл")
-        file_menu.addAction("Новый")
-        file_menu.addAction("Открыть")
-        file_menu.addAction("Сохранить")
+        # --- ИСПРАВЛЕНО: Явное создание QAction ---
+        file_menu.addAction(QAction("Новый", self))
+        file_menu.addAction(QAction("Открыть", self))
+        file_menu.addAction(QAction("Сохранить", self))
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
         file_menu.addSeparator()
-        file_menu.addAction("Выход")
+        file_menu.addAction(QAction("Выход", self))
 
         edit_menu = menubar.addMenu("&Правка")
-        edit_menu.addAction("Отменить")
-        edit_menu.addAction("Повторить")
+        edit_menu.addAction(QAction("Отменить", self))
+        edit_menu.addAction(QAction("Повторить", self))
 
         # --- Панель инструментов ---
         toolbar = self.addToolBar("Основная")
-        toolbar.addAction("Новый")
-        toolbar.addAction("Открыть")
-        toolbar.addAction("Сохранить")
+        # --- ИСПРАВЛЕНО: Явное создание QAction ---
+        toolbar.addAction(QAction("Новый", self))
+        toolbar.addAction(QAction("Открыть", self))
+        toolbar.addAction(QAction("Сохранить", self))
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         # --- Центральный виджет ---
         central_widget = QWidget()
@@ -74,7 +88,9 @@ class DemoMainWindow(QMainWindow):
         left_layout.addWidget(spinbox)
 
         # Слайдер
-        slider = QSlider(Qt.Horizontal)
+        # --- ИСПРАВЛЕНО: QtCore.Qt.Horizontal ---
+        slider = QSlider(QtCore.Qt.Horizontal)
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
         slider.setValue(50)
         left_layout.addWidget(slider)
 
@@ -126,50 +142,89 @@ class DemoMainWindow(QMainWindow):
         self.statusBar().showMessage("Готов")
 
 
-def run_demo(style_name: str = "Fusion", material_theme: str = None):
+# --- ИСПРАВЛЕНО: Аннотации типов ---
+def run_demo(style_name: Optional[str] = "Fusion", material_theme: Optional[str] = None):
+# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     """Запускает демонстрационное приложение с указанным стилем."""
-    print(f"Запуск демо с '{style_name}' стилем...")
+    logger.info(f"Запуск демо с 'style_name={style_name}', 'material_theme={material_theme}'...")
     app = QApplication(sys.argv)
     app.setApplicationName("DemoGUI")
 
-    # --- Установка стиля ---
+    # --- Установка стиля PySide6 ---
     if style_name:
-        app.setStyle(style_name)
-        print(f"Установлен стиль: {style_name}")
+        try:
+            app.setStyle(style_name)
+            logger.info(f"Установлен стиль PySide6: {style_name}")
+        except Exception as e:
+            logger.error(f"Ошибка при установке стиля PySide6 '{style_name}': {e}")
+    else:
+        logger.info("Стиль PySide6 не устанавливается.")
 
     # --- Установка темы qt-material ---
     if material_theme:
         try:
             import qt_material
             qt_material.apply_stylesheet(app, theme=material_theme)
-            print(f"Применена тема qt-material: {material_theme}")
+            logger.info(f"Применена тема qt-material: {material_theme}")
         except ImportError:
+            logger.error("Ошибка: Библиотека qt-material не установлена.")
             print("Ошибка: Библиотека qt-material не установлена.")
             return
         except Exception as e:
-            print(f"Ошибка при применении темы qt-material: {e}")
+            logger.error(f"Ошибка при применении темы qt-material '{material_theme}': {e}", exc_info=True)
+            print(f"Ошибка при применении темы qt-material '{material_theme}': {e}")
             return
+    else:
+        logger.info("Тема qt-material не применяется.")
 
     window = DemoMainWindow()
     window.show()
+    logger.info("Демонстрационное окно открыто. Закройте его, чтобы продолжить.")
     print("Демонстрационное окно открыто. Закройте его, чтобы продолжить.")
-    app.exec()
-    print("Демонстрационное окно закрыто.")
+    
+    try:
+        exit_code = app.exec()
+        logger.info(f"Демонстрационное окно закрыто. Код завершения: {exit_code}")
+        print(f"Демонстрационное окно закрыто. Код завершения: {exit_code}")
+        return exit_code
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении цикла событий приложения: {e}", exc_info=True)
+        print(f"Ошибка при выполнении цикла событий приложения: {e}")
+        return -1
 
 
 if __name__ == "__main__":
+    logger.info("--- Демонстрация стилей PySide6 ---")
     print("--- Демонстрация стилей PySide6 ---")
     
     # 1. Запуск с Fusion стилем
+    logger.info("\n--- 1. Стиль Fusion ---")
     print("\n--- 1. Стиль Fusion ---")
-    run_demo(style_name="Fusion", material_theme=None)
+    try:
+        run_demo(style_name="Fusion", material_theme=None)
+    except Exception as e:
+        logger.error(f"Необработанная ошибка при запуске Fusion: {e}", exc_info=True)
+        print(f"Необработанная ошибка при запуске Fusion: {e}")
     
     # 2. Запуск с темой qt-material (тёмная)
+    logger.info("\n--- 2. Тема qt-material (dark_teal) ---")
     print("\n--- 2. Тема qt-material (dark_teal) ---")
-    run_demo(style_name=None, material_theme='dark_teal.xml') # Отключаем Fusion, чтобы qt-material работал корректно
+    try:
+        # Отключаем Fusion, чтобы qt-material работал корректно
+        run_demo(style_name=None, material_theme='dark_teal.xml') 
+    except Exception as e:
+        logger.error(f"Необработанная ошибка при запуске qt-material (dark_teal): {e}", exc_info=True)
+        print(f"Необработанная ошибка при запуске qt-material (dark_teal): {e}")
     
     # 3. Запуск с темой qt-material (светлая)
+    logger.info("\n--- 3. Тема qt-material (light_blue) ---")
     print("\n--- 3. Тема qt-material (light_blue) ---")
-    run_demo(style_name=None, material_theme='light_blue.xml') # Отключаем Fusion, чтобы qt-material работал корректно
+    try:
+        # Отключаем Fusion, чтобы qt-material работал корректно
+        run_demo(style_name=None, material_theme='light_blue.xml') 
+    except Exception as e:
+        logger.error(f"Необработанная ошибка при запуске qt-material (light_blue): {e}", exc_info=True)
+        print(f"Необработанная ошибка при запуске qt-material (light_blue): {e}")
 
+    logger.info("\n--- Демонстрация завершена ---")
     print("\n--- Демонстрация завершена ---")
