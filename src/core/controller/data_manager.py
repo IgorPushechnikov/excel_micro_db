@@ -266,6 +266,13 @@ class DataManager:
             logger.error("Проект не загружен.")
             return []
 
+        try:
+            sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
+            return storage.load_edit_history(sheet_id, limit) or []
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
+            return []
+
     def _generate_excel_column_names(self, num_cols: int) -> List[str]:
         """
         Генерирует список имён столбцов Excel (A, B, ..., Z, AA, AB, ...).
@@ -287,12 +294,4 @@ class DataManager:
                 j = j // 26 - 1
             names.append(name)
         return names
-
-    # ... (остальной код get_edit_history без изменений)
-        try:
-            sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
-            return storage.load_edit_history(sheet_id, limit) or []
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
-            return []
 
