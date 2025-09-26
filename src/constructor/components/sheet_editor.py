@@ -9,7 +9,7 @@ import logging
 from typing import Optional, List, Dict, Any, Tuple
 
 from PySide6.QtWidgets import QTableView, QAbstractItemDelegate, QStyledItemDelegate, QItemEditorFactory, QWidget, QVBoxLayout, QFrame, QAbstractItemView
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal, QItemSelectionModel
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt, Signal, QItemSelectionModel
 from PySide6.QtGui import QColor, QBrush, QFont, QPainter
 
 # Импортируем AppController
@@ -64,19 +64,19 @@ class SheetEditorModel(QAbstractTableModel):
             self._data = []
             self._column_names = ["A"]
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         """Возвращает количество строк."""
         if parent.isValid():
             return 0  # Упрощённая модель, без иерархии
         return len(self._data)
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         """Возвращает количество столбцов."""
         if parent.isValid():
             return 0  # Упрощённая модель, без иерархии
         return len(self._column_names)
 
-    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> Any:
+    def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.DisplayRole) -> Any:
         """Возвращает данные для указанной ячейки."""
         if not index.isValid():
             return None
@@ -101,7 +101,7 @@ class SheetEditorModel(QAbstractTableModel):
 
         return None
 
-    def setData(self, index: QModelIndex, value: Any, role: int = Qt.EditRole) -> bool:
+    def setData(self, index: QModelIndex | QPersistentModelIndex, value: Any, role: int = Qt.EditRole) -> bool:
         """Устанавливает данные для указанной ячейки."""
         if not index.isValid() or role != Qt.EditRole:
             return False
@@ -149,7 +149,7 @@ class SheetEditorModel(QAbstractTableModel):
                 return str(section + 1) # Нумерация строк с 1
         return None
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlags:
         """Возвращает флаги для ячейки (редактируемость, выбор и т.д.)."""
         if not index.isValid():
             return Qt.NoItemFlags
@@ -187,7 +187,7 @@ class SheetEditorDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.model = model
 
-    def paint(self, painter: QPainter, option, index: QModelIndex):
+    def paint(self, painter: QPainter, option, index: QModelIndex | QPersistentModelIndex):
         """
         Отрисовывает ячейку с учетом стиля.
         """
