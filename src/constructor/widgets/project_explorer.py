@@ -6,6 +6,12 @@
 import logging
 from typing import Optional, List, Dict, Any
 
+# --- НОВОЕ: Импорт из PySide6 ---
+from PySide6.QtCore import Slot, Signal
+from PySide6.QtWidgets import QTreeWidgetItem, QMessageBox
+from PySide6 import QtCore
+# --- КОНЕЦ НОВОГО ---
+
 # --- НОВОЕ: Импорт из qfluentwidgets ---
 from qfluentwidgets import TreeWidget
 # --- КОНЕЦ НОВОГО ---
@@ -70,7 +76,7 @@ class ProjectExplorer(TreeWidget):
              logger.info("Проект не загружен. ProjectExplorer (Fluent) будет пуст.")
              self.clear()
              placeholder_item = QTreeWidgetItem(["<Нет открытого проекта>"])
-             placeholder_item.setFlags(Qt.NoItemFlags) # Нельзя выбрать
+             placeholder_item.setFlags(QtCore.Qt.NoItemFlags) # Нельзя выбрать
              self.addTopLevelItem(placeholder_item)
              return
 
@@ -88,8 +94,8 @@ class ProjectExplorer(TreeWidget):
                         sheet_id = sheet_info.get("sheet_id", "N/A")
                         
                         item = QTreeWidgetItem([sheet_name])
-                        item.setData(0, Qt.UserRole, sheet_id) # Сохраняем ID
-                        item.setData(0, Qt.UserRole + 1, sheet_name) # Сохраняем имя
+                        item.setData(0, QtCore.Qt.UserRole, sheet_id) # Сохраняем ID
+                        item.setData(0, QtCore.Qt.UserRole + 1, sheet_name) # Сохраняем имя
                         
                         self.addTopLevelItem(item)
                     
@@ -97,12 +103,12 @@ class ProjectExplorer(TreeWidget):
                     self.expandAll()
                  else:
                      placeholder_item = QTreeWidgetItem(["<Нет листов в проекте>"])
-                     placeholder_item.setFlags(Qt.NoItemFlags)
+                     placeholder_item.setFlags(QtCore.Qt.NoItemFlags)
                      self.addTopLevelItem(placeholder_item)
             else:
                  logger.warning("Нет доступа к storage AppController.")
                  placeholder_item = QTreeWidgetItem(["<Ошибка доступа к данным>"])
-                 placeholder_item.setFlags(Qt.NoItemFlags)
+                 placeholder_item.setFlags(QtCore.Qt.NoItemFlags)
                  self.addTopLevelItem(placeholder_item)
 
         except Exception as e:
@@ -117,8 +123,8 @@ class ProjectExplorer(TreeWidget):
     def _on_item_clicked(self, item: QTreeWidgetItem, column: int):
         """Слот для обработки клика по элементу дерева."""
         # Проверяем, является ли элемент листом (по наличию данных)
-        sheet_id = item.data(0, Qt.UserRole)
-        sheet_name = item.data(0, Qt.UserRole + 1)
+        sheet_id = item.data(0, QtCore.Qt.UserRole)
+        sheet_name = item.data(0, QtCore.Qt.UserRole + 1)
         
         if sheet_id is not None and sheet_name:
             logger.debug(f"Выбран лист: {sheet_name} (ID: {sheet_id})")
