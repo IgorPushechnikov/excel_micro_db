@@ -40,9 +40,47 @@ class ProjectManager:
     # Имя файла с метаданными проекта
     PROJECT_METADATA_FILE = ".excel_micro_db_project"
 
-    def __init__(self):
-        """Инициализация менеджера проектов."""
-        logger.debug("Инициализация ProjectManager")
+    def __init__(self, app_controller):
+        """Инициализация менеджера проектов.
+        
+        Args:
+            app_controller: Ссылка на AppController.
+        """
+        self.app_controller = app_controller
+        logger.debug("Инициализация ProjectManager с AppController")
+
+    def initialize(self) -> bool:
+        """
+        Инициализирует ProjectManager.
+        Проверяет, существует ли проект в app_controller.project_path.
+        Если существует и валиден, загружает его.
+        
+        Returns:
+            bool: True, если инициализация прошла успешно (проект загружен или готов к созданию).
+        """
+        project_path = Path(self.app_controller.project_path)
+        logger.info(f"Инициализация ProjectManager для проекта: {project_path}")
+        
+        # Проверяем, существует ли директория проекта
+        if not project_path.exists():
+            logger.info(f"Директория проекта не существует: {project_path}. Готов к созданию нового проекта.")
+            # Не загружаем, но инициализация считается успешной
+            return True
+
+        # Проверяем, является ли директория проектом (валидируем структуру и БД)
+        if self.validate_project():
+            logger.info(f"Проект валиден. Попытка загрузки...")
+            if self.load_project():
+                logger.info("Проект успешно загружен.")
+                return True
+            else:
+                logger.error("Не удалось загрузить валидный проект.")
+                return False
+        else:
+            logger.warning(f"Директория {project_path} существует, но не является валидным проектом Excel Micro DB.")
+            # Можно предложить создать новый проект поверх или вернуть False
+            # Пока вернем True, чтобы AppController мог создать проект в этой директории
+            return True
 
     def create_project(self, project_path: str, project_name: Optional[str] = None) -> bool:
         """
@@ -196,51 +234,68 @@ class ProjectManager:
             logger.error(f"Ошибка при сохранении метаданных проекта: {e}")
             return False
 
-    def load_project(self, project_path: str) -> Optional[Dict[str, Any]]:
+    def load_project(self) -> bool:
         """
-        Загрузка существующего проекта.
-
-        Args:
-            project_path (str): Путь к директории проекта
+        Загрузка существующего проекта из app_controller.project_path.
+        Инициализирует app_controller.storage.
 
         Returns:
-            Optional[Dict[str, Any]]: Метаданные проекта или None если ошибка
+            bool: True если проект загружен успешно, False в противном случае
         """
+        from src.storage.base import ProjectDBStorage
 
         try:
-            project_path_obj = Path(project_path).resolve()
+            project_path_obj = Path(self.app_controller.project_path).resolve()
             logger.info(f"Загрузка проекта из: {project_path_obj}")
 
             # Проверяем существование проекта
             if not project_path_obj.exists():
                 logger.error(f"Директория проекта не существует: {project_path_obj}")
-                return None
+                return False
 
             if not project_path_obj.is_dir():
                 logger.error(f"Путь {project_path_obj} не является директорией")
-                return None
+                return False
 
             # Проверяем наличие файла метаданных
             metadata_file = project_path_obj / self.PROJECT_METADATA_FILE
             if not metadata_file.exists():
                 logger.error(f"Файл метаданных проекта не найден: {metadata_file}")
                 logger.info("Возможно, это не проект Excel Micro DB")
-                return None
+                return False
 
             # Загружаем метаданные
             metadata = self._load_project_metadata(project_path_obj)
             if not metadata:
-                return None
+                return False
 
             # Обновляем время последнего открытия
             metadata["last_opened"] = datetime.now().isoformat()
             self._save_project_metadata(project_path_obj, metadata)
 
-            logger.info(f"Проект '{metadata.get('project_name')}' загружен успешно")
-            return metadata
+            # --- НОВОЕ: Инициализация storage для AppController ---
+            db_path = project_path_obj / "project_data.db"
+            if not db_path.exists():
+                logger.error(f"Файл БД проекта не найден: {db_path}")
+                return False
+
+            storage = ProjectDBStorage(str(db_path))
+            if not storage.connect():
+                logger.error(f"Не удалось подключиться к БД проекта: {db_path}")
+                return False
+
+            # Устанавливаем storage в app_controller
+            self.app_controller.storage = storage
+            # Кэшируем метаданные проекта
+            self.app_controller._current_project_data = metadata
+
+            logger.info(f"Проект '{metadata.get('project_name')}' загружен успешно, БД подключена")
+            return True
+            # --- КОНЕЦ НОВОГО ---
+
         except Exception as e:
             logger.error(f"Ошибка при загрузке проекта: {e}")
-            return None
+            return False
 
     def _load_project_metadata(self, project_path: Path) -> Optional[Dict[str, Any]]:
         """
@@ -266,12 +321,9 @@ class ProjectManager:
             logger.error(f"Ошибка при загрузке метаданных проекта: {e}")
             return None
 
-    def validate_project(self, project_path: str) -> bool:
+    def validate_project(self) -> bool:
         """
-        Валидация структуры проекта.
-
-        Args:
-            project_path (str): Путь к директории проекта
+        Валидация структуры проекта в app_controller.project_path.
 
         Returns:
             bool: True если проект валиден, False в противном случае
@@ -282,7 +334,7 @@ class ProjectManager:
         storage = None
         cursor = None
         try:
-            project_path_obj = Path(project_path)
+            project_path_obj = Path(self.app_controller.project_path)
             logger.debug(f"Валидация проекта: {project_path_obj}")
 
             # Проверяем существование директории
@@ -359,6 +411,24 @@ class ProjectManager:
         except Exception as e:
             logger.error(f"Ошибка при валидации проекта: {e}")
             return False
+
+    def close_project(self) -> None:
+        """
+        Закрытие текущего проекта.
+        Отключает app_controller.storage.
+        """
+        logger.info("Закрытие проекта...")
+        if self.app_controller.storage:
+            try:
+                self.app_controller.storage.disconnect()
+                logger.debug("Соединение с БД проекта закрыто.")
+            except Exception as e:
+                logger.error(f"Ошибка при закрытии соединения с БД проекта: {e}")
+            finally:
+                self.app_controller.storage = None
+                self.app_controller._current_project_data = None
+        else:
+            logger.debug("Соединение с БД проекта не было установлено.")
 
     def add_excel_file_to_project(self, project_path: str, file_path: str) -> bool:
         """
