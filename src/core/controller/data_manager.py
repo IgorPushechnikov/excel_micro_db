@@ -291,7 +291,7 @@ class DataManager:
     # ... (остальной код get_edit_history без изменений)
         try:
             sheet_id = self._get_sheet_id_by_name(sheet_name) if sheet_name else None
-            return storage.load_edit_history(sheet_id, limit)
+            return storage.load_edit_history(sheet_id, limit) or []
         except Exception as e:
             logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
             return []
