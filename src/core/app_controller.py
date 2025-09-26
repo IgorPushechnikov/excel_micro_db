@@ -26,14 +26,13 @@ from src.utils.logger import get_logger
 from src.exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
 
 # Импорты для новых менеджеров (теперь из поддиректории)
-from .controller.data_manager import DataManager
+# from .controller.data_manager import DataManager # <-- УДАЛЯЕМ ОТСЮДА, чтобы избежать циклического импорта
 from .controller.project_manager import ProjectManager # Предполагается, что он тоже будет в controller
 # from .controller.format_manager import FormatManager # Пока не реализован
 # from .controller.chart_manager import ChartManager # Пока не реализован
 # from .controller.analysis_manager import AnalysisManager # Пока не реализован
 # from .controller.export_manager import ExportManager # Пока не реализован
 # from .controller.node_manager import NodeManager # Пока не реализован
-# from .controller.processor_bridge import ProcessorBridge # Пока не реализован
 
 logger = get_logger(__name__)
 
@@ -56,15 +55,17 @@ class AppController:
         self.storage: Optional[ProjectDBStorage] = None
         self._current_project_data: Optional[Dict[str, Any]] = None  # Кэш метаданных проекта
 
-        # Инициализация менеджеров (теперь из поддиректории controller)
-        self.project_manager = ProjectManager(self)
+        # --- Инициализация менеджеров ---
+        # Импортируем DataManager локально, чтобы избежать циклического импорта
+        from .controller.data_manager import DataManager # <-- ДОБАВЛЯЕМ СЮДА
         self.data_manager = DataManager(self)
+
+        self.project_manager = ProjectManager(self)
         # self.format_manager = FormatManager(self) # Пока не реализован
         # self.chart_manager = ChartManager(self) # Пока не реализован
         # self.analysis_manager = AnalysisManager(self) # Пока не реализован
         # self.export_manager = ExportManager(self) # Пока не реализован
         # self.node_manager = NodeManager(self) # Пока не реализован
-        # self.processor_bridge = ProcessorBridge(self) # Пока не реализован
 
         logger.debug(f"AppController инициализирован для проекта: {project_path}")
 
@@ -260,7 +261,7 @@ class AppController:
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """Экспортирует проект в Excel-файл."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."))
         try:
             from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
