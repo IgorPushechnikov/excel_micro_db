@@ -149,6 +149,22 @@ class ProjectManager:
             logger.info(f"Проект '{project_name}' создан успешно в: {project_path_obj}")
             return True
 
+    def create_new_project(self, project_name: str) -> bool:
+        """
+        Создает новую структуру проекта в app_controller.project_path с указанным именем.
+
+        Args:
+            project_name (str): Название проекта.
+
+        Returns:
+            bool: True если проект создан успешно, False в противном случае
+        """
+        # Используем self.app_controller.project_path вместо передачи отдельно
+        project_path = self.app_controller.project_path
+        logger.debug(f"Создание нового проекта '{project_name}' в: {project_path}")
+        # Вызываем основной метод create_project с project_path и project_name
+        return self.create_project(project_path, project_name)
+
         except PermissionError:
             logger.error(f"Нет прав для создания проекта в: {project_path}")
             return False
