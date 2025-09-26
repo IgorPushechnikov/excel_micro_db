@@ -523,15 +523,26 @@ class ProjectManager:
         # Здесь можно добавить закрытие файлов, соединений и т.д.
 
 
-def create_project_manager() -> ProjectManager:
+class _FakeAppController:
+    """Фиктивный AppController для standalone запуска ProjectManager."""
+    def __init__(self, project_path=""):
+        self.project_path = project_path
+        # storage и другие атрибуты могут быть добавлены при необходимости
+
+
+def create_project_manager(app_controller=None) -> ProjectManager:
     """
     Фабричная функция для создания экземпляра ProjectManager.
+
+    Args:
+        app_controller: Экземпляр AppController. Если None, создаётся фиктивный.
 
     Returns:
         ProjectManager: Экземпляр менеджера проектов
     """
-
-    return ProjectManager()
+    if app_controller is None:
+        app_controller = _FakeAppController()
+    return ProjectManager(app_controller)
 
 
 # Пример использования
@@ -539,21 +550,22 @@ if __name__ == "__main__":
     # Это просто для демонстрации, не будет выполняться при импорте
     logger.info("Демонстрация работы ProjectManager")
 
-    # Создание менеджера проектов
-    pm = create_project_manager()
-
-    # Создание тестового проекта
+    # Создание менеджера проектов (с фиктивным app_controller)
     test_project_path = "./test_project"
+    pm = create_project_manager(_FakeAppController(project_path=test_project_path))
+
+    # Создание тестового проекта (project_path уже в app_controller)
     if pm.create_project(test_project_path, "Тестовый проект"):
         logger.info("Тестовый проект создан успешно")
 
-        # Загрузка проекта
-        project_data = pm.load_project(test_project_path)
-        if project_data:
-            logger.info(f"Загружен проект: {project_data.get('project_name')}")
+        # Загрузка проекта (project_path берётся из app_controller)
+        if pm.load_project(): # Вызов без аргумента
+            logger.info(f"Загружен проект: {pm.app_controller._current_project_data.get('project_name')}")
 
-            # Валидация проекта
-            if pm.validate_project(test_project_path):
-                logger.info("Проект прошел валидацию")
+            # Валидация проекта (project_path берётся из app_controller)
+            if pm.validate_project(): # Вызов без аргумента
+                logger.info("Проект прошёл валидацию")
             else:
-                logger.error("Ошибка при создании тестового проекта")
+                logger.error("Ошибка при валидации проекта")
+        else:
+            logger.error("Ошибка при загрузке проекта")
