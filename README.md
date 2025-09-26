@@ -3,6 +3,7 @@
 **Микро-СУБД с визуальным конструктором для анализа и воссоздания логики Excel файлов.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-green.svg)](https://github.com/IgorPushechnikov/excel_micro_db)
 
 ## 🎯 Цель проекта
 
@@ -103,7 +104,7 @@ pyinstaller --onefile --windowed gui.py
 1. Клонируйте репозиторий:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/IgorPushechnikov/excel_micro_db.git
    cd excel_micro_db
    ```
 
