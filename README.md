@@ -49,8 +49,9 @@ excel_micro_db/
 ├── scripts/         # Вспомогательные скрипты
 ├── src/             # Исходный код
 │   ├── analyzer/    # Анализ Excel файлов
-│   ├── constructor/ # (УСТАРЕЛО) Старый GUI
-│   ├── constructor_new/ # **Новый GUI**, приближенный к Excel
+│   ├── cli/          # Интерфейс командной строки (CLI)
+│   ├── constructor/  # **Новый GUI**, приближенный к Excel
+│   ├── constructor_bak_old/ # (Временно) Старый GUI
 │   ├── core/        # Ядро системы
 │   │   ├── controller/ # Вспомогательные менеджеры (DataManager и др.)
 │   ├── exceptions/  # Обработка исключений
@@ -79,11 +80,8 @@ python main.py --process --config config/batch.yaml
 ### 2. **GUI режим** (пользовательский интерфейс)
 
 ```bash
-# Запуск старого GUI (устаревший)
-python gui.py
-
 # Запуск нового GUI (в разработке)
-python -m src.constructor_new.gui_app
+python -m src.constructor.gui_app
 
 # Или после сборки:
 # excel_micro_db_gui.exe
@@ -99,7 +97,7 @@ python -i main.py --interactive
 
 ```bash
 # Сборка с PyInstaller
-# pyinstaller --onefile --windowed src/constructor_new/gui_app.py
+# pyinstaller --onefile --windowed src/constructor/gui_app.py
 # Результат: dist/gui_app.exe
 ```
 
