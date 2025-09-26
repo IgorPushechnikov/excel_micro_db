@@ -15,7 +15,7 @@ from PySide6.QtGui import QAction, QIcon
 # Импорты для нового GUI
 # from .components.sheet_editor import SheetEditor  # Пока нет
 # from .components.project_explorer import ProjectExplorer  # Пока нет
-# from .components.node_editor import NodeEditor  # Пока нет
+from .components.node_editor_widget import NodeEditorWidget # <-- ДОБАВЛЕН
 # from .components.format_dialog import FormatDialog  # Пока нет
 # from .components.settings_dialog import SettingsDialog  # Пока нет
 
@@ -73,6 +73,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Новый", self._on_new_project)
         file_menu.addAction("Открыть", self._on_open_project)
         file_menu.addAction("Сохранить", self._on_save_project)
+        file_menu.addAction("Сохранить как...", self._on_save_as_project) # <-- ДОБАВЛЕНО
+        file_menu.addSeparator()
+        file_menu.addAction("Закрыть", self._on_close_project) # <-- ДОБАВЛЕНО
         file_menu.addSeparator()
         file_menu.addAction("Выход", self.close)
 
@@ -81,13 +84,65 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Отменить", self._on_undo)
         edit_menu.addAction("Повторить", self._on_redo)
         edit_menu.addSeparator()
+        edit_menu.addAction("Вырезать", self._on_cut) # <-- ДОБАВЛЕНО
         edit_menu.addAction("Копировать", self._on_copy)
         edit_menu.addAction("Вставить", self._on_paste)
+        edit_menu.addAction("Очистить содержимое", self._on_clear_contents) # <-- ДОБАВЛЕНО
+        # edit_menu.addAction("Заполнить", ...) # <-- ПОЗЖЕ
+        # edit_menu.addSeparator()
+        # edit_menu.addAction("Найти...", ...) # <-- ПОЗЖЕ
+        # edit_menu.addAction("Заменить...", ...) # <-- ПОЗЖЕ
+        # edit_menu.addAction("Перейти...", ...) # <-- ПОЗЖЕ
+        # edit_menu.addSeparator()
+        # edit_menu.addAction("Выделить все", ...) # <-- ПОЗЖЕ
 
         # Вид
         view_menu = menu_bar.addMenu("Вид")
+        view_menu.addAction("Панель инструментов", self._on_toggle_toolbar) # <-- ДОБАВЛЕНО
+        view_menu.addAction("Строка формул", self._on_toggle_formula_bar) # <-- ДОБАВЛЕНО
+        view_menu.addSeparator()
         view_menu.addAction("Обозреватель проекта", self._on_toggle_project_explorer)
         view_menu.addAction("Нодовый редактор", self._on_toggle_node_editor)
+        # view_menu.addAction("Сетка", ...) # <-- ПОЗЖЕ
+        # view_menu.addAction("Заголовки", ...) # <-- ПОЗЖЕ
+        # view_menu.addAction("Разделители", ...) # <-- ПОЗЖЕ
+        # view_menu.addSeparator()
+        # view_menu.addAction("Масштаб...", ...) # <-- ПОЗЖЕ
+
+        # Вставка (НОВОЕ МЕНЮ)
+        insert_menu = menu_bar.addMenu("Вставка") # <-- ДОБАВЛЕНО
+        insert_menu.addAction("Ячейки...", self._on_insert_cells) # <-- ДОБАВЛЕНО
+        insert_menu.addAction("Строки", self._on_insert_rows) # <-- ДОБАВЛЕНО
+        insert_menu.addAction("Столбцы", self._on_insert_columns) # <-- ДОБАВЛЕНО
+        insert_menu.addSeparator()
+        insert_menu.addAction("Лист", self._on_insert_sheet) # <-- ДОБАВЛЕНО
+        # insert_menu.addAction("Диаграммы...", ...) # <-- ПОЗЖЕ
+        # insert_menu.addAction("Изображения...", ...) # <-- ПОЗЖЕ
+
+        # Формат (НОВОЕ МЕНЮ)
+        format_menu = menu_bar.addMenu("Формат") # <-- ДОБАВЛЕНО
+        format_menu.addAction("Ячейки...", self._on_format_cells) # <-- ДОБАВЛЕНО
+        format_menu.addSeparator()
+        format_menu.addAction("Строка", self._on_format_row) # <-- ДОБАВЛЕНО
+        format_menu.addAction("Столбец", self._on_format_column) # <-- ДОБАВЛЕНО
+        format_menu.addAction("Лист", self._on_format_sheet) # <-- ДОБАВЛЕНО
+
+        # Данные (НОВОЕ МЕНЮ)
+        data_menu = menu_bar.addMenu("Данные") # <-- ДОБАВЛЕНО
+        # data_menu.addAction("Сортировка и фильтр", ...) # <-- ПОЗЖЕ
+        # data_menu.addAction("Проверка данных", ...) # <-- ПОЗЖЕ
+        # data_menu.addAction("Источники данных", ...) # <-- ПОЗЖЕ
+        # data_menu.addAction("Анализ данных", ...) # <-- ПОЗЖЕ
+        # data_menu.addAction("Группировка", ...) # <-- ПОЗЖЕ
+        # data_menu.addAction("Итоги", ...) # <-- ПОЗЖЕ
+
+        # Формулы (НОВОЕ МЕНЮ)
+        formulas_menu = menu_bar.addMenu("Формулы") # <-- ДОБАВЛЕНО
+        # formulas_menu.addAction("Вставить функцию...", ...) # <-- ПОЗЖЕ
+        # formulas_menu.addAction("Автосумма", ...) # <-- ПОЗЖЕ
+        # formulas_menu.addSeparator()
+        # formulas_menu.addAction("Имена", ...) # <-- ПОЗЖЕ
+        # formulas_menu.addAction("Проверка формул", ...) # <-- ПОЗЖЕ
 
         # Инструменты
         tools_menu = menu_bar.addMenu("Инструменты")
@@ -199,7 +254,7 @@ class MainWindow(QMainWindow):
 
         # Нодовый редактор (справа)
         node_editor_dock = QDockWidget("Нодовый редактор", self)
-        node_editor_widget = QWidget()  # Заменить на реальный виджет (NodeGraphQt)
+        node_editor_widget = NodeEditorWidget(self)  # <-- ЗАМЕНЕН
         node_editor_dock.setWidget(node_editor_widget)
         node_editor_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.addDockWidget(Qt.RightDockWidgetArea, node_editor_dock)
@@ -227,17 +282,53 @@ class MainWindow(QMainWindow):
     def _on_redo(self):
         print("Повторить")
 
+    def _on_cut(self): # <-- ДОБАВЛЕНО
+        print("Вырезать")
+
     def _on_copy(self):
         print("Копировать")
 
     def _on_paste(self):
         print("Вставить")
 
+    def _on_clear_contents(self): # <-- ДОБАВЛЕНО
+        print("Очистить содержимое")
+
+    def _on_toggle_toolbar(self): # <-- ДОБАВЛЕНО
+        print("Переключить панель инструментов")
+
+    def _on_toggle_formula_bar(self): # <-- ДОБАВЛЕНО
+        print("Переключить строку формул")
+
     def _on_toggle_project_explorer(self):
         print("Переключить обозреватель проекта")
 
     def _on_toggle_node_editor(self):
         print("Переключить нодовый редактор")
+
+    def _on_insert_cells(self): # <-- ДОБАВЛЕНО
+        print("Вставить ячейки...")
+
+    def _on_insert_rows(self): # <-- ДОБАВЛЕНО
+        print("Вставить строки")
+
+    def _on_insert_columns(self): # <-- ДОБАВЛЕНО
+        print("Вставить столбцы")
+
+    def _on_insert_sheet(self): # <-- ДОБАВЛЕНО
+        print("Вставить лист")
+
+    def _on_format_cells(self): # <-- ДОБАВЛЕНО
+        print("Формат ячеек...")
+
+    def _on_format_row(self): # <-- ДОБАВЛЕНО
+        print("Формат строки")
+
+    def _on_format_column(self): # <-- ДОБАВЛЕНО
+        print("Формат столбца")
+
+    def _on_format_sheet(self): # <-- ДОБАВЛЕНО
+        print("Формат листа")
 
     def _on_settings(self):
         print("Настройки")
@@ -251,4 +342,10 @@ class MainWindow(QMainWindow):
     def _on_cancel_formula(self):
         self.formula_line_edit.clear()
         print("Отменить редактирование")
+
+    def _on_save_as_project(self): # <-- ДОБАВЛЕНО
+        print("Сохранить проект как...")
+
+    def _on_close_project(self): # <-- ДОБАВЛЕНО
+        print("Закрыть проект")
     # --- Конец заглушек ---
