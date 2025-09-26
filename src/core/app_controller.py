@@ -7,6 +7,7 @@
 
 import os
 import logging
+import sqlite3
 from typing import Dict, Any, List, Optional, Tuple, Union
 from pathlib import Path
 
@@ -27,7 +28,7 @@ from src.exceptions.app_exceptions import ProjectError, AnalysisError, ExportErr
 
 # Импорты для новых менеджеров (теперь из поддиректории)
 # from .controller.data_manager import DataManager # <-- УДАЛЯЕМ ОТСЮДА, чтобы избежать циклического импорта
-from .controller.project_manager import ProjectManager # Предполагается, что он тоже будет в controller
+from .project_manager import ProjectManager # Был перемещен в корень core
 # from .controller.format_manager import FormatManager # Пока не реализован
 # from .controller.chart_manager import ChartManager # Пока не реализован
 # from .controller.analysis_manager import AnalysisManager # Пока не реализован
@@ -261,7 +262,7 @@ class AppController:
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """Экспортирует проект в Excel-файл."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
         try:
             from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
