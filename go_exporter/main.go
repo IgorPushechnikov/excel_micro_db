@@ -61,48 +61,42 @@ type ChartSeries struct {
 }
 
 // convertChartType преобразует строку типа диаграммы из JSON в excelize.ChartType.
+// Внимание: Поддерживаются только базовые типы, доступные в Excelize v2.9.1.
+// Сложные типы (например, ColStacked, LinePercentStacked, Pie3D, DoughnutExploded)
+// могут требовать обновления Excelize или более сложной реализации.
 func convertChartType(chartTypeStr string) excelize.ChartType {
 	switch chartTypeStr {
 	case "col":
 		return excelize.Col
-	case "colStacked":
-		return excelize.ColStacked
-	case "colPercentStacked":
-		return excelize.ColPercentStacked
-	case "col3D":
+	case "col3D": // Доступен в v2.9.1
 		return excelize.Col3D
-	case "col3DClustered":
-		return excelize.Col3DClustered
-	case "col3DStacked":
-		return excelize.Col3DStacked
-	case "col3DPercentStacked":
-		return excelize.Col3DPercentStacked
 	case "line":
 		return excelize.Line
-	case "lineStacked":
-		return excelize.LineStacked
-	case "linePercentStacked":
-		return excelize.LinePercentStacked
-	case "line3D":
-		return excelize.Line3D
 	case "pie":
 		return excelize.Pie
-	case "pie3D":
+	case "pie3D": // Доступен в v2.9.1
 		return excelize.Pie3D
-	case "pieOfPie":
-		return excelize.PieOfPie
-	case "barOfPie":
-		return excelize.BarOfPie
 	case "doughnut":
 		return excelize.Doughnut
-	case "doughnutExploded":
-		return excelize.DoughnutExploded
-	// Добавьте другие типы по мере необходимости
-	// См. полный список в документации к Excelize v2.9.1:
-	// https://pkg.go.dev/github.com/xuri/excelize/v2@v2.9.1#pkg-constants (раздел CHART)
+	case "bar": // Добавлен для полноты, если используется
+		return excelize.Bar
+	case "area": // Добавлен для полноты, если используется
+		return excelize.Area
+	case "radar": // Добавлен для полноты, если используется
+		return excelize.Radar
+	case "scatter": // Добавлен для полноты, если используется
+		return excelize.Scatter
+	case "stock": // Добавлен для полноты, если используется
+		return excelize.Stock
+	case "combo": // Добавлен для полноты, если используется
+		return excelize.Combo
+	// Следующие типы НЕ поддерживаются в Excelize v2.9.1 и возвращают базовый тип 'Col'
+	case "colStacked", "colPercentStacked", "col3DClustered", "col3DStacked", "col3DPercentStacked",
+		"lineStacked", "linePercentStacked", "line3D", "pieOfPie", "barOfPie", "doughnutExploded":
+		fmt.Printf("Warning: Chart type '%s' is not supported in Excelize v2.9.1, using 'col' as default.\n", chartTypeStr)
+		return excelize.Col
 	default:
 		// Возвращаем тип по умолчанию, если тип не распознан
-		// Лучше логировать это как предупреждение
 		fmt.Printf("Warning: Unknown chart type '%s', using 'col' as default.\n", chartTypeStr)
 		return excelize.Col // или другой тип по умолчанию
 	}
