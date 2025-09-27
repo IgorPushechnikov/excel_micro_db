@@ -11,6 +11,7 @@
 import json
 import subprocess
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
@@ -78,7 +79,8 @@ class GoExporterBridge:
                 cell_dict[(row, col)] = str(value) if value is not None else None
 
         # Создаем пустую матрицу данных
-        data_matrix = [[None for _ in range(max_col + 1)] for _ in range(max_row + 1)]
+        # Явно указываем тип, чтобы избежать ошибок типизации
+        data_matrix: List[List[Optional[str]]] = [[None for _ in range(max_col + 1)] for _ in range(max_row + 1)]
 
         # Заполняем матрицу значениями из словаря
         for (row, col), value in cell_dict.items():
@@ -196,13 +198,13 @@ class GoExporterBridge:
 
         return ExportData(metadata=metadata, sheets=sheets_data)
 
-    def export_to_xlsx(self, output_path: Path, temp_dir: Path = None) -> bool:
+    def export_to_xlsx(self, output_path: Path, temp_dir: Optional[Path] = None) -> bool:
         """
         Выполняет экспорт данных в XLSX-файл с помощью Go-утилиты.
 
         Args:
             output_path: Путь для сохранения итогового XLSX-файла.
-            temp_dir: Временная директория для хранения JSON-файла. Если None, используется системная.
+            temp_dir: Временная директория для хранения JSON-файла. Если None, используется временная директория ОС.
 
         Returns:
             bool: True в случае успеха, False в случае ошибки.
@@ -213,9 +215,17 @@ class GoExporterBridge:
             export_data = self._prepare_export_data()
 
             # 2. Сериализация в JSON
-            temp_json_path = (temp_dir or Path.cwd()) / "export_data.json"
-            with open(temp_json_path, 'w', encoding='utf-8') as f:
-                json.dump(export_data.model_dump(), f, ensure_ascii=False, indent=2)
+            # Используем контекстный менеджер tempfile, чтобы гарантировать удаление файла
+            if temp_dir is not None:
+                temp_json_path = temp_dir / "export_data.json"
+                with open(temp_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(export_data.model_dump(), f, ensure_ascii=False, indent=2)
+            else:
+                # Создаем временный файл, который автоматически удалится
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
+                    json.dump(export_data.model_dump(), tmp_file, ensure_ascii=False, indent=2)
+                    temp_json_path = Path(tmp_file.name)
+            
             logger.info(f"Export data serialized to {temp_json_path}")
 
             # 3. Вызов Go-утилиты
@@ -229,14 +239,20 @@ class GoExporterBridge:
             # 4. Обработка результата
             if result.returncode == 0:
                 logger.info(f"Export successful! File saved to {output_path}")
-                # Удаляем временный JSON-файл
-                temp_json_path.unlink(missing_ok=True)
-                return True
+                success = True
             else:
                 logger.error(f"Go exporter failed with return code {result.returncode}")
                 logger.error(f"Stderr: {result.stderr}")
                 logger.error(f"Stdout: {result.stdout}")
-                return False
+                success = False
+            
+            # Удаляем временный JSON-файл в любом случае
+            try:
+                temp_json_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Не удалось удалить временный файл {temp_json_path}: {e}")
+            
+            return success
 
         except Exception as e:
             logger.exception(f"An error occurred during export: {e}")
