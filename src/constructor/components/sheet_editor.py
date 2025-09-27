@@ -14,6 +14,8 @@ from PySide6.QtGui import QColor, QBrush, QFont, QPainter
 
 # Импортируем AppController
 from src.core.app_controller import AppController
+# Импортируем StyleManager и CellStyle
+from .style_manager import StyleManager, CellStyle
 
 # Получаем логгер
 logger = logging.getLogger(__name__)
@@ -38,7 +40,8 @@ class SheetEditorModel(QAbstractTableModel):
         self.sheet_name = sheet_name
         self._data: List[List[Any]] = []  # [[row1_col1, row1_col2, ...], [row2_col1, ...], ...]
         self._column_names: List[str] = [] # ["A", "B", "C", ...]
-        self._styles: Dict[Tuple[int, int], Dict[str, Any]] = {} # {(row, col): {"font": ..., "bg_color": ...}, ...}
+        # Инициализируем StyleManager
+        self._style_manager = StyleManager(app_controller, sheet_name)
         self._load_data()
 
     def _load_data(self):
@@ -161,15 +164,20 @@ class SheetEditorModel(QAbstractTableModel):
         """
         Возвращает словарь стиля для ячейки (row, col).
         Формат словаря: {"font": QFont, "bg_color": QColor, "text_color": QColor, ...}
-        Пока возвращает заглушку или None.
         """
-        # В реальной реализации этот метод будет запрашивать стили у DataManager через AppController
-        # и конвертировать их из формата БД в формат PySide6 (QFont, QColor и т.п.).
-        # Для MVP, можно кешировать стили в модели при загрузке.
-        # Типичные ключи: font_name, font_size, bold, italic, font_color, bg_color, alignment, border
-        # style_key = (row, col)
-        # return self._styles.get(style_key)
-        return None # Пока заглушка, делегат будет использовать стандартный стиль
+        cell_style = self._style_manager.get_style(row, col)
+        if cell_style is None:
+            return None
+
+        # Конвертируем CellStyle в словарь для совместимости с делегатом
+        style_dict = {}
+        if cell_style.bg_color:
+            style_dict["bg_color"] = cell_style.bg_color
+        if cell_style.text_color:
+            style_dict["text_color"] = cell_style.text_color
+        if cell_style.font:
+            style_dict["font"] = cell_style.font
+        return style_dict if style_dict else None
 
 
 class SheetEditorDelegate(QStyledItemDelegate):
@@ -191,67 +199,30 @@ class SheetEditorDelegate(QStyledItemDelegate):
         """
         Отрисовывает ячейку с учетом стиля.
         """
-        # Получаем стандартный прямоугольник для отрисовки
-        super().paint(painter, option, index)
-
         # Получаем стиль для текущей ячейки из модели
         row = index.row()
         col = index.column()
         style_dict = self.model.get_style_for_cell(row, col)
 
-        # Применяем стиль, если он есть
+        # Модифицируем option перед стандартной отрисовкой
         if style_dict:
-            # Пример: установка фона
+            # Установка фонового цвета через палитру
             bg_color = style_dict.get("bg_color")
             if bg_color:
-                painter.fillRect(option.rect, QBrush(QColor(bg_color)))
+                option.palette.setColor(option.palette.Base, bg_color)
 
-            # Пример: установка шрифта (это сложнее, painter.begin() может быть уже вызван)
-            # Лучше устанавливать шрифт через QStyleOptionViewItem, но это требует больше манипуляций.
-            # Для простоты, пусть QStyledItemDelegate сам обрабатывает шрифт, если он установлен через itemData.
-            # font = style_dict.get("font")
-            # if font:
-            #     painter.setFont(font) # Это может не сработать, если painter.begin() уже вызван для этого элемента
-            #     # Лучше использовать option.font = font, но это нужно сделать до super().paint
-            #     # Это требует более сложной логики в делегате.
-
-            # Пока оставим простую заливку фона и текста.
-            # Для полноценной поддержки стилей (шрифт, границы, выравнивание) нужно будет
-            # более точно манипулировать QStyleOptionViewItem перед вызовом super().paint
-            # или реализовать paint полностью самостоятельно.
-            # Или использовать itemData в модели, но это менее гибко для динамических стилей.
-            # QStyledItemDelegate в принципе может использовать itemData, но для сложных стилей
-            # лучше переписать paint или использовать QItemDelegate и его методы для редактирования.
-
-            # Попробуем установить шрифт и цвет текста через painter, если он не занят.
-            # Это не всегда надежно.
-            font = style_dict.get("font")
-            if font:
-                 painter.save() # Сохраняем текущий контекст
-                 painter.setFont(font)
-                 # super().paint(painter, option, index) # Не вызываем снова, иначе наложится
-                 # Нужно перерисовать текст с новым шрифтом
-                 # text = index.data(Qt.DisplayRole)
-                 # painter.drawText(option.rect, Qt.AlignLeft, str(text)) # Пример, выравнивание и т.д.
-                 # Пока оставим как есть, super().paint уже нарисовал.
-                 painter.restore() # Восстанавливаем контекст
-
+            # Установка цвета текста через палитру
             text_color = style_dict.get("text_color")
             if text_color:
-                 painter.save()
-                 painter.setPen(QColor(text_color))
-                 # Аналогично, можно перерисовать текст
-                 painter.restore()
+                option.palette.setColor(option.palette.Text, text_color)
 
-        # super().paint вызван в начале, он уже нарисовал стандартный элемент.
-        # Мы можем нарисовать поверх или изменить поведение до super().paint.
-        # В данном случае, мы рисуем фон поверх, если он определен в стиле.
-        # Это не идеально, так как затирает стандартную отрисовку фона (например, при выделении).
-        # Более правильный способ - манипулировать option перед super().paint.
-        # Пример:
-        # if bg_color:
-        #     option.palette.setColor(QPalette.Base, QColor(bg_color))
-        # super().paint(painter, option, index)
+            # Установка шрифта
+            font = style_dict.get("font")
+            if font:
+                option.font = font
+
+        # Вызываем стандартную отрисовку с модифицированным option
+        super().paint(painter, option, index)
 
 
 class SheetEditor(QFrame):
@@ -274,6 +245,26 @@ class SheetEditor(QFrame):
         self.app_controller = app_controller
         self.sheet_name = sheet_name
         self._setup_ui()
+
+    def set_cell_style(self, row: int, col: int, style: 'CellStyle') -> bool:
+        """
+        Устанавливает стиль для ячейки (row, col).
+
+        Args:
+            row (int): Номер строки (0-базированный).
+            col (int): Номер столбца (0-базированный).
+            style (CellStyle): Стиль для установки.
+
+        Returns:
+            bool: True, если стиль успешно установлен, иначе False.
+        """
+        # Делегируем установку стиля модели
+        success = self.model._style_manager.set_style(row, col, style)
+        if success:
+            # Обновляем представление для отображения нового стиля
+            index = self.model.index(row, col)
+            self.model.dataChanged.emit(index, index, [Qt.DisplayRole])
+        return success
 
     def _setup_ui(self):
         """
