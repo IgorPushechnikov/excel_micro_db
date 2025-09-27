@@ -60,6 +60,54 @@ type ChartSeries struct {
 	Values     string `json:"values"`
 }
 
+// convertChartType преобразует строку типа диаграммы из JSON в excelize.ChartType.
+func convertChartType(chartTypeStr string) excelize.ChartType {
+	switch chartTypeStr {
+	case "col":
+		return excelize.ChartTypeCol
+	case "colStacked":
+		return excelize.ChartTypeColStacked
+	case "colPercentStacked":
+		return excelize.ChartTypeColPercentStacked
+	case "col3D":
+		return excelize.ChartTypeCol3D
+	case "col3DClustered":
+		return excelize.ChartTypeCol3DClustered
+	case "col3DStacked":
+		return excelize.ChartTypeCol3DStacked
+	case "col3DPercentStacked":
+		return excelize.ChartTypeCol3DPercentStacked
+	case "line":
+		return excelize.ChartTypeLine
+	case "lineStacked":
+		return excelize.ChartTypeLineStacked
+	case "linePercentStacked":
+		return excelize.ChartTypeLinePercentStacked
+	case "line3D":
+		return excelize.ChartTypeLine3D
+	case "pie":
+		return excelize.ChartTypePie
+	case "pie3D":
+		return excelize.ChartTypePie3D
+	case "pieOfPie":
+		return excelize.ChartTypePieOfPie
+	case "barOfPie":
+		return excelize.ChartTypeBarOfPie
+	case "doughnut":
+		return excelize.ChartTypeDoughnut
+	case "doughnutExploded":
+		return excelize.ChartTypeDoughnutExploded
+	// Добавьте другие типы по мере необходимости
+	// См. полный список в документации к Excelize:
+	// https://pkg.go.dev/github.com/xuri/excelize/v2#ChartType
+	default:
+		// Возвращаем тип по умолчанию, если тип не распознан
+		// Лучше логировать это как предупреждение
+		fmt.Printf("Warning: Unknown chart type '%s', using 'col' as default.\n", chartTypeStr)
+		return excelize.ChartTypeCol // или другой тип по умолчанию
+	}
+}
+
 func main() {
 	// Парсинг аргументов командной строки
 	inputFile := flag.String("input", "", "Path to the input JSON file")
@@ -125,7 +173,7 @@ func main() {
 		// Добавление диаграмм
 		for _, chart := range sheet.Charts {
 			chartConfig := &excelize.Chart{
-				Type: chart.Type,
+				Type: convertChartType(chart.Type), // <-- Изменённая строка
 				Series: []excelize.ChartSeries{},
 				Title:  []excelize.RichTextRun{{Text: chart.Title}},
 			}
