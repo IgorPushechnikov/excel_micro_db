@@ -142,7 +142,7 @@ func main() {
 			}
 		} else {
 			// Для последующих листов создаем новый
-			index, err := f.NewSheet(sheet.Name)
+			_, err := f.NewSheet(sheet.Name) // <-- Исправлено: игнорируем индекс листа
 			if err != nil {
 				log.Printf("Warning: could not create new sheet '%s': %v", sheet.Name, err)
 				continue // Пропускаем этот лист, если не удалось создать
