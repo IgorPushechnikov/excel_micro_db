@@ -61,44 +61,38 @@ type ChartSeries struct {
 }
 
 // convertChartType преобразует строку типа диаграммы из JSON в excelize.ChartType.
-// Внимание: Поддерживаются только базовые типы, доступные в Excelize v2.9.1.
-// Сложные типы (например, ColStacked, LinePercentStacked, Pie3D, DoughnutExploded)
-// могут требовать обновления Excelize или более сложной реализации.
+// Поддерживаются только базовые типы, доступные в Excelize v2.9.1.
+// Неподдерживаемые или неизвестные типы возвращают базовый тип 'Col'.
 func convertChartType(chartTypeStr string) excelize.ChartType {
 	switch chartTypeStr {
+	// Поддерживаемые типы в v2.9.1
 	case "col":
 		return excelize.Col
-	case "col3D": // Доступен в v2.9.1
-		return excelize.Col3D
 	case "line":
 		return excelize.Line
 	case "pie":
 		return excelize.Pie
-	case "pie3D": // Доступен в v2.9.1
-		return excelize.Pie3D
+	case "bar":
+		return excelize.Bar
+	case "area":
+		return excelize.Area
+	case "scatter":
+		return excelize.Scatter
 	case "doughnut":
 		return excelize.Doughnut
-	case "bar": // Добавлен для полноты, если используется
-		return excelize.Bar
-	case "area": // Добавлен для полноты, если используется
-		return excelize.Area
-	case "radar": // Добавлен для полноты, если используется
-		return excelize.Radar
-	case "scatter": // Добавлен для полноты, если используется
-		return excelize.Scatter
-	case "stock": // Добавлен для полноты, если используется
-		return excelize.Stock
-	case "combo": // Добавлен для полноты, если используется
-		return excelize.Combo
-	// Следующие типы НЕ поддерживаются в Excelize v2.9.1 и возвращают базовый тип 'Col'
-	case "colStacked", "colPercentStacked", "col3DClustered", "col3DStacked", "col3DPercentStacked",
-		"lineStacked", "linePercentStacked", "line3D", "pieOfPie", "barOfPie", "doughnutExploded":
-		fmt.Printf("Warning: Chart type '%s' is not supported in Excelize v2.9.1, using 'col' as default.\n", chartTypeStr)
+	// Типы, которые могут быть в JSON, но не поддерживаются напрямую в v2.9.1.
+	// Возвращаем наиболее подходящий базовый тип или 'Col' по умолчанию.
+	// Это предотвращает ошибки компиляции.
+	case "colStacked", "colPercentStacked", "col3D", "col3DClustered", "col3DStacked", "col3DPercentStacked",
+		"lineStacked", "linePercentStacked", "line3D", "pie3D", "pieOfPie", "barOfPie", "doughnutExploded":
+		// Можно логировать предупреждение, если нужно
+		// fmt.Printf("Warning: Chart type '%s' is not directly supported in Excelize v2.9.1, using 'col' as fallback.\n", chartTypeStr)
 		return excelize.Col
 	default:
-		// Возвращаем тип по умолчанию, если тип не распознан
+		// Неизвестный тип - возвращаем 'Col' как тип по умолчанию
+		// Лучше логировать это как предупреждение
 		fmt.Printf("Warning: Unknown chart type '%s', using 'col' as default.\n", chartTypeStr)
-		return excelize.Col // или другой тип по умолчанию
+		return excelize.Col
 	}
 }
 
@@ -135,29 +129,59 @@ func main() {
 	}()
 
 	// Обработка каждого листа
-	for _, sheet := range exportData.Sheets {
-		// Создание нового листа
-		if err := f.SetSheetName(f.GetSheetName(0), sheet.Name); err != nil {
-			log.Printf("Warning: could not rename first sheet to '%s': %v", sheet.Name, err)
+	for i, sheet := range exportData.Sheets {
+		var sheetName string
+		if i == 0 {
+			// Переименовываем первый (дефолтный) лист
+			sheetName = sheet.Name
+			if err := f.SetSheetName("Sheet1", sheetName); err != nil {
+				log.Printf("Warning: could not rename default sheet to '%s': %v", sheetName, err)
+				// Если не удалось переименовать, используем имя по умолчанию или генерируем новое?
+				// Для простоты, продолжим с sheet.Name, надеясь, что SetSheetName создаст его, если он не первый.
+				// Более надежный способ - проверить существование и создать/переименовать.
+			}
+		} else {
+			// Для последующих листов создаем новый
+			index, err := f.NewSheet(sheet.Name)
+			if err != nil {
+				log.Printf("Warning: could not create new sheet '%s': %v", sheet.Name, err)
+				continue // Пропускаем этот лист, если не удалось создать
+			}
+			sheetName = sheet.Name
+			// Убедимся, что активный лист остается первым или последним созданным?
+			// f.SetActiveSheet(index) // Опционально
 		}
 
 		// Заполнение данными
 		for rowIndex, row := range sheet.Data {
-			cellRow := rowIndex + 1
 			for colIndex, cellValue := range row {
+				// Excelize использует 1-индексацию
+				cellRow := rowIndex + 1
 				cellCol := colIndex + 1
-				cellName, _ := excelize.ColumnNumberToName(cellCol)
-				cellName += fmt.Sprintf("%d", cellRow)
+				// Преобразуем номер столбца в имя (A, B, ..., Z, AA, AB, ...)
+				cellName, err := excelize.ColumnNumberToName(cellCol)
+				if err != nil {
+					log.Printf("Error converting column number %d to name: %v", cellCol, err)
+					continue
+				}
+				cellAddress := fmt.Sprintf("%s%d", cellName, cellRow)
 
 				if cellValue != nil {
-					f.SetCellValue(sheet.Name, cellName, *cellValue)
+					// Устанавливаем значение ячейки
+					// f.SetCellValue(sheetName, cellAddress, *cellValue) // Этот способ тоже работает
+					// Используем более конкретный метод, если известен тип, но для общего случая SetCellValue подходит.
+					if err := f.SetCellValue(sheetName, cellAddress, *cellValue); err != nil {
+						log.Printf("Warning: could not set cell value at %s on sheet '%s': %v", cellAddress, sheetName, err)
+					}
 				}
 			}
 		}
 
 		// Добавление формул
 		for _, formula := range sheet.Formulas {
-			f.SetCellFormula(sheet.Name, formula.Cell, formula.Formula)
+			if err := f.SetCellFormula(sheetName, formula.Cell, formula.Formula); err != nil {
+				log.Printf("Warning: could not set formula at %s on sheet '%s': %v", formula.Cell, sheetName, err)
+			}
 		}
 
 		// TODO: Реализовать применение стилей
@@ -166,12 +190,16 @@ func main() {
 
 		// Добавление диаграмм
 		for _, chart := range sheet.Charts {
+			// Создаем конфигурацию диаграммы
 			chartConfig := &excelize.Chart{
-				Type: convertChartType(chart.Type), // <-- Изменённая строка
+				Type: convertChartType(chart.Type), // <-- Используем нашу функцию
+				// Series будет заполнен ниже
 				Series: []excelize.ChartSeries{},
-				Title:  []excelize.RichTextRun{{Text: chart.Title}},
+				// Title теперь принимает []excelize.RichTextRun
+				Title: []excelize.RichTextRun{{Text: chart.Title}},
 			}
 
+			// Заполняем серии данных для диаграммы
 			for _, series := range chart.Series {
 				chartConfig.Series = append(chartConfig.Series, excelize.ChartSeries{
 					Name:       series.Name,
@@ -180,15 +208,16 @@ func main() {
 				})
 			}
 
-			if err := f.AddChart(sheet.Name, chart.Position, chartConfig); err != nil {
-				log.Printf("Warning: could not add chart at %s: %v", chart.Position, err)
+			// Добавляем диаграмму на лист
+			if err := f.AddChart(sheetName, chart.Position, chartConfig); err != nil {
+				log.Printf("Warning: could not add chart at %s on sheet '%s': %v", chart.Position, sheetName, err)
 			}
 		}
+		// Конец обработки диаграмм для текущего листа
 
-		// Если есть ещё листы, создадим их
-		// (Первый лист уже существует по умолчанию)
-		// ... (логика для создания дополнительных листов)
+		// TODO: Обработка дополнительных элементов (изображения, таблицы и т.д.)
 	}
+	// Конец обработки всех листов
 
 	// Сохранение файла
 	if err := f.SaveAs(*outputFile); err != nil {
