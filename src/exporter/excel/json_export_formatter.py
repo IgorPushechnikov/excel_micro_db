@@ -77,8 +77,8 @@ def export_project_to_json_format(project_db_path: str, output_json_path: str) -
                 "name": sheet_name,
                 "data": [],
                 "formulas": [],
-                "styles": [], # Пока пустой список
-                "charts": []  # Пока пустой список
+                "styles": [], # Будет заполнен ниже
+                "charts": []  # Будет заполнен ниже
             }
             
             # --- Загрузка "сырых данных" ---
@@ -146,34 +146,54 @@ def export_project_to_json_format(project_db_path: str, output_json_path: str) -
                 
                 sheet_data_item["formulas"].append(formula_item)
             
-            # --- Загрузка стилей (заглушка) ---
-            # styles_records = storage.load_sheet_styles(sheet_id)
-            # logger.debug(f"Загружено {len(styles_records)} записей стилей для листа '{sheet_name}' (ID: {sheet_id}).")
-            # for record in styles_records:
-            #     style_item = {
-            #         "range": record.get('range_address', ''),
-            #         "style": json.loads(record.get('style_attributes', '{}')) # Предполагаем, что стиль хранится как JSON-строка
-            #     }
-            #     sheet_data_item["styles"].append(style_item)
+            # --- Загрузка стилей ---
+            styles_records = storage.load_sheet_styles(sheet_id)
+            logger.debug(f"Загружено {len(styles_records)} записей стилей для листа '{sheet_name}' (ID: {sheet_id}).")
             
-            # --- Загрузка диаграмм (заглушка) ---
-            # charts_records = storage.load_sheet_charts(sheet_id)
-            # logger.debug(f"Загружено {len(charts_records)} записей диаграмм для листа '{sheet_name}' (ID: {sheet_id}).")
-            # for record in charts_records:
-            #     # chart_data_str = record.get('chart_data')
-            #     # if chart_data_str:
-            #     #     try:
-            #     #         # Десериализуем JSON-строку, хранящуюся в БД, обратно в словарь
-            #     #         chart_data_dict = json.loads(chart_data_str)
-            #     #         chart_item = {
-            #     #             "type": chart_data_dict.get('type', 'col'),
-            #     #             "position": chart_data_dict.get('position', 'A1'),
-            #     #             "title": chart_data_dict.get('title', ''),
-            #     #             "series": chart_data_dict.get('series', [])
-            #     #         }
-            #     #         sheet_data_item["charts"].append(chart_item)
-            #     #     except json.JSONDecodeError as je:
-            #     #         logger.error(f"Ошибка разбора JSON диаграммы для листа '{sheet_name}': {je}")
+            for record in styles_records:
+                # Предполагаем, что стиль хранится как JSON-строка в поле 'style_attributes'
+                # и диапазон в поле 'range_address'
+                style_attributes_str = record.get('style_attributes', '{}')
+                range_address = record.get('range_address', '')
+                
+                try:
+                    # Десериализуем JSON-строку атрибутов стиля обратно в словарь Python
+                    style_attributes_dict = json.loads(style_attributes_str) if style_attributes_str else {}
+                except json.JSONDecodeError as je:
+                    logger.error(f"Ошибка разбора JSON стиля для листа '{sheet_name}', диапазон '{range_address}': {je}")
+                    style_attributes_dict = {} # Используем пустой словарь в случае ошибки
+                
+                style_item = {
+                    "range": range_address,
+                    "style": style_attributes_dict # Передаем словарь напрямую
+                }
+                sheet_data_item["styles"].append(style_item)
+            
+            # --- Загрузка диаграмм ---
+            charts_records = storage.load_sheet_charts(sheet_id)
+            logger.debug(f"Загружено {len(charts_records)} записей диаграмм для листа '{sheet_name}' (ID: {sheet_id}).")
+            
+            for record in charts_records:
+                # Предполагаем, что данные диаграммы хранятся как JSON-строка в поле 'chart_data'
+                chart_data_str = record.get('chart_data')
+                
+                if chart_data_str:
+                    try:
+                        # Десериализуем JSON-строку, хранящуюся в БД, обратно в словарь
+                        chart_data_dict = json.loads(chart_data_str)
+                        
+                        # Создаем элемент диаграммы для JSON, соответствующий Go-структуре
+                        chart_item = {
+                            "type": chart_data_dict.get('type', 'col'),
+                            "position": chart_data_dict.get('position', 'A1'),
+                            "title": chart_data_dict.get('title', ''),
+                            "series": chart_data_dict.get('series', [])
+                        }
+                        
+                        sheet_data_item["charts"].append(chart_item)
+                        
+                    except json.JSONDecodeError as je:
+                        logger.error(f"Ошибка разбора JSON диаграммы для листа '{sheet_name}': {je}")
             
             # Добавляем собранные данные листа в основную структуру
             export_data["sheets"].append(sheet_data_item)
