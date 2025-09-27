@@ -4,6 +4,9 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 
+# Импортируем openpyxl для работы с адресами ячеек
+from openpyxl.utils import coordinate_to_tuple, get_column_letter
+
 # Импортируем хранилище для получения данных
 from src.storage.base import ProjectDBStorage
 
@@ -38,6 +41,7 @@ def export_project_to_json_format(project_db_path: str, output_json_path: str) -
         logger.error(f"Файл БД проекта не найден: {project_db_path}")
         return False
 
+    storage = None
     try:
         # 1. Подключение к БД проекта
         storage = ProjectDBStorage(project_db_path)
@@ -116,7 +120,7 @@ def export_project_to_json_format(project_db_path: str, output_json_path: str) -
                 for r in range(1, max_row + 1): # Excel rows are 1-indexed
                     row_data = []
                     for c in range(1, max_col + 1): # Excel cols are 1-indexed
-                        cell_address = f"{openpyxl.utils.get_column_letter(c)}{r}"
+                        cell_address = f"{get_column_letter(c)}{r}"
                         cell_value = cell_data_map.get(cell_address)
                         # В Go-структуре *string означает указатель на строку или nil.
                         # В Python мы будем использовать None для пустых ячеек.
