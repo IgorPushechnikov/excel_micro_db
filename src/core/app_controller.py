@@ -256,13 +256,15 @@ class AppController:
         # Пока вызываем напрямую, но в будущем будет через ExportManager
         if export_type.lower() == 'excel':
             return self.export_project(output_path, use_xlsxwriter=True)
+        elif export_type.lower() == 'go_excel':
+            return self.export_project_with_go(output_path)
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
             return False
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
-        """Экспортирует проект в Excel-файл."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
+        """Экспортирует проект в Excel-файл (старый метод)."""
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."),
         try:
             from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
@@ -273,6 +275,27 @@ class AppController:
             return success
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
+            return False
+
+    def export_project_with_go(self, output_path: str) -> bool:
+        """Экспортирует проект в Excel-файл с использованием Go-экспортера."""
+        logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Go-экспортера.")
+        try:
+            # Импортируем GoExporterBridge
+            from src.exporter.go_bridge import GoExporterBridge
+            
+            # Создаем экземпляр моста
+            go_bridge = GoExporterBridge(self.storage)
+            
+            # Выполняем экспорт
+            success = go_bridge.export_to_xlsx(Path(output_path))
+            if success:
+                logger.info(f"Проект успешно экспортирован в '{output_path}' с помощью Go-экспортера.")
+            else:
+                logger.error(f"Ошибка при экспорте проекта в '{output_path}' с помощью Go-экспортера.")
+            return success
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Go-экспортера: {e}", exc_info=True)
             return False
 
 
