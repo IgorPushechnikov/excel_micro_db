@@ -96,7 +96,7 @@ class GoExporterBridge:
         """
         logger.debug(f"Подготовка данных для листа '{sheet_name}' (ID: {sheet_id})...")
 
-        # 1. Загрузка редактируемых данных
+        # 1. Загрузка "сырых" (редактируемых) данных
         editable_data_rows = self.db_storage.load_sheet_editable_data(sheet_id, sheet_name)
         # editable_data_rows - это список словарей [{'cell_address': 'A1', 'value': 'Header'}, ...]
         # Нам нужно преобразовать это в двумерный список (матрицу)
