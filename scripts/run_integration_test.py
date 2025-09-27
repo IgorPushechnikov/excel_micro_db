@@ -151,7 +151,7 @@ def main():
     if all_steps_passed:
         cmd_export = [
             sys.executable, str(main_py),
-            "--export", "excel",
+            "--export", "go_excel",
             "--output", str(output_file),
             "--project-path", str(project_path)
         ]
