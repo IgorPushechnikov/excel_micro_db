@@ -10,7 +10,7 @@ echo ================================
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo ОШИБКА: Python не найден в системе!
-    echo Пожалуйста, установите Python 3.10 или выше.
+    echo Пожалуйста, установите Python 3.13 или выше.
     pause
     exit /b 1
 )
