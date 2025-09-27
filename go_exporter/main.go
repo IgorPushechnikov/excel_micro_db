@@ -64,47 +64,47 @@ type ChartSeries struct {
 func convertChartType(chartTypeStr string) excelize.ChartType {
 	switch chartTypeStr {
 	case "col":
-		return excelize.ChartTypeCol
+		return excelize.Col
 	case "colStacked":
-		return excelize.ChartTypeColStacked
+		return excelize.ColStacked
 	case "colPercentStacked":
-		return excelize.ChartTypeColPercentStacked
+		return excelize.ColPercentStacked
 	case "col3D":
-		return excelize.ChartTypeCol3D
+		return excelize.Col3D
 	case "col3DClustered":
-		return excelize.ChartTypeCol3DClustered
+		return excelize.Col3DClustered
 	case "col3DStacked":
-		return excelize.ChartTypeCol3DStacked
+		return excelize.Col3DStacked
 	case "col3DPercentStacked":
-		return excelize.ChartTypeCol3DPercentStacked
+		return excelize.Col3DPercentStacked
 	case "line":
-		return excelize.ChartTypeLine
+		return excelize.Line
 	case "lineStacked":
-		return excelize.ChartTypeLineStacked
+		return excelize.LineStacked
 	case "linePercentStacked":
-		return excelize.ChartTypeLinePercentStacked
+		return excelize.LinePercentStacked
 	case "line3D":
-		return excelize.ChartTypeLine3D
+		return excelize.Line3D
 	case "pie":
-		return excelize.ChartTypePie
+		return excelize.Pie
 	case "pie3D":
-		return excelize.ChartTypePie3D
+		return excelize.Pie3D
 	case "pieOfPie":
-		return excelize.ChartTypePieOfPie
+		return excelize.PieOfPie
 	case "barOfPie":
-		return excelize.ChartTypeBarOfPie
+		return excelize.BarOfPie
 	case "doughnut":
-		return excelize.ChartTypeDoughnut
+		return excelize.Doughnut
 	case "doughnutExploded":
-		return excelize.ChartTypeDoughnutExploded
+		return excelize.DoughnutExploded
 	// Добавьте другие типы по мере необходимости
-	// См. полный список в документации к Excelize:
-	// https://pkg.go.dev/github.com/xuri/excelize/v2#ChartType
+	// См. полный список в документации к Excelize v2.9.1:
+	// https://pkg.go.dev/github.com/xuri/excelize/v2@v2.9.1#pkg-constants (раздел CHART)
 	default:
 		// Возвращаем тип по умолчанию, если тип не распознан
 		// Лучше логировать это как предупреждение
 		fmt.Printf("Warning: Unknown chart type '%s', using 'col' as default.\n", chartTypeStr)
-		return excelize.ChartTypeCol // или другой тип по умолчанию
+		return excelize.Col // или другой тип по умолчанию
 	}
 }
 
