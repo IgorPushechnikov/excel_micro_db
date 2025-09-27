@@ -13,13 +13,51 @@ import subprocess
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict, Tuple
 
 from src.exporter.go_bridge.export_data_model import ExportData, SheetData, Formula, Style, Chart, ChartSeries, ProjectMetadata
 from src.storage.base import ProjectDBStorage
 
 
 logger = logging.getLogger(__name__)
+
+
+def _convert_chart_position_db_to_address(position_data: Dict[str, Any]) -> str:
+    """
+    Преобразует словарь позиции диаграммы из БД в строку адреса ячейки (например, "A1").
+    Использует 'from_col' и 'from_row' из данных позиции.
+
+    Args:
+        position_data (Dict[str, Any]): Словарь с данными позиции из БД.
+
+    Returns:
+        str: Строка адреса ячейки (например, "A1") или "A1" по умолчанию при ошибке.
+    """
+    try:
+        # Извлекаем индексы столбца и строки (0-based)
+        col_index = position_data.get('from_col', 0)
+        row_index = position_data.get('from_row', 0)
+        
+        # Преобразуем 0-based индекс в 1-based номер для Excel
+        row_number = row_index + 1
+        
+        # Преобразуем 0-based индекс столбца в имя столбца Excel (A, B, ..., Z, AA, AB, ...)
+        # Алгоритм: https://stackoverflow.com/questions/2386196/how-to-convert-a-column-number-eg-127-into-an-excel-column-eg-aa
+        column_name = ""
+        temp_col_index = col_index
+        while temp_col_index >= 0:
+            column_name = chr(temp_col_index % 26 + ord('A')) + column_name
+            temp_col_index = temp_col_index // 26 - 1
+        
+        # Если column_name осталась пустой (например, при col_index < 0), используем A
+        if not column_name:
+            column_name = "A"
+            logger.warning(f"Имя столбца диаграммы оказалось пустым для индекса {col_index}. Используется 'A'.")
+        
+        return f"{column_name}{row_number}"
+    except Exception as e:
+        logger.warning(f"Ошибка при преобразовании позиции диаграммы {position_data}: {e}. Используется A1.")
+        return "A1" # Возвращаем значение по умолчанию в случае ошибки
 
 
 class GoExporterBridge:
@@ -102,14 +140,74 @@ class GoExporterBridge:
         charts_data = self.db_storage.load_sheet_charts(sheet_id)
         charts_list = []
         for chart_item in charts_data:
-            # Предполагается, что chart_item - это словарь с ключами, соответствующими Chart и ChartSeries
-            # Нужно аккуратно преобразовать его в Pydantic-модели.
+            # chart_item - это словарь вида {'chart_data': '...json string...'}
+            # Нужно извлечь и распарсить JSON-строку
+            chart_data_str = chart_item.get('chart_data', '{}')
+            if not chart_data_str:
+                continue
             try:
-                # Если данные диаграммы уже в правильном формате, можно использовать model_validate
-                chart = Chart.model_validate(chart_item)
+                # Десериализуем JSON-строку в словарь Python
+                chart_dict_from_db = json.loads(chart_data_str)
+                
+                # --- Адаптация данных из БД в формат Chart ---
+                adapted_chart_dict = {}
+                
+                # 1. type -> type
+                adapted_chart_dict['type'] = chart_dict_from_db.get('type', 'col')
+                
+                # 2. position (сложный объект) -> position (строка)
+                position_data = chart_dict_from_db.get('position', {})
+                if isinstance(position_data, dict):
+                    adapted_chart_dict['position'] = _convert_chart_position_db_to_address(position_data)
+                else:
+                    # Если position не словарь, используем значение по умолчанию
+                    logger.warning(f"Поле 'position' диаграммы не является словарем: {position_data}. Используется A1.")
+                    adapted_chart_dict['position'] = "A1"
+                
+                # 3. title -> title (опционально)
+                title = chart_dict_from_db.get('title')
+                if title is not None:
+                    adapted_chart_dict['title'] = str(title)
+                # Если title отсутствует, Chart.model_validate установит значение по умолчанию (None)
+                
+                # 4. series -> series (нужно адаптировать ChartSeries тоже)
+                series_data_list = chart_dict_from_db.get('series', [])
+                adapted_series_list = []
+                if isinstance(series_data_list, list):
+                    for series_item in series_data_list:
+                        if isinstance(series_item, dict):
+                            adapted_series_item = {}
+                            # val_range -> values
+                            val_range = series_item.get('val_range')
+                            if val_range:
+                                adapted_series_item['values'] = val_range
+                            # cat_range -> categories (опционально)
+                            cat_range = series_item.get('cat_range')
+                            if cat_range:
+                                adapted_series_item['categories'] = cat_range
+                            # name -> name (опционально)
+                            name = series_item.get('name')
+                            if name:
+                                adapted_series_item['name'] = str(name)
+                            
+                            adapted_series_list.append(adapted_series_item)
+                        else:
+                            logger.warning(f"Элемент series не является словарем: {series_item}")
+                else:
+                    logger.warning(f"Поле 'series' диаграммы не является списком: {series_data_list}")
+                
+                adapted_chart_dict['series'] = adapted_series_list
+                
+                # --- Конец адаптации ---
+                
+                # Теперь валидируем адаптированный словарь с помощью Pydantic
+                chart = Chart.model_validate(adapted_chart_dict)
                 charts_list.append(chart)
+            except json.JSONDecodeError as je:
+                logger.warning(f"Не удалось распарсить JSON диаграммы для листа '{sheet_name}': {je}")
+                continue
             except Exception as e:
-                logger.warning(f"Не удалось преобразовать данные диаграммы для листа '{sheet_name}': {e}")
+                logger.warning(f"Не удалось преобразовать данные диаграммы для листа '{sheet_name}': {e}", exc_info=True)
                 continue
 
         return SheetData(
