@@ -13,7 +13,7 @@ import subprocess
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from src.exporter.go_bridge.export_data_model import ExportData, SheetData, Formula, Style, Chart, ChartSeries, ProjectMetadata
 from src.storage.base import ProjectDBStorage
