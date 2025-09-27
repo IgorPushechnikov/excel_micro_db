@@ -9,6 +9,7 @@ numpy>=1.24.0
 pandas>=2.0.3
 openpyxl>=3.1.2
 xlsxwriter>=3.0.0  # Добавь эту строку
+pydantic>=2.0.0
 
 # Визуализация данных
 matplotlib>=3.7.0
