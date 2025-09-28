@@ -133,11 +133,14 @@ class GoExporterBridge:
 
         # 3. Загрузка стилей
         # TODO: Реализовать преобразование стилей из формата БД в формат, понятный Go-экспортеру.
-        # Пока оставим пустым списком.
+        # Пока оставим пустым списком и добавим отладочный лог.
+        styles_data = self.db_storage.load_sheet_styles(sheet_id)
+        logger.debug(f"[DEBUG] Загружены стили для листа '{sheet_name}' (ID: {sheet_id}): {styles_data}")
         styles_list = []
 
         # 4. Загрузка диаграмм
         charts_data = self.db_storage.load_sheet_charts(sheet_id)
+        logger.debug(f"[DEBUG] Загружены диаграммы для листа '{sheet_name}' (ID: {sheet_id}): {charts_data}")
         charts_list = []
         for chart_item in charts_data:
             # chart_item - это словарь вида {'chart_data': '...json string...'}
