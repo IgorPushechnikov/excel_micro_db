@@ -177,20 +177,38 @@ class GoExporterBridge:
                     for series_item in series_data_list:
                         if isinstance(series_item, dict):
                             adapted_series_item = {}
-                            # val_range -> values
+                            # val_range -> values (обязательно)
                             val_range = series_item.get('val_range')
                             if val_range:
                                 adapted_series_item['values'] = val_range
+                            else:
+                                # Если val_range отсутствует, пропускаем этот элемент series
+                                logger.warning(f"Элемент series не содержит обязательное поле 'val_range': {series_item}")
+                                continue
+                            
                             # cat_range -> categories (опционально)
                             cat_range = series_item.get('cat_range')
-                            if cat_range:
+                            if cat_range is not None: # Может быть пустая строка, которая тоже валидна
                                 adapted_series_item['categories'] = cat_range
+                            else:
+                                # Если cat_range отсутствует, явно устанавливаем None
+                                adapted_series_item['categories'] = None
+                            
                             # name -> name (опционально)
                             name = series_item.get('name')
-                            if name:
+                            if name is not None: # Может быть пустая строка, которая тоже валидна
                                 adapted_series_item['name'] = str(name)
+                            else:
+                                # Если name отсутствует, явно устанавливаем None
+                                adapted_series_item['name'] = None
                             
-                            adapted_series_list.append(adapted_series_item)
+                            # Создаем объект ChartSeries из адаптированного словаря
+                            try:
+                                chart_series = ChartSeries.model_validate(adapted_series_item)
+                                adapted_series_list.append(chart_series)
+                            except Exception as e:
+                                logger.warning(f"Не удалось создать ChartSeries из адаптированного элемента: {e}", exc_info=True)
+                                continue
                         else:
                             logger.warning(f"Элемент series не является словарем: {series_item}")
                 else:
