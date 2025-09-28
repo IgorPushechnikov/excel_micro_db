@@ -255,8 +255,10 @@ class AppController:
         """Универсальный метод для экспорта результатов проекта."""
         # Пока вызываем напрямую, но в будущем будет через ExportManager
         if export_type.lower() == 'excel':
-            return self.export_project(output_path, use_xlsxwriter=True)
+            # Новый питоновский экспорт через xlsxwriter
+            return self.export_project_with_xlsxwriter(output_path)
         elif export_type.lower() == 'go_excel':
+            # Экспорт через Go-экспортер
             return self.export_project_with_go(output_path)
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
@@ -314,6 +316,25 @@ class AppController:
             return success
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Go-экспортера: {e}", exc_info=True)
+            return False
+
+    def export_project_with_xlsxwriter(self, output_path: str) -> bool:
+        """Экспортирует проект в Excel-файл с использованием Python-экспортера (xlsxwriter)."""
+        logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter).")
+        try:
+            # Импортируем xlsxwriter_exporter
+            from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
+            
+            # Выполняем экспорт
+            success = export_project_xlsxwriter(self.project_db_path, output_path)
+
+            if success:
+                logger.info(f"Проект успешно экспортирован в '{output_path}' с помощью Python-экспортера (xlsxwriter).")
+            else:
+                logger.error(f"Ошибка при экспорте проекта в '{output_path}' с помощью Python-экспортера (xlsxwriter).")
+            return success
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Python-экспортера (xlsxwriter): {e}", exc_info=True)
             return False
 
 
