@@ -51,6 +51,7 @@ class SheetData(BaseModel):
     formulas: List[Formula] = Field(default_factory=list)
     styles: List[Style] = Field(default_factory=list)
     charts: List[Chart] = Field(default_factory=list)
+    merged_cells: List[str] = Field(default_factory=list)
 
 class ExportData(BaseModel):
     """Корневая модель для всего экспортируемого проекта."""
