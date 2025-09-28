@@ -31,8 +31,8 @@ class Style(BaseModel):
 
 class ChartSeries(BaseModel):
     """Описание одной серии данных для диаграммы."""
-    name: str  # Ссылка на ячейку с названием, например "Sheet1!$A$1"
-    categories: str  # Диапазон категорий, например "Sheet1!$B$1:$D$1"
+    name: Optional[str] = None  # Ссылка на ячейку с названием, например "Sheet1!$A$1"
+    categories: Optional[str] = None  # Диапазон категорий, например "Sheet1!$B$1:$D$1"
     values: str  # Диапазон значений, например "Sheet1!$B$2:$D$2"
 
 class Chart(BaseModel):
