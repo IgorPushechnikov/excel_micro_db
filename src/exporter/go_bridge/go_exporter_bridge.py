@@ -16,8 +16,9 @@ import tempfile
 from pathlib import Path
 from typing import Any, List, Optional, Dict, Tuple
 
-from src.exporter.go_bridge.export_data_model import ExportData, SheetData, Formula, Style, Chart, ChartSeries, ProjectMetadata
+# Импортируем новый модуль для преобразования стилей
 from src.exporter.go_bridge.style_converter import convert_openpyxl_style_to_go_format
+from src.exporter.go_bridge.export_data_model import ExportData, SheetData, Formula, Style, Chart, ChartSeries, ProjectMetadata
 from src.storage.base import ProjectDBStorage
 
 
@@ -55,7 +56,7 @@ def _convert_chart_position_db_to_address(position_data: Dict[str, Any]) -> str:
         if not column_name:
             column_name = "A"
             logger.warning(f"Имя столбца диаграммы оказалось пустым для индекса {col_index}. Используется 'A'.")
-        
+
         return f"{column_name}{row_number}"
     except Exception as e:
         logger.warning(f"Ошибка при преобразовании позиции диаграммы {position_data}: {e}. Используется A1.")
@@ -150,6 +151,7 @@ class GoExporterBridge:
                             
                             # --- Интеграция style_converter ---
                             # Преобразуем структуру стиля из формата openpyxl в формат Go/excelize
+                            # Используем новый модуль для очистки
                             cleaned_style_dict = convert_openpyxl_style_to_go_format(style_attributes_dict)
                             
                             # Создаем объект Style с очищенными атрибутами
