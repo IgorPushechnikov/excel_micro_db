@@ -1,105 +1,50 @@
-# Go Excel Exporter
+# Go-экспортер (go_excel_exporter)
 
-Этот модуль представляет собой автономную утилиту на языке Go, предназначенную для генерации файлов Excel (`.xlsx`) на основе структурированных данных, полученных из основного приложения **Excel Micro DB**.
+Go-утилита `go_excel_exporter.exe` предназначена для генерации `.xlsx` файлов на основе JSON-данных, подготовленных Python-частью приложения Excel Micro DB.
 
-## Цель
+## Назначение
 
-Заменить текущий экспорт на основе `xlsxwriter` (Python) на более мощный и совместимый экспорт с использованием библиотеки `Excelize` (Go). Основное преимущество — полная поддержка редактируемых диаграмм и более широкий спектр типов диаграмм.
-
-## Архитектура
-
-Утилита спроектирована как **CLI-инструмент**, который вызывается из основного Python-приложения. Она не взаимодействует с базой данных напрямую, а получает все необходимые данные через промежуточный JSON-файл.
-
-Такой подход обеспечивает:
-1.  **Гибкость:** В будущем основное приложение сможет использовать любую СУБД (SQLite, PostgreSQL, MySQL и т.д.), а Go-экспортер останется неизменным, так как он работает только с JSON.
-2.  **Изоляцию:** Go-модуль полностью независим и может быть легко протестирован отдельно.
-3.  **Простоту распространения:** Компилируется в один бинарный файл.
-
-## Формат данных (Контракт)
-
-Основное приложение (Python) должно подготовить файл в формате `ExportData.json` со следующей структурой:
-
-```json
-{
-  "metadata": {
-    "project_name": "string",
-    "author": "string",
-    "created_at": "string (ISO 8601)"
-  },
-  "sheets": [
-    {
-      "name": "string",
-      "data": [
-        ["cell_value_or_null", "cell_value_or_null", ...],
-        ...
-      ],
-      "formulas": [
-        {
-          "cell": "A1",
-          "formula": "=SUM(B1:C1)"
-        },
-        ...
-      ],
-      "styles": [
-        {
-          "range": "A1:C10",
-          "style": {
-            "font": { "bold": true, "color": "FF0000" },
-            "fill": { "fg_color": "FFFF00" },
-            "alignment": { "horizontal": "center" }
-          }
-        },
-        ...
-      ],
-      "charts": [
-        {
-          "type": "col",
-          "position": "E5",
-          "title": "My Chart",
-          "series": [
-            {
-              "name": "Sheet1!$A$1",
-              "categories": "Sheet1!$B$1:$D$1",
-              "values": "Sheet1!$B$2:$D$2"
-            }
-          ]
-        },
-        ...
-      ]
-    }
-  ]
-}
-```
-
-## Использование
-
-После компиляции утилита (`go_excel_exporter.exe` на Windows) вызывается с двумя аргументами:
-
-```bash
-./go_excel_exporter.exe path/to/export_data.json path/to/output_file.xlsx
-```
-
-### Пример вызова из Python
-
-```python
-import subprocess
-
-result = subprocess.run([
-    "go_excel_exporter.exe",
-    "temp/export_data.json",
-    "output/report.xlsx"
-], capture_output=True, text=True, check=True)
-```
-
-## Сборка
-
-1. Установите Go (версия 1.21+).
-2. Перейдите в директорию `go_exporter`.
-3. Выполните команду:
-   ```bash
-   go build -o go_excel_exporter.exe .
-   ```
+Эта утилита принимает JSON-файл, соответствующий [спецификации](../../spec/go_excel_exporter_input_spec.yaml), и использует библиотеку `excelize` для создания Excel-файла. Она является частью архитектуры экспорта, описанной в [документации проекта](../../docs/export_spec.md).
 
 ## Зависимости
 
-Основная зависимость — библиотека [`github.com/xuri/excelize/v2`](https://github.com/xuri/excelize).
+*   [github.com/xuri/excelize/v2](https://github.com/xuri/excelize): Библиотека для работы с Excel файлами.
+
+## Использование
+
+```bash
+go_excel_exporter -input <input.json> -output <output.xlsx>
+```
+
+*   `-input`: Путь к JSON-файлу с данными проекта.
+*   `-output`: Путь, по которому будет создан итоговый `.xlsx` файл.
+
+## Входные данные (JSON)
+
+Утилита ожидает JSON, соответствующий структуре `ExportData`, определённой в `main.go` (и описанной в `spec/go_excel_exporter_input_spec.yaml`).
+
+*   **`metadata`**: Информация о проекте (пока не используется напрямую).
+*   **`sheets`**: Массив объектов `SheetData`.
+    *   **`name`**: Имя листа.
+    *   **`data`**: Двумерный массив значений ячеек.
+    *   **`formulas`**: Массив объектов `Formula` (ячейка, формула).
+    *   **`styles`**: Массив объектов `Style` (диапазон, словарь атрибутов стиля).
+    *   **`charts`**: Массив объектов `Chart` (тип, позиция, серии и т.д.).
+    *   **`merged_cells`**: Массив строк, описывающих объединённые диапазоны (например, "A1:B2").
+
+## Обработка стилей
+
+Go-утилита должна обрабатывать структуру `Style`, в частности поле `style`, которое содержит "очищенный" словарь атрибутов стиля, подготовленный Python-модулем `style_converter.py`. Этот словарь содержит конкретные значения (например, `{"rgb": "FF0000"}` для цвета), которые могут быть напрямую переданы в `excelize.Style`.
+
+## Обработка диаграмм
+
+Go-утилита должна обрабатывать структуру `Chart`, включая `type`, `position`, `title` и `series`. Важно корректно обрабатывать поля, которые могут быть `null` в JSON (например, `name` или `categories` в `ChartSeries`).
+
+## Сборка
+
+Утилита собирается из `main.go` с помощью `go build`.
+
+```bash
+cd src/exporter/go
+go build -o go_excel_exporter.exe main.go
+```
