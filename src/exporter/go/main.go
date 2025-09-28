@@ -142,8 +142,8 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 		// BgColor/FgColor -> Color
 		// patternType -> Pattern
 		if patternType, ok := fillData["patternType"].(string); ok {
-			// Map patternType to excelize.Pattern
-			var fillPattern excelize.Pattern
+			// Map patternType to excelize.Pattern (int)
+			var fillPattern int
 			switch patternType {
 			case "solid":
 				fillPattern = 1 // solid
@@ -170,7 +170,7 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 
 		// Handle bgColor and fgColor - use the first one found or combine if needed
 		// For simplicity, let's take bgColor first, then fgColor if bgColor is not set
-		// In excelize, Fill.Color is a slice of strings
+		// In excelize, Fill.Color for pattern fills is a []string
 		var fillColor string
 		if bgColorData, ok := fillData["bgColor"].(map[string]interface{}); ok {
 			if rgb, ok := bgColorData["rgb"].(string); ok && len(rgb) == 6 {
@@ -185,7 +185,7 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 			}
 		}
 		if fillColor != "" {
-			excelizeStyle.Fill.Color = []string{fillColor}
+			excelizeStyle.Fill.Color = []string{fillColor} // For pattern fill, Color is a slice of strings
 		}
 	}
 
@@ -214,7 +214,7 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 			color := getColorFromMap(topData)
 			excelizeStyle.Border = append(excelizeStyle.Border, excelize.Border{
 				Type:  "top",
-				Color: []string{color}, // Color is a slice
+				Color: color, // Color is a string
 				Style: styleCode,
 			})
 		}
@@ -223,7 +223,7 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 			color := getColorFromMap(bottomData)
 			excelizeStyle.Border = append(excelizeStyle.Border, excelize.Border{
 				Type:  "bottom",
-				Color: []string{color},
+				Color: color,
 				Style: styleCode,
 			})
 		}
@@ -232,7 +232,7 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 			color := getColorFromMap(leftData)
 			excelizeStyle.Border = append(excelizeStyle.Border, excelize.Border{
 				Type:  "left",
-				Color: []string{color},
+				Color: color,
 				Style: styleCode,
 			})
 		}
@@ -241,7 +241,7 @@ func convertStyleToExcelizeOptions(styleMap map[string]interface{}) (*excelize.S
 			color := getColorFromMap(rightData)
 			excelizeStyle.Border = append(excelizeStyle.Border, excelize.Border{
 				Type:  "right",
-				Color: []string{color},
+				Color: color,
 				Style: styleCode,
 			})
 		}
