@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Мост между основным Python-приложением и Go-утилитой для экспорта.
 
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Dict, Tuple
 
 from src.exporter.go_bridge.export_data_model import ExportData, SheetData, Formula, Style, Chart, ChartSeries, ProjectMetadata
+from src.exporter.go_bridge.style_converter import convert_openpyxl_style_to_go_format
 from src.storage.base import ProjectDBStorage
 
 
@@ -132,16 +134,49 @@ class GoExporterBridge:
         ]
 
         # 3. Загрузка стилей
-        # TODO: Реализовать преобразование стилей из формата БД в формат, понятный Go-экспортеру.
-        # Пока оставим пустым списком и добавим отладочный лог.
         styles_data = self.db_storage.load_sheet_styles(sheet_id)
-        logger.debug(f"[DEBUG] Загружены стили для листа '{sheet_name}' (ID: {sheet_id}): {styles_data}")
+        logger.debug(f"[DEBUG] Загружены сырые стили для листа '{sheet_name}' (ID: {sheet_id}): {styles_data}")
         styles_list = []
+        if isinstance(styles_data, list):
+            for style_item in styles_data:
+                if isinstance(style_item, dict):
+                    # style_item - это словарь вида {'range_address': 'A1:B10', 'style_attributes': '...json string...'}
+                    range_address = style_item.get('range_address')
+                    style_attributes_str = style_item.get('style_attributes')
+                    if range_address and style_attributes_str:
+                        try:
+                            # Десериализуем JSON-строку атрибутов стиля в словарь Python
+                            style_attributes_dict = json.loads(style_attributes_str)
+                            
+                            # --- Интеграция style_converter ---
+                            # Преобразуем структуру стиля из формата openpyxl в формат Go/excelize
+                            cleaned_style_dict = convert_openpyxl_style_to_go_format(style_attributes_dict)
+                            
+                            # Создаем объект Style с очищенными атрибутами
+                            style = Style(range=range_address, style=cleaned_style_dict)
+                            styles_list.append(style)
+                            # --- Конец интеграции ---
+                            
+                        except json.JSONDecodeError as je:
+                            logger.warning(f"Не удалось распарсить JSON стиля для диапазона '{range_address}' на листе '{sheet_name}': {je}")
+                            continue
+                        except Exception as e:
+                            logger.warning(f"Не удалось преобразовать или создать стиль для диапазона '{range_address}' на листе '{sheet_name}': {e}", exc_info=True)
+                            continue
+                else:
+                    logger.warning(f"Элемент стиля не является словарем: {style_item}")
+        else:
+            logger.warning(f"Поле 'styles_data' для листа '{sheet_name}' не является списком: {styles_data}")
 
         # 4. Загрузка диаграмм
         charts_data = self.db_storage.load_sheet_charts(sheet_id)
         logger.debug(f"[DEBUG] Загружены диаграммы для листа '{sheet_name}' (ID: {sheet_id}): {charts_data}")
         charts_list = []
+
+        # 5. Загрузка объединенных ячеек
+        merged_cells_data = self.db_storage.load_sheet_merged_cells(sheet_id)
+        logger.debug(f"[DEBUG] Загружены объединенные ячейки для листа '{sheet_name}' (ID: {sheet_id}): {merged_cells_data}")
+        merged_cells_list = merged_cells_data if isinstance(merged_cells_data, list) else []
         for chart_item in charts_data:
             # chart_item - это словарь вида {'chart_data': '...json string...'}
             # Нужно извлечь и распарсить JSON-строку
@@ -235,8 +270,9 @@ class GoExporterBridge:
             name=sheet_name,
             data=data_matrix,
             formulas=formulas_list,
-            styles=styles_list,
-            charts=charts_list
+            styles=styles_list, # Теперь должен содержать данные
+            charts=charts_list,
+            merged_cells=merged_cells_list
         )
 
     def _excel_address_to_indices(self, address: str) -> tuple[int, int] | tuple[None, None]:
