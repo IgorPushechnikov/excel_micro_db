@@ -30,6 +30,7 @@ type SheetData struct {
 	Formulas []Formula   `json:"formulas,omitempty"`
 	Styles   []Style     `json:"styles,omitempty"`
 	Charts   []Chart     `json:"charts,omitempty"`
+	MergedCells []string `json:"merged_cells,omitempty"`
 }
 
 // Formula структура для формулы
@@ -214,6 +215,14 @@ func main() {
 			}
 		}
 		// Конец обработки диаграмм для текущего листа
+
+		// Применение объединенных ячеек
+		for _, mergedCellRange := range sheet.MergedCells {
+			if err := f.MergeCell(sheetName, mergedCellRange); err != nil {
+				log.Printf("Warning: could not merge cells '%s' on sheet '%s': %v", mergedCellRange, sheetName, err)
+			}
+		}
+		// Конец применения объединенных ячеек для текущего листа
 
 		// TODO: Обработка дополнительных элементов (изображения, таблицы и т.д.)
 	}
