@@ -3,6 +3,7 @@
 """
 CLI точка входа в Excel Micro DB.
 Поддерживает различные режимы работы через аргументы командной строки.
+Теперь также может запускать HTTP-сервер.
 """
 
 import argparse
@@ -10,17 +11,39 @@ import sys
 import os
 import logging
 from pathlib import Path
+import threading
+import time
 
-# Добавляем src в путь поиска модулей
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# Добавляем директорию backend в путь поиска модулей
+# Теперь main.py находится в backend/, поэтому parent — это backend/
+sys.path.insert(0, str(Path(__file__).parent))
 
-from src.utils.logger import get_logger
+from utils.logger import get_logger
 # Импортируем AppController для интеграции
-from src.core.app_controller import create_app_controller
+from core.app_controller import create_app_controller
 # ProjectManager больше не импортируем напрямую, так как AppController его использует
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
+
+def start_http_server(host: str = "127.0.0.1", port: int = 8000):
+    """
+    Запускает HTTP-сервер (пока заглушка с TODO).
+    В дальнейшем будет использовать FastAPI.
+    """
+    logger.info(f"Запуск HTTP-сервера на {host}:{port} (заглушка)")
+    print(f"HTTP-сервер должен стартовать на {host}:{port}...")
+    # TODO: Импортировать и запустить FastAPI сервер из backend.api.fastapi_server
+    # Примерный код будет:
+    # from api.fastapi_server import run_server
+    # run_server(host, port)
+    # Пока просто эмулируем долгий запуск
+    try:
+        while True:
+            time.sleep(10) # Сервер работает
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал остановки HTTP-сервера.")
+        print("HTTP-сервер остановлен.")
 
 def initialize_project(project_path: str) -> None:
     """Инициализация нового проекта."""
@@ -32,19 +55,18 @@ def initialize_project(project_path: str) -> None:
         if not app_controller.initialize():
              logger.error("Не удалось инициализировать приложение для создания проекта.")
              raise Exception("Ошибка инициализации приложения")
-             
+
         success = app_controller.create_project(project_path)
-        
+
         if success:
             logger.info("Проект инициализирован успешно")
         else:
             logger.error("Не удалось инициализировать проект")
             raise Exception("Ошибка создания проекта")
-            
+
     except Exception as e:
         logger.error(f"Ошибка при инициализации проекта: {e}")
         raise
-
 def analyze_excel(file_path: str, project_path: str) -> None:
     """Анализ Excel файла через AppController."""
     logger.info(f"Начало анализа файла: {file_path}")
@@ -81,8 +103,7 @@ def analyze_excel(file_path: str, project_path: str) -> None:
 
     except Exception as e:
         logger.error(f"Ошибка при анализе файла: {e}")
-        raise # Повторно вызываем исключение, чтобы main() мог его обработать
-
+        raise
 def process_data(config_path: str) -> None:
     """Обработка данных по конфигурации."""
     logger.info(f"Обработка данных с конфигурацией: {config_path}")
@@ -92,12 +113,11 @@ def process_data(config_path: str) -> None:
         if not Path(config_path).exists():
             logger.error(f"Конфигурационный файл не найден: {config_path}")
             return
-            
+
         logger.info("Обработка данных завершена")
     except Exception as e:
         logger.error(f"Ошибка при обработке данных: {e}")
         raise
-
 def export_results_cli(export_type: str, output_path: str, project_path: str) -> None:
     """Экспорт результатов проекта через CLI."""
     # --- НОВЫЙ КОД: Настройка лога в подпапке ---
@@ -153,7 +173,7 @@ def export_results_cli(export_type: str, output_path: str, project_path: str) ->
             logger.info(f"Начинается создание SQL-дампа БД в: {sql_output_path}")
 
             # Импортируем функцию dump_db_to_sql
-            from src.utils.db_utils import dump_db_to_sql
+            from utils.db_utils import dump_db_to_sql
             dump_success = dump_db_to_sql(str(project_db_path), str(sql_output_path))
             if dump_success:
                 logger.info(f"SQL-дамп БД успешно создан: {sql_output_path}")
@@ -172,14 +192,12 @@ def export_results_cli(export_type: str, output_path: str, project_path: str) ->
         logger.removeHandler(export_file_handler)
         export_file_handler.close()
         # --- КОНЕЦ НОВОГО КОДА ---
-
-
 def start_interactive_mode() -> None:
     """Запуск интерактивного режима (REPL)."""
     logger.info("Запуск интерактивного режима")
     print("Добро пожаловать в интерактивный режим Excel Micro DB!")
     print("Для выхода введите 'exit' или нажмите Ctrl+C")
-    
+
     # TODO: Здесь будет реализация интерактивного режима
     # Пока только демонстрация
     try:
@@ -194,12 +212,11 @@ def start_interactive_mode() -> None:
             except KeyboardInterrupt:
                 print("\nПолучен сигнал завершения (Ctrl+C)")
                 break
-        
+
         logger.info("Выход из интерактивного режима")
     except Exception as e:
         logger.error(f"Ошибка в интерактивном режиме: {e}")
         raise
-
 def main() -> int:
     """Главная функция точки входа. Возвращает код завершения."""
     parser = argparse.ArgumentParser(
@@ -215,23 +232,23 @@ def main() -> int:
   python main.py --gui
         """
     )
-    
+
     # Группы взаимоисключающих аргументов (режимы работы)
-    # Обновляем группу, чтобы включить --export
+    # Обновляем группу, чтобы включить --export и --http-server
     mode_group = parser.add_mutually_exclusive_group(required=True)
-    
+
     mode_group.add_argument(
         '--init',
         action='store_true',
         help='Инициализация нового проекта'
     )
-    
+
     mode_group.add_argument(
         '--analyze',
         metavar='FILE',
         help='Анализ Excel файла (требует --project-path)'
     )
-    
+
     # Добавляем новый режим экспорта
     mode_group.add_argument(
         '--export',
@@ -239,56 +256,94 @@ def main() -> int:
         choices=['go_excel', 'excel'], # Ограничиваем поддерживаемые типы на данном этапе
         help='Экспорт результатов проекта (например, go_excel или excel). Требует --output и --project-path.'
     )
-    
+
     mode_group.add_argument(
         '--process',
         action='store_true',
         help='Обработка данных'
     )
-    
+
     mode_group.add_argument(
         '--interactive',
         action='store_true',
         help='Запуск интерактивного режима (REPL)'
     )
-    
+
     mode_group.add_argument(
         '--gui',
         action='store_true',
         help='Запуск графического интерфейса пользователя (GUI)'
     )
-    
+
+    # ДОБАВЛЕН: Новый режим HTTP-сервера
+    mode_group.add_argument(
+        '--http-server',
+        action='store_true',
+        help='Запуск HTTP-сервера для взаимодействия с GUI (FastAPI)'
+    )
+
     # Дополнительные аргументы
     parser.add_argument(
         '--project-path',
         metavar='PATH',
         help='Путь к директории проекта'
     )
-    
+
     parser.add_argument(
         '--config',
         metavar='FILE',
         help='Путь к конфигурационному файлу (для --process)'
     )
-    
+
     # Добавляем аргумент для выходного файла экспорта
     parser.add_argument(
         '--output',
         metavar='FILE',
         help='Путь к выходному файлу (для --export)'
     )
-    
+
+    # Аргументы для HTTP-сервера
+    parser.add_argument(
+        '--host',
+        metavar='HOST',
+        default='127.0.0.1',
+        help='Хост для HTTP-сервера (по умолчанию: 127.0.0.1, для --http-server)'
+    )
+
+    parser.add_argument(
+        '--port',
+        metavar='PORT',
+        type=int,
+        default=8000,
+        help='Порт для HTTP-сервера (по умолчанию: 8000, для --http-server)'
+    )
+
     # Парсим аргументы
     args = parser.parse_args()
-    
+
     try:
         # Обработка выбранных режимов
-        if args.gui:
+        if args.http_server:
+            # --- НОВОЕ: Запуск HTTP-сервера ---
+            logger.info(f"Запуск HTTP-сервера на {args.host}:{args.port}...")
+            # Запускаем сервер в отдельном потоке, чтобы CLI мог обрабатывать сигналы (Ctrl+C)
+            server_thread = threading.Thread(target=start_http_server, args=(args.host, args.port), daemon=True)
+            server_thread.start()
+            print(f"HTTP-сервер запущен на {args.host}:{args.port}. Нажмите Ctrl+C для остановки.")
+            try:
+                server_thread.join() # Ждем завершения потока (по Ctrl+C)
+            except KeyboardInterrupt:
+                logger.info("Получен сигнал остановки из CLI.")
+                print("\nОстановка HTTP-сервера...")
+                return 0 # Возвращаем 0 при корректной остановке
+            # --- КОНЕЦ НОВОГО ---
+
+        elif args.gui:
             # --- НОВОЕ: Запуск GUI ---
             logger.info("Запуск графического интерфейса...")
             # Импортируем и запускаем GUI
             try:
-                from src.constructor.gui_app import main as gui_main
+                from constructor.gui_app import main as gui_main
                 logger.debug("Модуль GUI успешно импортирован.")
                 # Передаём управление в GUI
                 # gui_main() не принимает аргументы, как и CLI main()
@@ -304,37 +359,37 @@ def main() -> int:
                 print(f"Ошибка: Критическая ошибка при запуске GUI: {e_gui}")
                 return 1
             # --- КОНЕЦ НОВОГО ---
-            
+
         elif args.init:
             if not args.project_path:
                 parser.error("--init требует указания --project-path")
             initialize_project(args.project_path)
             return 0 # Успех
-            
+
         elif args.analyze:
             # --analyze теперь требует --project-path
             if not args.project_path:
                 parser.error("--analyze требует указания --project-path")
             analyze_excel(args.analyze, args.project_path)
             return 0 # Успех
-            
+
         elif args.export:
             # --export требует --output и --project-path
             if not args.output or not args.project_path:
                 parser.error("--export требует указания --output и --project-path")
             export_results_cli(args.export, args.output, args.project_path)
             return 0 # Успех
-            
+
         elif args.process:
             if not args.config:
                 parser.error("--process требует указания --config")
             process_data(args.config)
             return 0 # Успех
-            
+
         elif args.interactive:
             start_interactive_mode()
             return 0 # Успех
-            
+
     except Exception as e:
         logger.critical(f"Критическая ошибка приложения: {e}")
         return 1
@@ -345,6 +400,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     # main() возвращает код, который мы передаём в sys.exit()
-    exit_code = main() 
+    exit_code = main()
     # Если main() не вернул ничего (None), sys.exit() интерпретирует это как 0
     sys.exit(exit_code)
