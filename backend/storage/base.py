@@ -1,4 +1,4 @@
-# src/storage/base.py
+# backend/storage/base.py
 
 import sqlite3
 import logging
@@ -8,10 +8,10 @@ import os
 import json
 
 # Импортируем новые функции из модулей storage
-from src.storage import schema, raw_data, editable_data, formulas, styles, charts, history, metadata, sheets
+from . import schema, raw_data, editable_data, formulas, styles, charts, history, metadata, sheets
 
 # Импортируем logger из utils
-from src.utils.logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -249,7 +249,7 @@ class ProjectDBStorage:
 
     # --- Методы для работы с редактируемыми данными ---
 
-    # Используют функции из src/storage/editable_data.py
+    # Используют функции из storage/editable_data.py
 
     def load_sheet_editable_data(self, sheet_id: int, sheet_name: str) -> List[Dict[str, Any]]:
         """
@@ -298,7 +298,7 @@ class ProjectDBStorage:
 
     # --- Методы для работы с формулами ---
 
-    # Используют функции из src/storage/formulas.py
+    # Используют функции из storage/formulas.py
 
     def save_sheet_formulas(self, sheet_id: int, formulas_list: List[Dict[str, str]]) -> bool:
         """
@@ -344,7 +344,7 @@ class ProjectDBStorage:
 
     # --- Методы для работы со стилями ---
 
-    # Используют функции из src/storage/styles.py
+    # Используют функции из storage/styles.py
 
     def save_sheet_styles(self, sheet_id: int, styles_list: List[Dict[str, Any]]) -> bool:
         """
@@ -392,7 +392,7 @@ class ProjectDBStorage:
 
     # --- Методы для работы с диаграммами ---
 
-    # Используют функции из src/storage/charts.py
+    # Используют функции из storage/charts.py
 
     def save_sheet_charts(self, sheet_id: int, charts_list: List[Dict[str, Any]]) -> bool:
         """
@@ -484,7 +484,7 @@ class ProjectDBStorage:
 
     # --- Методы для работы с историей редактирования ---
 
-    # Используют функции из src/storage/history.py
+    # Используют функции из storage/history.py
 
     def save_edit_history_record(self, sheet_id: int, cell_address: str, old_value: Any, new_value: Any) -> bool:
         """
