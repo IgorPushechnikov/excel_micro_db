@@ -128,7 +128,7 @@ def main():
 
     logger.info(f"Проект будет создан в: {project_path}")
     logger.info(f"Тестовый файл: {excel_file}")
-    logger.info(f"Выходной файл (Go): {output_file_go}")
+    # logger.info(f"Выходной файл (Go): {output_file_go}")
     logger.info(f"Выходной файл (Python): {output_file_py}")
 
     all_steps_passed = True
@@ -153,18 +153,7 @@ def main():
             all_steps_passed = False
 
     # 3. Экспорт результатов (только если анализ успешен)
-    # 3.1. Экспорт с помощью Go-экспортера
-    if all_steps_passed:
-        cmd_export_go = [
-            sys.executable, str(main_py),
-            "--export", "go_excel",
-            "--output", str(output_file_go),
-            "--project-path", str(project_path)
-        ]
-        if not run_command(cmd_export_go, "Экспорт результатов (Go)", logger):
-            all_steps_passed = False
-
-    # 3.2. Экспорт с помощью Python-экспортера (xlsxwriter)
+    # 3.1. Экспорт с помощью Python-экспортера (xlsxwriter)
     if all_steps_passed:
         cmd_export_py = [
             sys.executable, str(main_py),
@@ -185,11 +174,11 @@ def main():
             logger.error(f"✗ Файл БД проекта НЕ НАЙДЕН: {db_file}")
             all_steps_passed = False
 
-        if output_file_go.exists():
-            logger.info(f"✓ Выходной Excel-файл (Go) создан: {output_file_go}")
-        else:
-            logger.error(f"✗ Выходной Excel-файл (Go) НЕ НАЙДЕН: {output_file_go}")
-            all_steps_passed = False
+        # if output_file_go.exists():
+        #     logger.info(f"✓ Выходной Excel-файл (Go) создан: {output_file_go}")
+        # else:
+        #     logger.error(f"✗ Выходной Excel-файл (Go) НЕ НАЙДЕН: {output_file_go}")
+        #     all_steps_passed = False
         
         if output_file_py.exists():
             logger.info(f"✓ Выходной Excel-файл (Python) создан: {output_file_py}")
