@@ -1,4 +1,4 @@
-# src/core/app_controller.py
+# backend/core/app_controller.py
 """
 Модуль для центрального контроллера приложения.
 Управляет жизненным циклом приложения и координирует работу
@@ -12,19 +12,19 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 from pathlib import Path
 
 # Импортируем анализатор
-# from src.analyzer.logic_documentation import analyze_excel_file # Импорт будет в AnalysisManager
+# from analyzer.logic_documentation import analyze_excel_file # Импорт будет в AnalysisManager
 
 # Импортируем хранилище
-from src.storage.base import ProjectDBStorage
+from storage.base import ProjectDBStorage
 
 # Импортируем экспортёры
-# from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # Импорт будет в ExportManager
+# from exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # Импорт будет в ExportManager
 
 # Импортируем logger из utils
-from src.utils.logger import get_logger
+from utils.logger import get_logger
 
 # --- Исключения ---
-from src.exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
+from exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
 
 # Импорты для новых менеджеров (теперь из поддиректории)
 # from .controller.data_manager import DataManager # <-- УДАЛЯЕМ ОТСЮДА, чтобы избежать циклического импорта
@@ -140,7 +140,7 @@ class AppController:
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
         """Анализирует Excel-файл и сохраняет результаты в БД проекта."""
         # Пока вызываем напрямую, но в будущем будет через AnalysisManager
-        from src.analyzer.logic_documentation import analyze_excel_file
+        from analyzer.logic_documentation import analyze_excel_file
         if not self.storage:
             logger.error("Проект не загружен. Невозможно выполнить анализ.")
             return False
@@ -268,7 +268,7 @@ class AppController:
         """Экспортирует проект в Excel-файл (старый метод)."""
         logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."),
         try:
-            from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
+            from exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
             if success:
                 logger.info(f"Проект успешно экспортирован в '{output_path}'.")
@@ -284,7 +284,7 @@ class AppController:
         logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Go-экспортера.")
         try:
             # Импортируем GoExporterBridge
-            from src.exporter.go_bridge import GoExporterBridge
+            from exporter.go_bridge import GoExporterBridge
             
             # Создаем экземпляр моста
             go_bridge = GoExporterBridge(self.storage)
@@ -323,7 +323,7 @@ class AppController:
         logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter).")
         try:
             # Импортируем xlsxwriter_exporter
-            from src.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
+            from exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
             
             # Выполняем экспорт
             success = export_project_xlsxwriter(self.project_db_path, output_path)
@@ -336,7 +336,6 @@ class AppController:
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Python-экспортера (xlsxwriter): {e}", exc_info=True)
             return False
-
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
