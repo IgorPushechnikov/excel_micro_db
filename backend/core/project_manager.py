@@ -1,4 +1,4 @@
-# src/core/project_manager.py
+# backend/core/project_manager.py
 
 """
 Менеджер проектов для Excel Micro DB.
@@ -14,11 +14,14 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 # Добавляем корень проекта в путь поиска модулей если нужно
-project_root = Path(__file__).parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+# NOTE: Этот способ добавления в sys.path может не работать корректно при импорте из backend,
+# так как __file__ будет указывать на файл в backend/, и project_root.parent.parent.parent
+# может выйти за пределы backend/. В новой структуре это может быть не нужно.
+# project_root = Path(__file__).parent.parent.parent
+# if str(project_root) not in sys.path:
+#     sys.path.insert(0, str(project_root))
 
-from src.utils.logger import get_logger
+from utils.logger import get_logger
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
@@ -121,7 +124,7 @@ class ProjectManager:
             # --- НОВЫЙ ШАГ: Инициализация БД проекта ---
             logger.debug("Инициализация внутренней БД проекта...")
             try:
-                from src.storage.base import ProjectDBStorage
+                from storage.base import ProjectDBStorage
                 db_path = project_path_obj / "project_data.db"
                 storage = ProjectDBStorage(str(db_path))
                 # Главное изменение: вызываем initialize_project_tables, а не пытаемся подключиться
@@ -258,7 +261,7 @@ class ProjectManager:
         Returns:
             bool: True если проект загружен успешно, False в противном случае
         """
-        from src.storage.base import ProjectDBStorage
+        from storage.base import ProjectDBStorage
 
         try:
             project_path_obj = Path(self.app_controller.project_path).resolve()
@@ -380,7 +383,7 @@ class ProjectManager:
                     return False
 
                 # Пробуем подключиться и выполнить базовую проверку
-                from src.storage.base import ProjectDBStorage
+                from storage.base import ProjectDBStorage
                 storage = ProjectDBStorage(str(db_path))
                 if not storage.connect():
                     logger.error(f"Не удалось подключиться к БД проекта для валидации: {db_path}")
@@ -422,7 +425,7 @@ class ProjectManager:
 
             # --- КОНЕЦ НОВОЙ ПРОВЕРКИ ---
 
-            logger.debug(f"Проект {project_path_obj} прошел валидацию")
+            logger.debug(f"Проект {project_path_obj} прошёл валидацию")
             return True
         except Exception as e:
             logger.error(f"Ошибка при валидации проекта: {e}")
@@ -538,13 +541,11 @@ class ProjectManager:
         logger.debug("Очистка ресурсов ProjectManager")
         # Здесь можно добавить закрытие файлов, соединений и т.д.
 
-
 class _FakeAppController:
     """Фиктивный AppController для standalone запуска ProjectManager."""
     def __init__(self, project_path=""):
         self.project_path = project_path
         # storage и другие атрибуты могут быть добавлены при необходимости
-
 
 def create_project_manager(app_controller=None) -> ProjectManager:
     """
