@@ -28,22 +28,28 @@ logger = get_logger(__name__)
 
 def start_http_server(host: str = "127.0.0.1", port: int = 8000):
     """
-    Запускает HTTP-сервер (пока заглушка с TODO).
-    В дальнейшем будет использовать FastAPI.
+    Запускает HTTP-сервер (FastAPI).
     """
-    logger.info(f"Запуск HTTP-сервера на {host}:{port} (заглушка)")
-    print(f"HTTP-сервер должен стартовать на {host}:{port}...")
-    # TODO: Импортировать и запустить FastAPI сервер из backend.api.fastapi_server
-    # Примерный код будет:
-    # from api.fastapi_server import run_server
-    # run_server(host, port)
-    # Пока просто эмулируем долгий запуск
+    logger.info(f"Запуск HTTP-сервера на {host}:{port}...")
+    print(f"Попытка запуска FastAPI-сервера на {host}:{port}...")
     try:
-        while True:
-            time.sleep(10) # Сервер работает
-    except KeyboardInterrupt:
-        logger.info("Получен сигнал остановки HTTP-сервера.")
-        print("HTTP-сервер остановлен.")
+        # Импортируем функцию запуска сервера из модуля api
+        from api.fastapi_server import run_server
+        # Запускаем сервер (uvicorn.run блокирует выполнение)
+        run_server(host, port)
+        logger.info("FastAPI-сервер завершил работу.")
+        print("FastAPI-сервер завершил работу.")
+    except ImportError as e:
+        logger.error(f"Не удалось импортировать api.fastapi_server: {e}")
+        print(f"Ошибка: Не удалось импортировать api.fastapi_server: {e}")
+        # Завершаем работу CLI с ошибкой
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Критическая ошибка при запуске HTTP-сервера: {e}")
+        print(f"Ошибка: Критическая ошибка при запуске HTTP-сервера: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 def initialize_project(project_path: str) -> None:
     """Инициализация нового проекта."""
@@ -326,16 +332,12 @@ def main() -> int:
         if args.http_server:
             # --- НОВОЕ: Запуск HTTP-сервера ---
             logger.info(f"Запуск HTTP-сервера на {args.host}:{args.port}...")
-            # Запускаем сервер в отдельном потоке, чтобы CLI мог обрабатывать сигналы (Ctrl+C)
-            server_thread = threading.Thread(target=start_http_server, args=(args.host, args.port), daemon=True)
-            server_thread.start()
-            print(f"HTTP-сервер запущен на {args.host}:{args.port}. Нажмите Ctrl+C для остановки.")
-            try:
-                server_thread.join() # Ждем завершения потока (по Ctrl+C)
-            except KeyboardInterrupt:
-                logger.info("Получен сигнал остановки из CLI.")
-                print("\nОстановка HTTP-сервера...")
-                return 0 # Возвращаем 0 при корректной остановке
+            # FastAPI (uvicorn) сам блокирует основной поток, поэтому нам не нужен daemon=True и join()
+            # Запускаем сервер напрямую, он будет работать до получения сигнала (Ctrl+C)
+            start_http_server(args.host, args.port)
+            # После завершения start_http_server (например, по Ctrl+C), возвращаем 0
+            logger.info("HTTP-сервер завершил работу по запросу.")
+            return 0 # Возвращаем 0 при корректной остановке сервера
             # --- КОНЕЦ НОВОГО ---
 
         elif args.gui:
