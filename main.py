@@ -269,8 +269,8 @@ def main() -> int:
     mode_group.add_argument(
         '--export',
         metavar='TYPE',
-        choices=['go_excel', 'excel'], # Ограничиваем поддерживаемые типы на данном этапе
-        help='Экспорт результатов проекта (например, go_excel или excel). Требует --output и --project-path.'
+        choices=['excel'], # Ограничиваем поддерживаемые типы на данном этапе
+        help='Экспорт результатов проекта (например, excel). Требует --output и --project-path.'
     )
 
     mode_group.add_argument(
