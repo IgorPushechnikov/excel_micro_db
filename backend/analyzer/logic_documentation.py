@@ -272,15 +272,15 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
             if hasattr(title_obj, 'tx') and title_obj.tx:
                 
                 # Проверяем Rich Text
-                if hasattr(tx_obj, 'rich') and tx_obj.rich:
+                if hasattr(title_obj.tx, 'rich') and title_obj.tx.rich:
                     try:
                         # Берем первый параграф и первый run
-                        if (hasattr(tx_obj.rich, 'p') and tx_obj.rich.p and 
-                            len(tx_obj.rich.p) > 0 and tx_obj.rich.p[0] and
-                            hasattr(tx_obj.rich.p[0], 'r') and tx_obj.rich.p[0].r and
-                            len(tx_obj.rich.p[0].r) > 0):
+                        if (hasattr(title_obj.tx.rich, 'p') and title_obj.tx.rich.p and 
+                            len(title_obj.tx.rich.p) > 0 and title_obj.tx.rich.p[0] and
+                            hasattr(title_obj.tx.rich.p[0], 'r') and title_obj.tx.rich.p[0].r and
+                            len(title_obj.tx.rich.p[0].r) > 0):
                             
-                            first_run = tx_obj.rich.p[0].r[0]
+                            first_run = title_obj.tx.rich.p[0].r[0]
                             # Получаем текст из run (может быть пустым "")
                             title_text = getattr(first_run, 't', "") 
                             
