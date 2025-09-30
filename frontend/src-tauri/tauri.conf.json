@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.igor.excelmicrodb",
   "build": {
-    "beforeDevCommand": "cd .. && start /b python main.py --http-server --port 8001",
+    "beforeDevCommand": "cd .. && python main.py --http-server --port 8001",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
