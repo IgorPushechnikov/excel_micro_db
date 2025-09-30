@@ -34,6 +34,17 @@ def start_http_server(host: str = "127.0.0.1", port: int = 8000):
     try:
         # Импортируем функцию запуска сервера из модуля api
         from api.fastapi_server import run_server
+        
+        # Обработчик сигналов для корректного завершения
+        def signal_handler(sig, frame):
+            logger.info("Получен сигнал завершения. Остановка сервера...")
+            print("\nПолучен сигнал завершения (Ctrl+C). Остановка сервера...")
+            sys.exit(0)
+        
+        import signal
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
         # Запускаем сервер (uvicorn.run блокирует выполнение)
         run_server(host, port)
         logger.info("FastAPI-сервер завершил работу.")
