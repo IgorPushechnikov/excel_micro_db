@@ -12,7 +12,7 @@ import json
 import re
 
 # Импортируем logger из utils
-from src.utils.logger import get_logger
+from utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from src.utils.logger
 
 logger = get_logger(__name__)
 
@@ -270,7 +270,6 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
             
             # Проверяем, есть ли текстовый заголовок (tx)
             if hasattr(title_obj, 'tx') and title_obj.tx:
-                tx_obj = title_obj.tx
                 
                 # Проверяем Rich Text
                 if hasattr(tx_obj, 'rich') and tx_obj.rich:
@@ -438,6 +437,7 @@ def analyze_excel_file(file_path: str) -> Dict[str, Any]:
                 #     "style_attributes": style_json # Строка JSON
                 # })
 
+
             # --- 4. Извлечение диаграмм ---
             logger.debug(f"Извлечение диаграмм с листа '{sheet_name}'...")
             # Диаграммы находятся в sheet._charts
@@ -513,7 +513,7 @@ if __name__ == "__main__":
     file_path = sys.argv[1]
     try:
         results = analyze_excel_file(file_path)
-        print(f"Анализ завершен. Результаты для {results['project_name']}:")
+        print(f"Анализ завершен. Результаты для {results['project_name']}:".format(results['project_name']))
         print(f"  - Листов: {len(results['sheets'])}")
         for sheet in results['sheets']:
             print(f"    - Лист '{sheet['name']}':")
