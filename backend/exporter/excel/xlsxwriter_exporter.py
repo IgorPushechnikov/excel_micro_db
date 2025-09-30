@@ -386,7 +386,15 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     if cat_range:
                         series_options['categories'] = cat_range
                     if name:
-                        series_options['name'] = name
+                        # Если name - это ссылка на ячейку (начинается с '='), извлекаем значение
+                        if isinstance(name, str) and name.startswith('='):
+                            name_value = _extract_single_value_from_ref(project_db_path, name)
+                            if name_value is not None:
+                                series_options['name'] = name_value
+                            else:
+                                logger.warning(f"[ДИАГРАММА] Не удалось извлечь значение для имени ряда из ссылки: {name}")
+                        else:
+                            series_options['name'] = name
                     
                     chart.add_series(series_options)
                     logger.debug(f"[ДИАГРАММА] Добавлена серия: values={val_range}, categories={cat_range}, name={name}")
@@ -593,5 +601,54 @@ def _parse_title_ref(title_ref: str) -> Optional[Dict[str, Any]]:
         'range_address': range_address,
         'is_single_cell': is_single_cell
     }
+
+def _extract_single_value_from_ref(db_path: Union[str, Path], ref: str) -> Optional[str]:
+    """
+    Извлекает значение из ссылки на ячейку (например, "=Sheet1!$A$1").
+    Использует ProjectDBStorage для загрузки данных.
+
+    Args:
+        db_path (Union[str, Path]): Путь к файлу БД проекта.
+        ref (str): Строка ссылки на ячейку.
+
+    Returns:
+        Optional[str]: Значение ячейки или None в случае ошибки.
+    """
+    try:
+        # Убираем начальный '='
+        if ref.startswith('='):
+            ref_body = ref[1:]
+        else:
+            ref_body = ref
+        
+        # Разделяем на имя листа и адрес ячейки
+        if '!' not in ref_body:
+            logger.error(f"[ДИАГРАММА] Неверный формат ссылки для извлечения значения: {ref}")
+            return None
+            
+        sheet_name_part, cell_address = ref_body.split('!', 1)
+        # Убираем одинарные кавычки из имени листа, если они есть
+        sheet_name = sheet_name_part.strip("'")
+        
+        # Загружаем данные листа из БД
+        storage = ProjectDBStorage(str(db_path))
+        if not storage.connect():
+            logger.error(f"[ДИАГРАММА] Не удалось подключиться к БД для извлечения значения из ссылки: {ref}")
+            return None
+        
+        raw_data = storage.load_sheet_raw_data(sheet_name)
+        storage.disconnect()
+        
+        # Ищем значение по адресу ячейки
+        for item in raw_data:
+            if item.get('cell_address') == cell_address:
+                return str(item.get('value', ''))
+                
+        logger.warning(f"[ДИАГРАММА] Ячейка {cell_address} не найдена на листе {sheet_name} для ссылки: {ref}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"[ДИАГРАММА] Ошибка при извлечении значения из ссылки {ref}: {e}", exc_info=True)
+        return None
 
 # Дополнительные вспомогательные функции можно добавить здесь
