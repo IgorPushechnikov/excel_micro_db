@@ -255,7 +255,22 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                     ser_dict['val_range'] = s.val.numRef.f # Строка формулы диапазона значений
                 if hasattr(s, 'cat') and s.cat and hasattr(s.cat, 'strRef') and s.cat.strRef:
                     ser_dict['cat_range'] = s.cat.strRef.f # Строка формулы диапазона категорий
-                # ... другие атрибуты серии (название, цвета и т.д.)
+                
+                # --- Извлечение имени ряда (для легенды) ---
+                if hasattr(s, 'tx') and s.tx:
+                    # Проверяем, является ли tx ссылкой на ячейку
+                    if hasattr(s.tx, 'strRef') and s.tx.strRef:
+                        ser_dict['name'] = s.tx.strRef.f
+                    # Проверяем, является ли tx простым текстом
+                    elif hasattr(s.tx, 'text') and s.tx.text:
+                        ser_dict['name'] = s.tx.text
+                    else:
+                        # Попытка получить строковое представление
+                        ser_dict['name'] = str(s.tx)
+                else:
+                    ser_dict['name'] = None
+                # --- Конец извлечения имени ряда ---
+                
                 series_data.append(ser_dict) # Добавляем словарь серии в список
             # После цикла устанавливаем 'series' в chart_data
             chart_data['series'] = series_data
