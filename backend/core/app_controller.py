@@ -257,9 +257,6 @@ class AppController:
         if export_type.lower() == 'excel':
             # Новый питоновский экспорт через xlsxwriter
             return self.export_project_with_xlsxwriter(output_path)
-        elif export_type.lower() == 'go_excel':
-            # Экспорт через Go-экспортер
-            return self.export_project_with_go(output_path)
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
             return False
@@ -277,45 +274,6 @@ class AppController:
             return success
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
-            return False
-
-    def export_project_with_go(self, output_path: str) -> bool:
-        """Экспортирует проект в Excel-файл с использованием Go-экспортера."""
-        logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Go-экспортера.")
-        try:
-            # Импортируем GoExporterBridge
-            from exporter.go_bridge import GoExporterBridge
-            
-            # Создаем экземпляр моста
-            go_bridge = GoExporterBridge(self.storage)
-
-            # --- НОВЫЙ КОД: Подготовка пути для отладочного JSON ---
-            output_path_obj = Path(output_path)
-            # Определяем путь к папке экспорта (например, та же папка, что и у output файла)
-            export_dir = output_path_obj.parent
-            # Определяем путь к папке для SQL-дампов и отладочных файлов
-            sql_and_debug_dir = export_dir / "sql_export" # Используем ту же папку, что и для SQL
-            # Создаем папку, если её нет
-            sql_and_debug_dir.mkdir(parents=True, exist_ok=True)
-            # Определяем путь к отладочному JSON-файлу
-            debug_json_file_path = sql_and_debug_dir / f"{output_path_obj.stem}_debug_data.json"
-            logger.debug(f"Debug JSON will be saved to: {debug_json_file_path}")
-            # --- КОНЕЦ НОВОГО КОДА ---
-
-            # Выполняем экспорт, передавая путь для отладочного JSON
-            # success = go_bridge.export_to_xlsx(Path(output_path)) # Старая строка
-            success = go_bridge.export_to_xlsx(Path(output_path), debug_json_path=debug_json_file_path) # Новая строка
-
-            if success:
-                logger.info(f"Проект успешно экспортирован в '{output_path}' с помощью Go-экспортера.")
-                # --- НОВЫЙ КОД: Сообщение о сохранении отладочного JSON ---
-                logger.info(f"Отладочный JSON-файл сохранен: {debug_json_file_path}")
-                # --- КОНЕЦ НОВОГО КОДА ---
-            else:
-                logger.error(f"Ошибка при экспорте проекта в '{output_path}' с помощью Go-экспортера.")
-            return success
-        except Exception as e:
-            logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Go-экспортера: {e}", exc_info=True)
             return False
 
     def export_project_with_xlsxwriter(self, output_path: str) -> bool:
