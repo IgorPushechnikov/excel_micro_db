@@ -11,13 +11,13 @@ from typing import Dict, Any, List, Optional, Union
 import xlsxwriter # Импортируем xlsxwriter
 
 # Импортируем ProjectDBStorage для взаимодействия с БД
-from src.storage.base import ProjectDBStorage
+from storage.base import ProjectDBStorage
 
 # Импортируем вспомогательные функции для конвертации стилей
-from src.exporter.excel.style_handlers.db_style_converter import json_style_to_xlsxwriter_format
+from exporter.excel.style_handlers.db_style_converter import json_style_to_xlsxwriter_format
 
 # Импортируем ProjectDBStorage для загрузки диаграмм
-from src.storage.base import ProjectDBStorage
+from storage.base import ProjectDBStorage
 
 logger = logging.getLogger(__name__)
 
