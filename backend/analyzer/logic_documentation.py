@@ -288,8 +288,8 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                         logger.debug(f"[ДИАГРАММА] Не удалось извлечь заголовок из rich text: {ae}")
                 
                 # Проверяем ссылку на ячейку
-                elif hasattr(tx_obj, 'strRef') and tx_obj.strRef:
-                    chart_data['title_ref'] = tx_obj.strRef.f
+                elif hasattr(title_obj.tx, 'strRef') and title_obj.tx.strRef:
+                    chart_data['title_ref'] = title_obj.tx.strRef.f
             
             # Если текст был извлечен (даже если он ""), сохраняем его
             if title_text is not None:
