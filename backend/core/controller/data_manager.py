@@ -11,7 +11,7 @@ import sqlite3  # Для аннотаций типов, если нужно
 from ..app_controller import AppController
 
 # Импортируем ProjectDBStorage
-from src.storage.base import ProjectDBStorage
+from storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: было from src.storage.base
 
 # Импортируем logger из utils
 from src.utils.logger import get_logger
@@ -294,4 +294,3 @@ class DataManager:
                 j = j // 26 - 1
             names.append(name)
         return names
-
