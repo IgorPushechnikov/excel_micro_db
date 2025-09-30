@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"name": "excel_micro_db",
+			"path": "."
+		}
+	],
+	"settings": {
+		"python-envs.defaultEnvManager": "ms-python.python:system",
+		"python-envs.pythonProjects": []
+	}
+}
