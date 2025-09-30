@@ -14,7 +14,7 @@ from ..app_controller import AppController
 from storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: было from src.storage.base
 
 # Импортируем logger из utils
-from src.utils.logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
