@@ -139,3 +139,4 @@ data/samples/test_sample.xlsx # Уже есть, конкретный файл
 # Дополнительные директории, если они используются
 node_modules/ # Обычно в frontend, но на всякий случай
 dist/        # Обычно в frontend, но на всякий случай
+/frontend/node_modules
