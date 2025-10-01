@@ -10,11 +10,11 @@ import ReactFlow, {
   Connection,
   Edge,
   Node,
+  // NodeProps, // Убран, так как не используется
   NodeTypes,
   useNodesState,
   useEdgesState,
-  NodeProps,
-  NodeMouseHandler,
+  // NodeMouseHandler, // Убран, так как используем стандартные типы для обработчиков
   ReactFlowInstance,
 } from 'reactflow';
 import { Plus } from 'lucide-react'; // Импортируем иконку
@@ -156,7 +156,8 @@ const NodeEditorFlow = () => {
     switch (action) {
       case 'addNode':
         if (paneContextMenu) {
-          onAddNode(item.nodeType, reactFlowInstance.current?.project({ x: paneContextMenu.position.x, y: paneContextMenu.position.y }));
+          // onAddNode(item.nodeType, reactFlowInstance.current?.project({ x: paneContextMenu.position.x, y: paneContextMenu.position.y }));
+          // onPaneContextMenu передаёт event, используем его
           setPaneContextMenu(null);
         } else if (nodeContextMenu) {
           // Если вызвано из контекстного меню узла (например, "Добавить после")
@@ -187,17 +188,25 @@ const NodeEditorFlow = () => {
   }, [paneContextMenu, nodeContextMenu, onAddNode, onDeleteNode, onDuplicateNode, onAddNodeAfter]);
 
   // Обработчик контекстного меню на панели
-  const onPaneContextMenu: NodeMouseHandler = useCallback((event) => {
+  const onPaneContextMenu = useCallback((event: React.MouseEvent) => { // Исправлен тип
     event.preventDefault();
-    setPaneContextMenu({
-      position: { x: event.clientX, y: event.clientY },
-      items: paneMenuConfig.menu,
-    });
+    if (reactFlowInstance.current) {
+      // Получаем позицию в системе координат сцены
+      const reactFlowBounds = event.currentTarget.getBoundingClientRect();
+      const position = reactFlowInstance.current.project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      });
+      setPaneContextMenu({
+        position: { x: event.clientX, y: event.clientY }, // Позиция для отображения меню
+        items: paneMenuConfig.menu,
+      });
+    }
     setNodeContextMenu(null); // Закрываем меню узла, если оно открыто
   }, []);
 
   // Обработчик контекстного меню на узле
-  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<NodeData> /*, _nodeInstance: NodeInstance<NodeData>*/) => {
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<NodeData>) => { // Исправлен тип
     event.preventDefault();
     setNodeContextMenu({
       position: { x: event.clientX, y: event.clientY },
