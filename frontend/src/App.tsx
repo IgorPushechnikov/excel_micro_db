@@ -1,5 +1,5 @@
 // frontend/src/App.tsx
-import React from 'react';
+// import React from 'react'; // Убран, так как не используется напрямую (новый JSX Transform)
 import MainLayout from './components/layout/MainLayout'; // Импортируем MainLayout
 // Удаляем старые импорты, которые больше не нужны в App.tsx
 // import reactLogo from "./assets/react.svg";
