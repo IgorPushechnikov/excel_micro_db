@@ -13,7 +13,7 @@ interface RowData {
 
 const DataTable: React.FC = () => {
   // Состояния для колонок и данных
-  const [columnDefs, setColumnDefs] = useState<ColDef<RowData>[]>([]); // Уточнённый тип
+  const [columnDefs, setColumnDefs] = useState<ColDef<RowData>[]>([]);
 
   const [rowData, setRowData] = useState<RowData[]>([]);
 
@@ -33,7 +33,9 @@ const DataTable: React.FC = () => {
     const initialRows = Array.from({ length: 10 }, (_, rowIndex) => {
       const row: RowData = { id: rowIndex + 1 };
       initialCols.forEach((col) => { // Убран colIndex
-        row[col.field] = rowIndex === 0 ? col.field : `Cell ${rowIndex + 1}${col.field}`;
+        if (col.field) { // Проверка, что col.field определено
+          row[col.field] = rowIndex === 0 ? col.field : `Cell ${rowIndex + 1}${col.field}`;
+        }
       });
       return row;
     });
