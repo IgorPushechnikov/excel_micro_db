@@ -38,6 +38,16 @@ interface NodeData {
   // Другие поля...
 }
 
+// Тип для элемента меню (уточнённый)
+interface MenuItem {
+  id?: string;
+  label?: string;
+  action?: string;
+  nodeType?: string;
+  separator?: boolean;
+  // Добавьте другие возможные поля из YAML
+}
+
 // Определяем доступные типы узлов
 const nodeTypes: NodeTypes = {
   formulaNode: FormulaNode,
@@ -78,8 +88,8 @@ const NodeEditorFlow = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Состояния для контекстного меню
-  const [paneContextMenu, setPaneContextMenu] = useState<{ position: { x: number; y: number }; items: any[] } | null>(null);
-  const [nodeContextMenu, setNodeContextMenu] = useState<{ position: { x: number; y: number }; items: any[]; nodeId: string } | null>(null);
+  const [paneContextMenu, setPaneContextMenu] = useState<{ position: { x: number; y: number }; items: MenuItem[] } | null>(null); // Уточнённый тип
+  const [nodeContextMenu, setNodeContextMenu] = useState<{ position: { x: number; y: number }; items: MenuItem[]; nodeId: string } | null>(null); // Уточнённый тип
 
   // Ссылка на экземпляр ReactFlow для получения позиции
   const reactFlowInstance = useRef<ReactFlowInstance<NodeData> | null>(null);
@@ -152,17 +162,20 @@ const NodeEditorFlow = () => {
   }, [nodes, onAddNode, setEdges]);
 
   // Обработчик действий из меню
-  const handleMenuAction = useCallback((action: string, item: any) => {
+  const handleMenuAction = useCallback((action: string, item: MenuItem) => { // Уточнённый тип
     switch (action) {
       case 'addNode':
         if (paneContextMenu) {
-          // onAddNode(item.nodeType, reactFlowInstance.current?.project({ x: paneContextMenu.position.x, y: paneContextMenu.position.y }));
-          // onPaneContextMenu передаёт event, используем его
+          // Используем reactFlowInstance для получения позиции сцены
+          if (reactFlowInstance.current) {
+            const scenePosition = reactFlowInstance.current.project(paneContextMenu.position);
+            onAddNode(item.nodeType!, { x: scenePosition.x, y: scenePosition.y }); // Передаём позицию сцены
+          }
           setPaneContextMenu(null);
         } else if (nodeContextMenu) {
           // Если вызвано из контекстного меню узла (например, "Добавить после")
           if (item.action === 'addNodeAfter' && nodeContextMenu.nodeId) {
-            onAddNodeAfter(nodeContextMenu.nodeId, item.nodeType);
+            onAddNodeAfter(nodeContextMenu.nodeId, item.nodeType!);
           }
           setNodeContextMenu(null);
         }
