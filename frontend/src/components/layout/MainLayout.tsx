@@ -8,7 +8,7 @@ import ProjectExplorer from '../explorer/ProjectExplorer'; // Пока не су
 import DataTable from '../table/DataTable'; // Пока не существует, будет создано
 import NodeEditor from '../node-editor/NodeEditor'; // Пока не существует, будет создано
 import NodeProperties from '../node-editor/NodeProperties'; // Пока не существует, будет создано
-import StatusBar from './StatusBar'; // Пока не существует, будет создано
+// import StatusBar from './StatusBar'; // Удалено, так как компонент не используется напрямую
 
 const MainLayout: React.FC = () => {
   return (
