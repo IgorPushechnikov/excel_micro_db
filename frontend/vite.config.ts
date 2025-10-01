@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite"; // Убедитесь, что это также импортировано, если используется
-import { yaml } from "vite-plugin-yaml"; // Импортируем плагин yaml
+// import tailwindcss from "@tailwindcss/vite"; // Убран, так как используем v3 через postcss.config.js
+import yaml from "vite-plugin-yaml"; // Исправленный импорт yaml как default export
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -10,7 +10,7 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [
     react(),
-    tailwindcss(), // Убедитесь, что tailwindcss плагин здесь
+    // tailwindcss(), // Убран, так как используем v3 через postcss.config.js
     yaml(),        // Добавляем yaml плагин
   ],
 
