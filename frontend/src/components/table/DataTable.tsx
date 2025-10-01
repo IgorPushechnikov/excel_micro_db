@@ -1,6 +1,7 @@
 // frontend/src/components/table/DataTable.tsx
 import React, { useState, useEffect } from 'react';
-import { AgGridReact, type ColDef, type GridOptions } from 'ag-grid-react'; // Импортируем типы
+import { AgGridReact } from 'ag-grid-react'; // Импортируем AgGridReact
+import type { ColDef } from 'ag-grid-community'; // Импортируем тип ColDef из ag-grid-community
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
@@ -13,6 +14,7 @@ interface RowData {
 const DataTable: React.FC = () => {
   // Состояния для колонок и данных
   const [columnDefs, setColumnDefs] = useState<ColDef<RowData>[]>([]); // Уточнённый тип
+
   const [rowData, setRowData] = useState<RowData[]>([]);
 
   // Инициализация данных и колонок при монтировании компонента
@@ -40,7 +42,7 @@ const DataTable: React.FC = () => {
     setRowData(initialRows);
   }, []);
 
-  // Базовые опции для ag-Grid передаются как пропы
+  // Базовые опции для ag-Grid передаются как пропсы
   const defaultColDef: ColDef<RowData> = {
     editable: true,
     sortable: true,
@@ -51,7 +53,7 @@ const DataTable: React.FC = () => {
   return (
     <div
       className="ag-theme-alpine h-full w-full border border-gray-300 dark:border-gray-600"
-      style={{ height: '100%', width: '100%' }}
+      style={{ height: '100%', width: '100%' }} // Встроенные стили (предупреждение)
     >
       <AgGridReact
         rowData={rowData}
