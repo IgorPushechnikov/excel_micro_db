@@ -15,10 +15,10 @@ name = "frontend_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.8.4", features = [] } # Обновлено до конкретной версии
+tauri-build = { version = "2.4.1", features = [] } # Обновлено до последней стабильной, найденной в ошибках
 
 [dependencies]
-tauri = { version = "2.8.4", features = [] } # Обновлено до конкретной версии
-tauri-plugin-opener = "2.5.0" # Обновлено до конкретной версии
+tauri = { version = "2.4.1", features = [] } # Обновлено до последней стабильной, найденной в ошибках
+tauri-plugin-opener = "2.5.0" # Проверить совместимость с 2.4.1, если нет 2.x.y - использовать 2.0.0
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
