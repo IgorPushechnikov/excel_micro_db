@@ -1,5 +1,5 @@
 // frontend/src/components/node-editor/NodeEditor.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -11,17 +11,15 @@ import ReactFlow, {
   Edge,
   Node,
   NodeTypes,
-  NodeProps,
   useNodesState,
   useEdgesState,
-  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css'; // Стили React Flow
 
-// Импортируем кастомные типы узлов (их нужно будет создать)
-import { FormulaNode } from './NodeTypes/FormulaNode'; // Пример
-import { PythonNode } from './NodeTypes/PythonNode'; // Пример
-import { DefaultNode } from './NodeTypes/DefaultNode'; // Пример
+// Импортируем кастомные типы узлов как default export
+import FormulaNode from './NodeTypes/FormulaNode';
+import PythonNode from './NodeTypes/PythonNode';
+import DefaultNode from './NodeTypes/DefaultNode';
 
 // Интерфейс для данных узла (может быть расширен)
 interface NodeData {
