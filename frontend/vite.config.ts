@@ -11,7 +11,7 @@ export default defineConfig(async () => ({
   plugins: [
     react(),
     // tailwindcss(), // Убран, так как используем v3 через postcss.config.js
-    yaml.default(),        // Используем yaml.default() как функцию
+    yaml, // Передаём импортированный плагин напрямую, без вызова ()
   ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
