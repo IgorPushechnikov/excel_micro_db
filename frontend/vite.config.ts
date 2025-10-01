@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 // import tailwindcss from "@tailwindcss/vite"; // Убран, так как используем v3 через postcss.config.js
-import yaml from "vite-plugin-yaml"; // Исправленный импорт yaml как default export
+import yaml from "vite-plugin-yaml"; // Импортируем yaml как default export
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -11,7 +11,7 @@ export default defineConfig(async () => ({
   plugins: [
     react(),
     // tailwindcss(), // Убран, так как используем v3 через postcss.config.js
-    yaml(),        // Добавляем yaml плагин, используя yaml() как функцию
+    yaml.default(),        // Используем yaml.default() как функцию
   ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
