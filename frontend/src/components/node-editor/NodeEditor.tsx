@@ -14,6 +14,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
 } from 'reactflow';
+import { Plus } from 'lucide-react'; // Импортируем иконку
 import 'reactflow/dist/style.css'; // Стили React Flow
 
 // Импортируем кастомные типы узлов как default export
@@ -97,9 +98,12 @@ const NodeEditorFlow = () => {
     >
       {/* Фоновая сетка */}
       <Background gap={16} size={1} color="#aaa" />
-      {/* Управление (масштаб, сброс) */}
+      {/* Управление (масштаб, сброс, добавление узла) */}
       <Controls>
-        <ControlButton onClick={onAddNode}>+</ControlButton> {/* Пример кнопки добавления */}
+        {/* Кнопка добавления узла с иконкой */}
+        <ControlButton onClick={onAddNode} title="Добавить узел">
+          <Plus size={16} />
+        </ControlButton>
       </Controls>
       {/* Мини-карта */}
       <MiniMap nodeColor={(n) => {
