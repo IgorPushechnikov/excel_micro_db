@@ -8,7 +8,7 @@ const FormulaBar: React.FC = () => {
       <span className="text-xs font-medium mr-2">=</span>
       <input 
         type="text" 
-        placeholder="NODE(\"sales_validator\") + SUM(B2:E2)" 
+        placeholder='NODE("sales_validator") + SUM(B2:E2)' /* Исправлено экранирование кавычек, использованы одинарные кавычки для строки */
         className="flex-1 text-xs p-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
         readOnly // Пока readOnly, как заглушка
       />
