@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -10,7 +10,6 @@ import ReactFlow, {
   Edge,
   Node,
   Panel,
-  Position,
 } from 'reactflow';
 
 import 'reactflow/dist/style.css';
