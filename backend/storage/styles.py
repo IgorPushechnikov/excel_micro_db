@@ -1,4 +1,4 @@
-# src/storage/styles.py
+# backend/storage/styles.py
 
 import sqlite3
 import logging
