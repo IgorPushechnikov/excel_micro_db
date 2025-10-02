@@ -38,7 +38,7 @@ const initialEdges: Edge[] = [
 ];
 
 const NodeEditor: React.FC = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [nodes, , onNodesChange] = useNodesState(initialNodes); // Убрали setNodes
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Обработчик соединений
