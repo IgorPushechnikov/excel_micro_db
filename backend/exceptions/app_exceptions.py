@@ -1,4 +1,4 @@
-# src/exceptions/app_exceptions.py
+# backend/exceptions/app_exceptions.py
 """
 Пользовательские исключения для приложения Excel Micro DB.
 """
