@@ -9,6 +9,7 @@ const FormulaBar: React.FC = () => {
         className="flex-1 ml-2 px-2 py-1 border border-gray-400 dark:border-gray-500 rounded bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100"
         value={"=NODE(\"sales_validator\") + SUM(B2:E2)"} 
         readOnly // Пока readOnly
+        aria-label="Строка формул" // Добавлено для доступности
       />
     </div>
   );
