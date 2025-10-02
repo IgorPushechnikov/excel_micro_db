@@ -13,14 +13,15 @@
     "build:electron": "electron-builder"
   },
   "dependencies": {
+    "@ag-grid-community/client-side-row-model": "^31.3.4",
+    "@ag-grid-community/react": "^31.0.2",
+    "ag-grid-community": "^31.0.2",
     "electron": "^26.0.0",
     "electron-builder": "^24.6.4",
+    "js-yaml": "^4.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "reactflow": "^11.11.4",
-    "js-yaml": "^4.1.0",
-    "ag-grid-community": "^31.0.2",
-    "@ag-grid-community/react": "^31.0.2"
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@eslint/js": "^8.45.0",
