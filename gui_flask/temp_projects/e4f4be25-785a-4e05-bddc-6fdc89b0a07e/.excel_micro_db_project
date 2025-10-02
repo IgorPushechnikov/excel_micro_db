@@ -1,0 +1,13 @@
+{
+  "project_name": "e4f4be25-785a-4e05-bddc-6fdc89b0a07e",
+  "project_path": "D:\\Projects\\excel_micro_db\\gui_flask\\temp_projects\\e4f4be25-785a-4e05-bddc-6fdc89b0a07e",
+  "created_at": "2025-10-02T23:42:18.126426",
+  "last_opened": "2025-10-02T23:42:18.137843",
+  "version": "1.0",
+  "excel_files": [],
+  "analyses": [],
+  "config": {
+    "max_file_size_mb": 100,
+    "analysis_timeout_seconds": 300
+  }
+}

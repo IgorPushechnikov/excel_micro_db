@@ -5,6 +5,7 @@ import tempfile
 import uuid
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
+import shutil # Импортируем shutil для удаления директорий
 
 # Добавим путь к backend в sys.path, чтобы импортировать AppController
 import sys
@@ -38,9 +39,19 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    """Загружает XLSX-файл во временный проект."""
+    """Загружает XLSX-файл и создает новый проект."""
     global active_project, active_project_path
     
+    # --- Очищаем предыдущий проект, если он был ---
+    if active_project_path and active_project_path.exists():
+        try:
+            shutil.rmtree(active_project_path)
+        except Exception as e:
+            print(f"Предупреждение: Не удалось удалить предыдущую директорию проекта {active_project_path}: {e}")
+    active_project = None
+    active_project_path = None
+    # ------------------------------------------------
+
     if 'file' not in request.files:
         return jsonify({'error': 'Файл не найден в запросе'}), 400
     
@@ -53,31 +64,49 @@ def upload_file():
             # Создаем уникальную временную директорию для проекта
             project_uuid = str(uuid.uuid4())
             project_path = temp_projects_dir / project_uuid
+            # Убедимся, что директория пуста или новая
+            if project_path.exists():
+                 shutil.rmtree(project_path)
             project_path.mkdir(exist_ok=True)
             
             # Сохраняем файл
             uploaded_file_path = project_path / file.filename
             file.save(str(uploaded_file_path))
             
-            # Инициализируем проект через AppController
+            # --- ИСПРАВЛЕНО ---
+            # 1. Создаем экземпляр AppController
             app_controller = create_app_controller(str(project_path))
-            if not app_controller.initialize():
-                return jsonify({'error': 'Не удалось инициализировать проект'}), 500
             
-            # Создаем структуру проекта
+            # 2. Создаем структуру проекта (это должно создать .excel_micro_db_project и project_data.db)
             if not app_controller.create_project(str(project_path)):
-                return jsonify({'error': 'Не удалось создать структуру проекта'}), 500
+                 # Если создать проект не удалось, очищаем и возвращаем ошибку
+                 if project_path.exists():
+                      shutil.rmtree(project_path)
+                 return jsonify({'error': 'Не удалось создать структуру проекта'}), 500
             
-            # Сохраняем ссылки на активный проект
+            # 3. Инициализируем проект (теперь файл .excel_micro_db_project существует)
+            #    Это должно загрузить проект и инициализировать storage
+            if not app_controller.initialize():
+                 # Если инициализировать не удалось, очищаем и возвращаем ошибку
+                 if project_path.exists():
+                      shutil.rmtree(project_path)
+                 return jsonify({'error': 'Не удалось инициализировать созданный проект'}), 500
+
+            # --- Сохраняем ссылки на активный проект ---
             active_project = app_controller
             active_project_path = project_path
             
-            return jsonify({'message': 'Файл загружен и проект создан', 'project_id': project_uuid, 'filename': file.filename}), 200
+            return jsonify({'message': 'Файл загружен и проект создан/инициализирован', 'project_id': project_uuid, 'filename': file.filename}), 200
         except Exception as e:
             # Очищаем, если что-то пошло не так
-            if project_path and project_path.exists():
-                import shutil
-                shutil.rmtree(project_path, ignore_errors=True)
+            if 'project_path' in locals() and project_path and project_path.exists():
+                try:
+                    shutil.rmtree(project_path, ignore_errors=False) # Не игнорируем ошибки здесь для явного логирования
+                except Exception as cleanup_e:
+                     print(f"Ошибка при очистке директории проекта {project_path} после исключения: {cleanup_e}")
+            # Сбрасываем глобальные переменные
+            active_project = None
+            active_project_path = None
             return jsonify({'error': f'Ошибка при обработке файла: {str(e)}'}), 500
     else:
         return jsonify({'error': 'Неподдерживаемый тип файла. Загрузите .xlsx файл.'}), 400
@@ -91,22 +120,34 @@ def analyze_file():
         return jsonify({'error': 'Нет активного проекта. Загрузите файл сначала.'}), 400
     
     try:
-        # Находим загруженный XLSX файл
+        # --- ПРОВЕРКА: Проект должен быть уже инициализирован на этапе загрузки ---
+        # if not active_project.is_project_loaded: # Проверяем свойство из AppController
+        #     return jsonify({'error': 'Проект не загружен в AppController. Это внутренняя ошибка.'}), 500
+        # if not active_project.storage:
+        #     return jsonify({'error': 'Хранилище проекта не инициализировано. Это внутренняя ошибка.'}), 500
+        # ---------------------------------------------
+
+        # 1. Находим загруженный XLSX файл
         xlsx_files = list(active_project_path.glob("*.xlsx"))
         if not xlsx_files:
             return jsonify({'error': 'XLSX файл не найден в проекте'}), 400
         
         xlsx_file_path = xlsx_files[0] # Берем первый найденный
         
-        # Выполняем анализ
+        # 2. Выполняем анализ и сохраняем результаты в БД проекта
+        #    Теперь storage должно быть доступно, так как проект был инициализирован
         success = active_project.analyze_excel_file(str(xlsx_file_path))
         
         if success:
             return jsonify({'message': 'Анализ завершен успешно'}), 200
         else:
-            return jsonify({'error': 'Ошибка при анализе файла'}), 500
+            return jsonify({'error': 'Ошибка при анализе файла (метод вернул False)'}), 500
             
     except Exception as e:
+        # --- Не сбрасываем проект при ошибке анализа, пусть пользователь сам решает, что делать ---
+        # active_project = None
+        # active_project_path = None
+        # ---------------------------------------------
         return jsonify({'error': f'Ошибка при анализе: {str(e)}'}), 500
 
 @app.route('/sheets', methods=['GET'])
@@ -134,17 +175,7 @@ def get_sheet_data(sheet_name):
         return jsonify({'error': 'Нет активного проекта или БД не загружена'}), 400
     
     try:
-        # Получаем редактируемые данные через DataManager
-        # editable_data_dict = active_project.data_manager.get_sheet_editable_data(sheet_name)
-        # if not editable_data_dict:
-        #     return jsonify({'error': 'Не удалось получить данные листа'}), 500
-        
-        # Преобразуем данные в формат ag-Grid
-        # column_names = editable_data_dict.get('column_names', [])
-        # rows_data = editable_data_dict.get('rows', [])
-        
-        # Для MVP используем более простой подход: загружаем список словарей cell_address -> value
-        # и преобразуем его в строки/столбцы
+        # Получаем sheet_id
         sheet_id = active_project.data_manager._get_sheet_id_by_name(sheet_name)
         if sheet_id is None:
             return jsonify({'error': f'Лист "{sheet_name}" не найден'}), 404
@@ -152,7 +183,6 @@ def get_sheet_data(sheet_name):
         editable_data_list = active_project.storage.load_sheet_editable_data(sheet_id, sheet_name)
         
         # Преобразование в формат ag-Grid (список объектов {col1: val1, col2: val2, ...})
-        # Это упрощенная версия, предполагающая, что данные плотные и начинаются с A1
         grid_data = []
         if editable_data_list:
             # Найдем максимальный номер строки и столбца
@@ -194,6 +224,8 @@ def get_sheet_data(sheet_name):
 
 def _index_to_column_letter(index: int) -> str:
     """Преобразует 0-базовый индекс в имя столбца Excel (A, B, ..., Z, AA, ...)."""
+    if index < 0:
+        return "A"
     result = ""
     while index >= 0:
         result = chr(index % 26 + ord('A')) + result
@@ -201,8 +233,6 @@ def _index_to_column_letter(index: int) -> str:
     return result if result else "A"
 
 # Проверка, что скрипт запущен напрямую, а не импортирован
+# В gui_flask/app.py, в конце
 if __name__ == '__main__':
-    # Запуск Flask-приложения в режиме разработки
-    # host='0.0.0.0' позволяет получить доступ с других устройств в сети (опционально)
-    # port=5000 стандартный для Flask
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000, threaded=False) # Добавлено threaded=False
