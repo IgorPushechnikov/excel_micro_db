@@ -3,7 +3,7 @@ import React from 'react';
 // import Ribbon from '../toolbar/Ribbon';
 // import FormulaBar from '../toolbar/FormulaBar';
 // import ProjectExplorer from '../explorer/ProjectExplorer';
-// import DataTable from '../table/DataTable';
+import DataTable from '../table/DataTable';
 // import NodeEditor from '../node-editor/NodeEditor';
 // import NodeProperties from '../node-editor/NodeProperties';
 // import FunctionPanel from '../toolbar/FunctionPanel';
@@ -32,7 +32,7 @@ const MainLayout = () => {
           <div className="flex flex-1 overflow-hidden">
             {/* Таблица (2/3 ширины правой панели) */}
             <div className="flex-2 border-r border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
-              {/* <DataTable /> */}
+              <DataTable />
             </div>
             {/* Нодовый редактор (1/3 ширины правой панели) */}
             <div className="flex-1 bg-white dark:bg-gray-800">
