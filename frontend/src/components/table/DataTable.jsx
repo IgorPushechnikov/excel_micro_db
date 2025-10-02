@@ -21,7 +21,7 @@ const DataTable = () => {
   ], []);
 
   // Определяем данные
-  const rowData = [
+  const rowData = useMemo(() => [
     { A: 'Pr', B: 'Q1', C: 'Q2', D: 'Q3' },
     { A: 'A', B: 100, C: 150, D: 200 },
     { A: 'B', B: 120, C: 180, D: 220 },
@@ -32,33 +32,20 @@ const DataTable = () => {
     { A: 'G', B: 160, C: 220, D: 260 },
     { A: 'H', B: 170, C: 230, D: 270 },
     { A: 'I', B: 180, C: 240, D: 280 },
-  ];
-
-  // Опции для ag-Grid
-  const gridOptions = {
-    rowSelection: 'multiple', // Явно указываем тип как 'multiple' | 'single'
-    enableCellTextSelection: true,
-    onGridReady: (_params) => { // Используем _ для неиспользуемого параметра
-      console.log('ag-Grid ready'); // Для отладки
-    },
-    // Возможность добавить другие опции ag-Grid
-  };
+  ], []); // useMemo для rowData тоже хорошая практика
 
   return (
-    <div className="h-full w-full"> {/* Внешний контейнер */}
-      <div className="h-full w-full p-1"> {/* Внутренний контейнер с отступом */}
-        <div
-          id="myGrid"
-          className="ag-theme-alpine-dark h-full w-full" // Контейнер для AgGridReact с темой и размерами
-        >
-          <AgGridReact
-            rowData={rowData}
-            columnDefs={columnDefs}
-            gridOptions={gridOptions}
-            // rowModelType больше не нужно указывать, но модуль зарегистрирован
-          />
-        </div>
-      </div>
+    <div className="ag-theme-alpine-dark h-full w-full p-1"> {/* Контейнер для AgGridReact с темой, размерами и отступом */}
+      <AgGridReact
+        rowData={rowData}
+        columnDefs={columnDefs}
+        rowSelection={'multiple'} // Указываем опцию напрямую
+        enableCellTextSelection={true} // Указываем опцию напрямую
+        onGridReady={(params) => { // Используем onGridReady как пропс
+          console.log('ag-Grid ready in DataTable:', params.api); // Для отладки
+        }}
+        // rowModelType больше не нужно указывать, но модуль зарегистрирован
+      />
     </div>
   );
 };
