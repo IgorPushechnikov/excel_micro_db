@@ -1,6 +1,11 @@
 // excel_micro_db/frontend/src/components/table/DataTable.jsx
 import React, { useMemo } from 'react';
 import { AgGridReact } from '@ag-grid-community/react';
+import { ModuleRegistry } from '@ag-grid-community/core';
+import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
+
+// Регистрируем необходимый модуль
+ModuleRegistry.registerModules([ClientSideRowModelModule]);
 
 // Импортируем стили ag-Grid
 import 'ag-grid-community/styles/ag-grid.css';
@@ -50,7 +55,7 @@ const DataTable = () => {
             rowData={rowData}
             columnDefs={columnDefs}
             gridOptions={gridOptions}
-            // rowModelType="clientSide" // Теперь не нужно указывать, так как это по умолчанию
+            // rowModelType больше не нужно указывать, но модуль зарегистрирован
           />
         </div>
       </div>
