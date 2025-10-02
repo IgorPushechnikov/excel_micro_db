@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
+import { AgGridReact } from '@ag-grid-community/react';
+import { ColDef } from '@ag-grid-community/core'; // Импортируем ColDef
+
 // Импортируем стили ag-Grid
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-// Импортируем AgGridReact и Core (Core теперь включает нужные модули по умолчанию в v31+)
-import { AgGridReact } from '@ag-grid-community/react';
 
 // Определяем тип для строки данных
 interface RowData {
@@ -14,8 +15,8 @@ interface RowData {
 }
 
 const DataTable: React.FC = () => {
-  // Определяем колонки с использованием useMemo и явного типа
-  const columnDefs = useMemo(() => [
+  // Определяем колонки с использованием useMemo и явного типа ColDef<RowData>
+  const columnDefs: ColDef<RowData>[] = useMemo(() => [
     { field: 'A', headerName: 'A', editable: true, sortable: true, filter: true },
     { field: 'B', headerName: 'B', editable: true, sortable: true, filter: true },
     { field: 'C', headerName: 'C', editable: true, sortable: true, filter: true },
