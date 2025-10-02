@@ -1,4 +1,4 @@
-# src/exporter/excel/xlsxwriter_exporter.py
+# backend/exporter/excel/xlsxwriter_exporter.py
 """
 Модуль для экспорта проекта Excel Micro DB в файл Excel (.xlsx) с использованием библиотеки xlsxwriter.
 """
