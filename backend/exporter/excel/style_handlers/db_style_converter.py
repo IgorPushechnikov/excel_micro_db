@@ -1,4 +1,4 @@
-# src/exporter/excel/style_handlers/db_style_converter.py
+# backend/exporter/excel/style_handlers/db_style_converter.py
 """
 Модуль для конвертации JSON-описаний стилей из БД в формат, понятный xlsxwriter.
 """
@@ -143,7 +143,7 @@ def json_style_to_xlsxwriter_format(style_json_str: str) -> Optional[Dict[str, A
         if 'vertical' in alignment_data:
             v_val = alignment_data['vertical']
             # Сопоставление ('top', 'vcenter', 'bottom', 'vjustify', 'vdistributed')
-            if v_val in ['top', 'center', 'bottom', 'justify', 'distributed']:
+            if v_val in ['top', 'vcenter', 'bottom', 'justify', 'distributed']:
                 xlsxwriter_format['valign'] = v_val.replace('v', '') # xlsxwriter использует 'top', 'vcenter' -> 'vcenter', 'bottom', 'justify', 'distributed'
                 if v_val == 'vcenter':
                     xlsxwriter_format['valign'] = 'vcenter'
