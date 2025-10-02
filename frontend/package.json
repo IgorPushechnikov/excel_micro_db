@@ -13,6 +13,8 @@
     "build:electron": "electron-builder"
   },
   "dependencies": {
+    "@ag-grid-community/react": "^32.3.9",
+    "ag-grid-community": "^34.2.0",
     "electron": "^38.2.0",
     "electron-builder": "^26.0.12",
     "react": "^19.1.1",
