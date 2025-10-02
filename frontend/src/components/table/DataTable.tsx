@@ -42,17 +42,17 @@ const DataTable: React.FC = () => {
     rowSelection: 'multiple' as const, // Явно указываем тип как 'multiple' | 'single'
     enableCellTextSelection: true,
     onGridReady: (_params: any) => { // Используем _ для неиспользуемого параметра
-      // console.log('Grid Ready', params); // Для отладки
+      console.log('ag-Grid ready'); // Для отладки
     },
     // Возможность добавить другие опции ag-Grid
   };
 
   return (
-    <div className="h-full w-full p-1">
+    <div className="h-full w-full p-1 flex items-center justify-center"> {/* Добавим flex центрирование для проверки */}
       <div 
         id="myGrid" 
-        className="ag-theme-alpine-dark h-full w-full" // Используем тему ag-Grid, можно кастомизировать позже
-        style={{ height: '100%', width: '100%' }} // Inline стили оставим для простоты
+        className="ag-theme-alpine-dark" // Убираем h-full w-full и inline стили
+        style={{ height: '100%', width: '100%' }} // Проверим, поможет ли это
       >
         <AgGridReact
           rowData={rowData}
