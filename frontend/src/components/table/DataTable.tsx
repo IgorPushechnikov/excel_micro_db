@@ -1,27 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 // Импортируем стили ag-Grid
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-// Импортируем AgGridReact
+// Импортируем AgGridReact и Core (Core теперь включает нужные модули по умолчанию в v31+)
 import { AgGridReact } from '@ag-grid-community/react';
-// Импортируем Core (необходимо для Community версии)
-import { ModuleRegistry } from '@ag-grid-community/core';
-import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
 
-// Регистрируем необходимые модули
-ModuleRegistry.registerModules([ClientSideRowModelModule]);
+// Определяем тип для строки данных
+interface RowData {
+  A: string | number;
+  B: string | number;
+  C: string | number;
+  D: string | number;
+}
 
 const DataTable: React.FC = () => {
-  // Определяем колонки
-  const [columnDefs] = useState([
+  // Определяем колонки с использованием useMemo и явного типа
+  const columnDefs = useMemo(() => [
     { field: 'A', headerName: 'A', editable: true, sortable: true, filter: true },
     { field: 'B', headerName: 'B', editable: true, sortable: true, filter: true },
     { field: 'C', headerName: 'C', editable: true, sortable: true, filter: true },
     { field: 'D', headerName: 'D', editable: true, sortable: true, filter: true },
-  ]);
+  ], []);
 
   // Определяем данные
-  const [rowData] = useState([
+  const rowData: RowData[] = [
     { A: 'Pr', B: 'Q1', C: 'Q2', D: 'Q3' },
     { A: 'A', B: 100, C: 150, D: 200 },
     { A: 'B', B: 120, C: 180, D: 220 },
@@ -32,13 +34,13 @@ const DataTable: React.FC = () => {
     { A: 'G', B: 160, C: 220, D: 260 },
     { A: 'H', B: 170, C: 230, D: 270 },
     { A: 'I', B: 180, C: 240, D: 280 },
-  ]);
+  ];
 
   // Опции для ag-Grid
   const gridOptions = {
-    rowSelection: 'multiple',
+    rowSelection: 'multiple' as const, // Явно указываем тип как 'multiple' | 'single'
     enableCellTextSelection: true,
-    onGridReady: (params: any) => {
+    onGridReady: (_params: any) => { // Используем _ для неиспользуемого параметра
       // console.log('Grid Ready', params); // Для отладки
     },
     // Возможность добавить другие опции ag-Grid
@@ -49,13 +51,13 @@ const DataTable: React.FC = () => {
       <div 
         id="myGrid" 
         className="ag-theme-alpine-dark h-full w-full" // Используем тему ag-Grid, можно кастомизировать позже
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: '100%', width: '100%' }} // Inline стили оставим для простоты
       >
         <AgGridReact
           rowData={rowData}
           columnDefs={columnDefs}
           gridOptions={gridOptions}
-          // rowModelType="clientSide" // Уже подключён ClientSideRowModelModule
+          // rowModelType="clientSide" // Теперь не нужно указывать, так как это по умолчанию
         />
       </div>
     </div>
