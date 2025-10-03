@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
 from utils.logger import get_logger
 from core.app_controller import create_app_controller, AppController
 from constructor.widgets.project_explorer import ProjectExplorer
-from constructor.widgets.sheet_editor import SheetEditor
+# ИСПРАВЛЕНО: Импорт SheetEditor теперь из подпапки sheet_editor
+from constructor.widgets.sheet_editor.sheet_editor_widget import SheetEditor
 
 # Встроенный WelcomeWidget для устранения ошибки импорта
 class WelcomeWidget(QWidget):
