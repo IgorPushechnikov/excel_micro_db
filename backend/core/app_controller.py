@@ -144,7 +144,7 @@ class AppController:
         """Получает редактируемые данные листа."""
         return self.data_manager.get_sheet_editable_data(sheet_name)
 
-    def get_sheet_raw_data(self, sheet_name: str) -> Optional[Dict[str, Any]]:
+    def get_sheet_raw_data(self, sheet_name: str) -> Optional[List[Dict[str, Any]]]:
         """Получает "сырые" данные листа (включая формулы, стили и т.д.)."""
         return self.data_manager.get_sheet_raw_data(sheet_name)
 
@@ -251,7 +251,7 @@ class AppController:
             project_id = 1
 
             # Проверяем, существует ли лист
-            cursor.execute("SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
+            cursor.execute("SELECT id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
             result = cursor.fetchone()
             if result:
                 logger.debug(f"Лист '{sheet_name}' найден с ID {result[0]}.")

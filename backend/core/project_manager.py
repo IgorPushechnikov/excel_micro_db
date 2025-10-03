@@ -74,7 +74,7 @@ class ProjectManager:
         # Проверяем, является ли директория проектом (валидируем структуру и БД)
         if self.validate_project():
             logger.info(f"Проект валиден. Попытка загрузки...")
-            if self.load_project():
+            if self.load_project(self.app_controller.project_path):
                 logger.info("Проект успешно загружен.")
                 return True
             else:
@@ -255,10 +255,13 @@ class ProjectManager:
             logger.error(f"Ошибка при сохранении метаданных проекта: {e}")
             return False
 
-    def load_project(self) -> bool:
+    def load_project(self, project_path: Optional[str] = None) -> bool:
         """
-        Загрузка существующего проекта из app_controller.project_path.
-        Инициализирует app_controller.storage.
+        Загрузка существующего проекта.
+
+        Args:
+            project_path (Optional[str]): Путь к директории проекта. 
+                                          Если None, используется self.app_controller.project_path.
 
         Returns:
             bool: True если проект загружен успешно, False в противном случае
@@ -267,7 +270,9 @@ class ProjectManager:
         from backend.storage.base import ProjectDBStorage
 
         try:
-            project_path_obj = Path(self.app_controller.project_path).resolve()
+            # Используем переданный путь или сохраненный в app_controller
+            path_to_load = project_path or self.app_controller.project_path
+            project_path_obj = Path(path_to_load).resolve()
             logger.info(f"Загрузка проекта из: {project_path_obj}")
 
             # Проверяем существование проекта
@@ -580,7 +585,7 @@ if __name__ == "__main__":
         logger.info("Тестовый проект создан успешно")
 
         # Загрузка проекта (project_path берётся из app_controller)
-        if pm.load_project(): # Вызов без аргумента
+        if pm.load_project(test_project_path): # Вызов с аргументом
             logger.info(f"Загружен проект: {pm.app_controller._current_project_data.get('project_name')}")
 
             # Валидация проекта (project_path берётся из app_controller)

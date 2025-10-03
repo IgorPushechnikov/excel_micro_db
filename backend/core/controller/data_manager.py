@@ -276,6 +276,30 @@ class DataManager:
             logger.error(f"Ошибка при загрузке истории редактирования: {e}", exc_info=True)
             return []
 
+    def get_sheet_raw_data(self, sheet_name: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Получает "сырые" данные листа (включая формулы, стили и т.д.).
+
+        Args:
+            sheet_name (str): Имя листа.
+
+        Returns:
+            Optional[List[Dict[str, Any]]]: Список словарей с данными ячеек или None в случае ошибки.
+        """
+        storage = self.app_controller.storage
+        if not storage:
+            logger.error("Проект не загружен.")
+            return []
+
+        try:
+            logger.debug(f"Загрузка 'сырых' данных для листа '{sheet_name}'...")
+            raw_data = storage.load_sheet_raw_data(sheet_name)
+            logger.debug(f"Загружено {len(raw_data)} записей 'сырых' данных для листа '{sheet_name}'.")
+            return raw_data
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке 'сырых' данных для листа '{sheet_name}': {e}", exc_info=True)
+            return []
+
     def _generate_excel_column_names(self, num_cols: int) -> List[str]:
         """
         Генерирует список имён столбцов Excel (A, B, ..., Z, AA, AB, ...).
