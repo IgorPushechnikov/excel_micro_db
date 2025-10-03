@@ -24,7 +24,7 @@ except ImportError:
 
 # Импортируем logger из utils
 # ИСПРАВЛЕНО: Корректный путь к logger внутри backend
-from utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from src.utils.logger
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from src.utils.logger
 
 logger = get_logger(__name__)
 
@@ -165,7 +165,6 @@ def _contains_time_format(number_format_code: str) -> bool:
         return True
     # Проверяем M (минуты), но не M (месяц)
     # Ищем M, который не является частью MM или MONTH
-    # Регулярное выражение для M, окруженного не-буквами или началом/конец строки, и не после/до M
     # Это сложно. Проще проверить на общие комбинации.
     # Проверим, есть ли 'M' отдельно от 'MM' и 'MONTH'
     temp_str = re.sub(r'MM(?![\w])', '', check_str)
