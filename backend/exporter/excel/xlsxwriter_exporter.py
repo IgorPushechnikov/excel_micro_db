@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
 import xlsxwriter # Импортируем xlsxwriter
-import datetime # Импортируем datetime для проверки типов
+import datetime # Импортируем datetime для проверки типов и парсинга
 
 # Импортируем ProjectDBStorage для взаимодействия с БД
 from storage.base import ProjectDBStorage
@@ -21,6 +21,33 @@ from exporter.excel.style_handlers.db_style_converter import json_style_to_xlsxw
 from storage.base import ProjectDBStorage
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_datetime_string(dt_str: str) -> Union[datetime.datetime, datetime.date, datetime.time, str]:
+    """
+    Пытается распознать строку как datetime, date или time.
+    Возвращает соответствующий объект или исходную строку, если не удалось распознать.
+    """
+    # Паттерны для распознавания
+    dt_patterns = [
+        "%Y-%m-%d %H:%M:%S",  # 2024-01-15 00:00:00
+        "%Y-%m-%d",           # 2024-01-15
+        "%H:%M:%S",           # 00:00:00
+        # Можно добавить больше паттернов при необходимости
+    ]
+    for pattern in dt_patterns:
+        try:
+            parsed = datetime.datetime.strptime(dt_str, pattern)
+            if pattern == "%Y-%m-%d %H:%M:%S":
+                return parsed
+            elif pattern == "%Y-%m-%d":
+                return parsed.date() # Возвращаем date
+            elif pattern == "%H:%M:%S":
+                return parsed.time() # Возвращаем time
+        except ValueError:
+            continue
+    # Если не распознано, возвращаем строку
+    return dt_str
 
 
 def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Union[str, Path]) -> bool:
@@ -92,7 +119,7 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
 
                 # 4b. Загрузка данных для листа
                 # Предполагаем, что storage предоставляет методы для загрузки данных
-                raw_data = storage.load_sheet_raw_data(sheet_name) # Возвращает список {'cell_address': ..., 'value': ...}
+                raw_data = storage.load_sheet_raw_data(sheet_name) # Возвращает список {'cell_address': ..., 'value': ..., 'value_type': ...}
                 formulas = storage.load_sheet_formulas(sheet_id) # Возвращает список {'cell_address': ..., 'formula': ...}
                 styles = storage.load_sheet_styles(sheet_id) # Возвращает список {'range_address': ..., 'style_attributes': ...}
                 merged_cells = storage.load_sheet_merged_cells(sheet_id) # Возвращает список ['A1:B2', ...]
@@ -152,7 +179,10 @@ def _write_value_with_format(worksheet, row: int, col: int, value: Any, cell_for
     elif isinstance(value, datetime.date):
         worksheet.write_date(row, col, value, cell_format)
     elif isinstance(value, datetime.time):
-        worksheet.write_datetime(row, col, datetime.datetime.combine(datetime.date.min, value), cell_format)
+        # xlsxwriter.write_time ожидает datetime.time, но на практике часто используется datetime.datetime с нулевой датой
+        # Попробуем так: создадим datetime.datetime с минимальной датой и временем
+        dt_val = datetime.datetime.combine(datetime.date.min, value)
+        worksheet.write_datetime(row, col, dt_val, cell_format)
     else:
         # Для остальных типов используем обычный write
         worksheet.write(row, col, value, cell_format)
@@ -178,13 +208,23 @@ def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas
     for item in raw_data:
         address = item['cell_address'] # e.g., 'A1'
         value = item['value']
+        value_type = item.get('value_type') # Получаем тип значения, если он есть
         # xlsxwriter требует номера строки/столбца, преобразуем адрес
         try:
             row, col = _xl_cell_to_row_col(address)
+            # Проверяем, нужно ли преобразовать строку в datetime-объект
+            parsed_value = value
+            if isinstance(value, str) and value_type in ['datetime', 'date', 'time']:
+                parsed_value = _parse_datetime_string(value)
+                # Если _parse_datetime_string не смог распознать, он вернёт строку
+                # В этом случае, если value_type был определён, но строка не распознана, можно логировать
+                if isinstance(parsed_value, str) and value_type in ['datetime', 'date', 'time']:
+                    logger.warning(f"[ЭКСПОРТ] Не удалось распознать строку '{value}' как {value_type} для ячейки {address}.")
+
             # Проверяем, есть ли формат для этой ячейки
             cell_format = cell_format_map.get((row, col))
             # Используем новую вспомогательную функцию
-            _write_value_with_format(worksheet, row, col, value, cell_format)
+            _write_value_with_format(worksheet, row, col, parsed_value, cell_format)
             written_cells.add((row, col))
         except Exception as e:
             logger.warning(f"Не удалось записать данные в ячейку {address}: {e}")
