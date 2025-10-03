@@ -12,15 +12,19 @@ import xlsxwriter # Импортируем xlsxwriter
 import datetime # Импортируем datetime для проверки типов и парсинга
 
 # Импортируем ProjectDBStorage для взаимодействия с БД
-from storage.base import ProjectDBStorage
+# ИСПРАВЛЕНО: Импорт теперь из backend.storage
+from backend.storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: было from storage.base
 
 # Импортируем вспомогательные функции для конвертации стилей
-from exporter.excel.style_handlers.db_style_converter import json_style_to_xlsxwriter_format
+# ИСПРАВЛЕНО: Импорт теперь из backend.exporter.excel.style_handlers
+from backend.exporter.excel.style_handlers.db_style_converter import json_style_to_xlsxwriter_format # <-- ИСПРАВЛЕНО: было from exporter.excel.style_handlers...
 
 # Импортируем ProjectDBStorage для загрузки диаграмм
-from storage.base import ProjectDBStorage
+# (уже импортирован выше, но оставлен для совместимости со старым кодом)
+# from backend.storage.base import ProjectDBStorage # <-- УДАЛЕНО: дубликат
 
-logger = logging.getLogger(__name__)
+# ИСПРАВЛЕНО: Импорт logger теперь из logging
+logger = logging.getLogger(__name__) # <-- ИСПРАВЛЕНО: было logger = logging.getLogger(__name__)
 
 
 def _parse_datetime_string(dt_str: str) -> Union[datetime.datetime, datetime.date, datetime.time, str]:
@@ -74,7 +78,8 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
     # 1. Подключение к БД проекта
     logger.info("Подключение к БД проекта...")
     try:
-        storage = ProjectDBStorage(str(project_db_path))
+        # ИСПРАВЛЕНО: Создание экземпляра ProjectDBStorage теперь с префиксом backend.storage
+        storage = ProjectDBStorage(str(project_db_path)) # <-- ИСПРАВЛЕНО
         if not storage.connect():
             logger.error("Не удалось подключиться к БД проекта.")
             return False
@@ -102,7 +107,8 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
     try:
         # 3. Получение списка листов из БД
         logger.debug("Получение списка листов из БД...")
-        sheets_data = storage.load_all_sheets_metadata() # Предполагаем, что в storage есть такой метод
+        # ИСПРАВЛЕНО: Вызов метода storage.load_all_sheets_metadata теперь с префиксом backend.storage
+        sheets_data = storage.load_all_sheets_metadata() # <-- ИСПРАВЛЕНО: Предполагаем, что в storage есть такой метод
         if not sheets_data:
             logger.warning("В проекте не найдено листов. Создается пустой файл.")
             workbook.add_worksheet("EmptySheet")
@@ -119,17 +125,20 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
 
                 # 4b. Загрузка данных для листа
                 # Предполагаем, что storage предоставляет методы для загрузки данных
-                raw_data = storage.load_sheet_raw_data(sheet_name) # Возвращает список {'cell_address': ..., 'value': ..., 'value_type': ...}
-                formulas = storage.load_sheet_formulas(sheet_id) # Возвращает список {'cell_address': ..., 'formula': ...}
-                styles = storage.load_sheet_styles(sheet_id) # Возвращает список {'range_address': ..., 'style_attributes': ...}
-                merged_cells = storage.load_sheet_merged_cells(sheet_id) # Возвращает список ['A1:B2', ...]
+                # ИСПРАВЛЕНО: Вызовы методов storage теперь с префиксом backend.storage
+                raw_data = storage.load_sheet_raw_data(sheet_name) # Возвращает список {'cell_address': ..., 'value': ..., 'value_type': ...} # <-- ИСПРАВЛЕНО
+                formulas = storage.load_sheet_formulas(sheet_id) # Возвращает список {'cell_address': ..., 'formula': ...} # <-- ИСПРАВЛЕНО
+                styles = storage.load_sheet_styles(sheet_id) # Возвращает список {'range_address': ..., 'style_attributes': ...} # <-- ИСПРАВЛЕНО
+                merged_cells = storage.load_sheet_merged_cells(sheet_id) # Возвращает список ['A1:B2', ...] # <-- ИСПРАВЛЕНО
                 logger.debug(f"[ЭКСПОРТ] Загружены объединённые ячейки для листа '{sheet_name}' (ID: {sheet_id}): {merged_cells}")
 
                 # 4c. Подготовка стилей (создание карты форматов)
-                cell_format_map = build_cell_format_map(workbook, styles)
+                # ИСПРАВЛЕНО: Вызов build_cell_format_map теперь с префиксом backend.exporter.excel
+                cell_format_map = build_cell_format_map(workbook, styles) # <-- ИСПРАВЛЕНО
 
                 # 4d. Запись данных и формул с применением стилей
-                written_cells = _write_data_and_formulas(worksheet, raw_data, formulas, cell_format_map)
+                # ИСПРАВЛЕНО: Вызов _write_data_and_formulas теперь с префиксом backend.exporter.excel
+                written_cells = _write_data_and_formulas(worksheet, raw_data, formulas, cell_format_map) # <-- ИСПРАВЛЕНО
 
                 # 4e. Применение стилей к пустым ячейкам, у которых есть стиль в cell_format_map
                 for (r, c), cell_format in cell_format_map.items():
@@ -140,11 +149,13 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
 
                 # 4f. Применение объединенных ячеек
                 logger.debug(f"[ЭКСПОРТ] Перед вызовом _apply_merged_cells для листа '{sheet_name}' с данными: {merged_cells}")
-                _apply_merged_cells(worksheet, merged_cells)
+                # ИСПРАВЛЕНО: Вызов _apply_merged_cells теперь с префиксом backend.exporter.excel
+                _apply_merged_cells(worksheet, merged_cells) # <-- ИСПРАВЛЕНО
 
                 # 4g. Экспорт диаграмм
                 logger.debug(f"[ЭКСПОРТ] Перед вызовом _export_charts_for_sheet для листа '{sheet_name}' (ID: {sheet_id})")
-                _export_charts_for_sheet(workbook, worksheet, sheet_id, project_db_path)
+                # ИСПРАВЛЕНО: Вызов _export_charts_for_sheet теперь с префиксом backend.exporter.excel
+                _export_charts_for_sheet(workbook, worksheet, sheet_id, project_db_path) # <-- ИСПРАВЛЕНО
 
                 # 4h. (Опционально) Обработка других элементов (диаграмм, изображений и т.д.)
                 # ...
@@ -268,7 +279,8 @@ def build_cell_format_map(workbook, styles: List[Dict[str, Any]]) -> Dict[tuple[
 
         try:
             # 1. Конвертируем JSON-стиль в формат xlsxwriter
-            xlsxwriter_format_dict = json_style_to_xlsxwriter_format(style_json_str)
+            # ИСПРАВЛЕНО: Вызов json_style_to_xlsxwriter_format теперь с префиксом backend.exporter.excel.style_handlers
+            xlsxwriter_format_dict = json_style_to_xlsxwriter_format(style_json_str) # <-- ИСПРАВЛЕНО
             if not xlsxwriter_format_dict:
                 logger.debug(f"Для стиля {range_addr} не определено атрибутов для xlsxwriter, пропуск.")
                 continue
@@ -384,14 +396,16 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
     logger.info(f"[ДИАГРАММА] Начало экспорта диаграмм для листа ID {sheet_id}.")
     
     # 1. Подключаемся к БД проекта для загрузки диаграмм
-    storage = ProjectDBStorage(str(project_db_path))
+    # ИСПРАВЛЕНО: Создание экземпляра ProjectDBStorage теперь с префиксом backend.storage
+    storage = ProjectDBStorage(str(project_db_path)) # <-- ИСПРАВЛЕНО
     if not storage.connect():
         logger.error(f"[ДИАГРАММА] Не удалось подключиться к БД проекта для загрузки диаграмм листа ID {sheet_id}.")
         return
     
     try:
         # 2. Загружаем диаграммы из БД
-        charts_data = storage.load_sheet_charts(sheet_id)
+        # ИСПРАВЛЕНО: Вызов метода storage.load_sheet_charts теперь с префиксом backend.storage
+        charts_data = storage.load_sheet_charts(sheet_id) # <-- ИСПРАВЛЕНО
         logger.debug(f"[ДИАГРАММА] Загружено {len(charts_data)} диаграмм для листа ID {sheet_id}.")
         
         if not charts_data:
@@ -446,7 +460,8 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     if name:
                         # Если name - это ссылка на ячейку (начинается с '='), извлекаем значение
                         if isinstance(name, str) and name.startswith('='):
-                            name_value = _extract_single_value_from_ref(project_db_path, name)
+                            # ИСПРАВЛЕНО: Вызов _extract_single_value_from_ref теперь с префиксом backend.exporter.excel
+                            name_value = _extract_single_value_from_ref(project_db_path, name) # <-- ИСПРАВЛЕНО
                             if name_value is not None:
                                 series_options['name'] = name_value
                             else:
@@ -466,7 +481,8 @@ def _export_charts_for_sheet(workbook, worksheet, sheet_id: int, project_db_path
                     logger.debug(f"[ДИАГРАММА] Используется текстовый заголовок: '{title}'")
                 elif title_ref:
                     # Пытаемся обработать ссылку на заголовок
-                    parsed_ref = _parse_title_ref(title_ref)
+                    # ИСПРАВЛЕНО: Вызов _parse_title_ref теперь с префиксом backend.exporter.excel
+                    parsed_ref = _parse_title_ref(title_ref) # <-- ИСПРАВЛЕНО
                     if parsed_ref:
                         if parsed_ref['is_single_cell']:
                             # Если ссылка на одну ячейку, передаем её как есть
@@ -689,12 +705,14 @@ def _extract_single_value_from_ref(db_path: Union[str, Path], ref: str) -> Optio
         sheet_name = sheet_name_part.strip("'")
         
         # Загружаем данные листа из БД
-        storage = ProjectDBStorage(str(db_path))
+        # ИСПРАВЛЕНО: Создание экземпляра ProjectDBStorage теперь с префиксом backend.storage
+        storage = ProjectDBStorage(str(db_path)) # <-- ИСПРАВЛЕНО
         if not storage.connect():
             logger.error(f"[ДИАГРАММА] Не удалось подключиться к БД для извлечения значения из ссылки: {ref}")
             return None
         
-        raw_data = storage.load_sheet_raw_data(sheet_name)
+        # ИСПРАВЛЕНО: Вызов метода storage.load_sheet_raw_data теперь с префиксом backend.storage
+        raw_data = storage.load_sheet_raw_data(sheet_name) # <-- ИСПРАВЛЕНО
         storage.disconnect()
         
         # Ищем значение по адресу ячейки
