@@ -1,4 +1,4 @@
-# src/core/controller/data_manager.py
+# backend/core/controller/data_manager.py
 """
 Модуль для управления данными листа.
 Отвечает за загрузку, обновление и историю редактирования данных листа.
@@ -11,10 +11,10 @@ import sqlite3  # Для аннотаций типов, если нужно
 from ..app_controller import AppController
 
 # Импортируем ProjectDBStorage
-from storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: было from src.storage.base
+from backend.storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: было from src.storage.base
 
 # Импортируем logger из utils
-from utils.logger import get_logger
+from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
