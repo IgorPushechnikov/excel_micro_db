@@ -37,6 +37,7 @@ from .project_manager import ProjectManager # Был перемещен в ко�
 
 logger = get_logger(__name__)
 
+
 class AppController:
     """
     Центральный контроллер приложения.
@@ -55,6 +56,9 @@ class AppController:
         self.project_db_path = os.path.join(project_path, "project_data.db")
         self.storage: Optional[ProjectDBStorage] = None
         self._current_project_data: Optional[Dict[str, Any]] = None  # Кэш метаданных проекта
+        # --- НОВОЕ: Атрибут для обработчика логов проекта ---
+        self._project_log_handler: Optional[logging.FileHandler] = None
+        # ================================================
 
         # --- Инициализация менеджеров ---
         # Импортируем DataManager локально, чтобы избежать циклического импорта
@@ -95,18 +99,33 @@ class AppController:
     # --- Управление проектом (делегировано ProjectManager) ---
     def create_project(self, project_path: str) -> bool:
         """Создает новый проект."""
-        return self.project_manager.create_project(project_path)
+        success = self.project_manager.create_project(project_path)
+        if success:
+            # --- НОВОЕ: Настройка логирования проекта ---
+            self._setup_project_logging(project_path)
+            # ==========================================
+        return success
 
     def create_new_project(self, project_name: str) -> bool:
         """Создает новую структуру проекта."""
         return self.project_manager.create_new_project(project_name)
 
-    def load_project(self) -> bool:
+    def load_project(self, project_path: Optional[str] = None) -> bool:
         """Загружает существующий проект."""
-        return self.project_manager.load_project()
+        # Используем переданный путь или сохраненный
+        load_path = project_path or self.project_path
+        success = self.project_manager.load_project(load_path)
+        if success:
+            # --- НОВОЕ: Настройка логирования проекта ---
+            self._setup_project_logging(load_path)
+            # ==========================================
+        return success
 
     def close_project(self):
         """Закрывает текущий проект."""
+        # --- НОВОЕ: Удаление обработчика логов проекта ---
+        self._remove_project_logging()
+        # ==============================================
         self.project_manager.close_project()
         self._current_project_data = None
 
@@ -294,6 +313,58 @@ class AppController:
         except Exception as e:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Python-экспортера (xlsxwriter): {e}", exc_info=True)
             return False
+
+    # --- НОВОЕ: Методы для настройки и удаления логирования проекта ---
+    def _setup_project_logging(self, project_path: str):
+        """
+        Настраивает дублирующий лог-файл в папке проекта.
+        """
+        try:
+            log_dir = Path(project_path) / "logs"
+            log_dir.mkdir(exist_ok=True)  # Создаем папку logs, если её нет
+            log_file = log_dir / "project_gui.log"
+
+            # Создаем обработчик
+            self._project_log_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+            # Создаем форматтер (можно использовать тот же, что и в основном логгере)
+            # или создать отдельный формат для файлового лога
+            # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+             # Используем тот же формат, что и в utils.logger
+            from utils.logger import setup_logger  # Импортируем, чтобы получить форматтер
+            formatter = setup_logger("dummy").handlers[0].formatter if setup_logger("dummy").handlers else None
+            if formatter:
+                 self._project_log_handler.setFormatter(formatter)
+            else:
+                 # Если форматтер не получен, используем простой стандартный
+                 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                 self._project_log_handler.setFormatter(formatter)
+
+            # Добавляем обработчик к корневому логгеру или к логгеру приложения
+            # Выберем корневой, чтобы захватить все сообщения
+            root_logger = logging.getLogger()
+            root_logger.addHandler(self._project_log_handler)
+
+            logger.info(f"Логирование в файл проекта '{log_file}' настроено.")
+        except Exception as e:
+            logger.error(f"Ошибка при настройке логирования в файл проекта: {e}", exc_info=True)
+
+    def _remove_project_logging(self):
+        """
+        Удаляет обработчик логов проекта при закрытии проекта.
+        """
+        if self._project_log_handler:
+            try:
+                root_logger = logging.getLogger()
+                root_logger.removeHandler(self._project_log_handler)
+                self._project_log_handler.close()  # Закрываем файловый дескриптор
+                logger.info(f"Логирование в файл проекта '{self._project_log_handler.baseFilename}' удалено.")
+            except Exception as e:
+                logger.error(f"Ошибка при удалении обработчика логов проекта: {e}", exc_info=True)
+            finally:
+                self._project_log_handler = None
+        else:
+            logger.debug("Обработчик логов проекта не был установлен.")
+    # ================================================================
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
