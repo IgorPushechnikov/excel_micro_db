@@ -322,8 +322,15 @@ class SheetEditor(QWidget):
                         from storage.styles import load_sheet_styles
                         styles_data = load_sheet_styles(conn, sheet_id)
                         logger.info(f"SheetEditor.load_sheet: Загружено {len(styles_data)} стилей для листа '{sheet_name}' из БД.")
+                        # --- ДОБАВЛЕНО ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ ---
+                        if styles_data:
+                            logger.debug(f"SheetEditor.load_sheet: Пример стиля: {styles_data[0]}")
+                        # ======================================
                         # Передаем стили в модель
                         self._model.set_cell_styles(styles_data)
+                        # --- ДОБАВЛЕНО ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ ---
+                        logger.debug(f"SheetEditor.load_sheet: Стили переданы в модель для листа '{sheet_name}'.")
+                        # ======================================
                     else:
                         logger.warning(f"SheetEditor.load_sheet: Лист '{sheet_name}' не найден в БД при попытке загрузить стили.")
                     conn.close()
