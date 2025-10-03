@@ -8,7 +8,10 @@ from pathlib import Path
 
 # --- Добавление корня проекта в sys.path ---
 # Это необходимо, чтобы модули из backend/ были видны.
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
+# sys.path.insert(0, str(Path(__file__).parent / "backend")) - УДАЛЕНО
+# Вместо этого, добавим родительскую директорию проекта, чтобы импортировать как backend.constructor...
+project_root = Path(__file__).parent.resolve()
+sys.path.insert(0, str(project_root))
 # -------------------------------------------
 
 # Импорт Qt
@@ -17,10 +20,12 @@ from PySide6.QtCore import Qt, QCoreApplication
 import logging
 
 # Импорт нашего главного окна
-from constructor.main_window import MainWindow
+# ИСПРАВЛЕНО: Абсолютный импорт относительно корня проекта, где backend в sys.path
+from backend.constructor.main_window import MainWindow
 
 # Импорт логгера
-from utils.logger import get_logger
+# ИСПРАВЛЕНО: Абсолютный импорт относительно корня проекта, где backend в sys.path
+from backend.utils.logger import get_logger
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
