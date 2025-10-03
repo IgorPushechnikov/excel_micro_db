@@ -290,7 +290,7 @@ class SheetEditor(QWidget):
 
         try:
             editable_data = self.app_controller.get_sheet_editable_data(sheet_name)
-            if editable_data is not None and 'column_names' in editable_data:
+            if editable_data is not None and 'rows' in editable_data: # Проверяем наличие данных
                 self._model = SheetDataModel(editable_data)
                 # === НОВОЕ: Подключение к новому сигналу модели ===
                 self._model.cellDataAboutToChange.connect(self._on_cell_data_about_to_change)
@@ -307,7 +307,7 @@ class SheetEditor(QWidget):
                 # =================================================================
                 logger.info(f"Лист '{sheet_name}' успешно загружен в редактор. "
                             f"Строк: {len(editable_data.get('rows', []))}, "
-                            f"Столбцов: {len(editable_data.get('column_names', []))}")
+                            f"Столбцов: {len(editable_data.get('rows', [])[0]) if editable_data.get('rows') else 0}")
 
                 # === НОВОЕ: Загрузка стилей и применение к модели ===
                 try:
@@ -415,8 +415,8 @@ class SheetEditor(QWidget):
             if not (0 <= row < self._model.rowCount() and 0 <= col < self._model.columnCount()):
                 logger.warning(f"SheetEditor: Изменение за пределами модели. row={row}, col={col}")
                 return
-            column_name = self._model._original_column_names[
-                col] if col < len(self._model._original_column_names) else f"Col_{col}"
+            # ИСПРАВЛЕНО: Используем индекс столбца как имя, так как _original_column_names больше нет
+            column_name = str(col) # Используем индекс столбца как имя
             new_value = self._model._rows[row][
                 col] if row < len(self._model._rows) and col < len(self._model._rows[row]) else None
             logger.debug(
