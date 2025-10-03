@@ -78,6 +78,8 @@ class DataManager:
         """
         Получает редактируемые данные листа в формате, ожидаемом SheetDataModel.
         Этот метод вызывается из SheetEditor.
+        Теперь учитывает как editable_data, так и raw_data, объединяя их.
+        Приоритет у редактируемых данных.
 
         Args:
             sheet_name (str): Имя листа.
@@ -93,64 +95,65 @@ class DataManager:
         try:
             logger.debug(f"Загрузка редактируемых данных для листа '{sheet_name}' для GUI...")
 
-            # Для MVP предположим, что имена столбцов - это стандартные имена Excel (A, B, C...)
-            # В будущем их нужно будет загружать из метаданных листа
-            # from src.constructor.components.sheet_editor import SheetDataModel # <-- УБРАНО
-            # dummy_model = SheetDataModel({"column_names": [], "rows": []}) # <-- УБРАНО
-            max_columns = 20  # Временное значение, в реальности нужно из метаданных
-            column_names = self._generate_excel_column_names(max_columns) # <-- ИСПОЛЬЗУЕМ МЕТОД DataManager
-
             # Получаем sheet_id
             sheet_id = self._get_sheet_id_by_name(sheet_name)
             if sheet_id is None:
                 logger.warning(f"Не найден sheet_id для листа '{sheet_name}'.")
                 # Возвращаем структуру с пустыми данными
-                return {"column_names": column_names, "rows": []}
+                return {"column_names": [], "rows": []}
 
             # Загружаем редактируемые данные
             editable_data_list = storage.load_sheet_editable_data(sheet_id, sheet_name)
-            
-            # Преобразуем список словарей в список кортежей для модели
-            # Предполагаем, что данные хранятся по адресам, и нам нужно создать матрицу
-            # Это упрощенная реализация для MVP
+            # Загружаем "сырые" данные как резервный источник
+            raw_data_list = storage.load_sheet_raw_data(sheet_name)
+
+            # Создаем словари для быстрого доступа к данным
+            editable_dict = {(item["cell_address"]): item["value"] for item in editable_data_list}
+            raw_dict = {(item["cell_address"]): item["value"] for item in raw_data_list}
+
+            # Объединяем адреса из обоих источников
+            all_addresses = set(editable_dict.keys()).union(set(raw_dict.keys()))
+
+            # Парсим адреса и находим max_row, max_col
+            max_row = -1
+            max_col = -1
+            cell_values = {}
+            for addr in all_addresses:
+                col_part = "".join(filter(str.isalpha, addr)).upper()
+                row_part = "".join(filter(str.isdigit, addr))
+                if row_part and col_part:
+                    row_idx = int(row_part) - 1  # 0-based
+                    col_idx = self._column_letter_to_index(col_part)
+                    max_row = max(max_row, row_idx)
+                    max_col = max(max_col, col_idx)
+                    # Приоритет у редактируемых данных
+                    cell_values[(row_idx, col_idx)] = editable_dict.get(addr, raw_dict[addr])
+
+            # Генерируем имена столбцов на основе max_col
+            column_names = self._generate_excel_column_names(max_col + 1) if max_col >= 0 else []
+
+            # Создаем матрицу данных
             rows = []
-            if editable_data_list:
-                # Найдем максимальный номер строки и столбца
-                max_row = 0
-                max_col = 0
-                cell_dict = {}
-                for item in editable_data_list:
-                    addr = item["cell_address"]
-                    # Простой парсер адреса (только для A1, B2 и т.д., без диапазонов)
-                    col_part = ""
-                    row_part = ""
-                    for char in addr:
-                        if char.isalpha():
-                            col_part += char
-                        else:
-                            row_part += char
-                    if row_part and col_part:
-                        row_idx = int(row_part) - 1  # 0-based
-                        col_idx = self._column_letter_to_index(col_part)
-                        max_row = max(max_row, row_idx)
-                        max_col = max(max_col, col_idx)
-                        cell_dict[(row_idx, col_idx)] = item["value"]
-                
-                # Создаем матрицу данных
+            if max_row >= 0 and max_col >= 0:
                 for r in range(max_row + 1):
                     row = []
-                    for c in range(max(max_col + 1, len(column_names))):
-                        row.append(cell_dict.get((r, c), ""))
+                    for c in range(max_col + 1):
+                        value = cell_values.get((r, c), "")
+                        row.append(value)
                     rows.append(tuple(row))
             else:
-                # Если данных нет, создаем одну пустую строку
-                rows = [tuple([""] * len(column_names))]
+                # Если данных нет, создаем одну пустую строку, если есть столбцы
+                if column_names:
+                    rows = [tuple([""] * len(column_names))]
+                else:
+                    rows = []
 
             result = {
                 "column_names": column_names,
                 "rows": rows
             }
-            logger.debug(f"Редактируемые данные для листа '{sheet_name}' подготовлены для GUI.")
+            logger.debug(f"Редактируемые данные для листа '{sheet_name}' подготовлены для GUI. "
+                         f"Строк: {len(rows)}, Столбцов: {len(column_names)}.")
             return result
 
         except Exception as e:
