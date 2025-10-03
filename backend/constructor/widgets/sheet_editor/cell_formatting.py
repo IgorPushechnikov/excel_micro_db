@@ -14,12 +14,12 @@ try:
     from openpyxl.styles.numbers import is_date_format as opx_is_date_format
 except ImportError:
     # fallback если функция не найдена
-    def opx_is_date_format(fmt_code):
+    def opx_is_date_format(fmt: str | None) -> bool:
         # Простая эвристика
-        indicators = ['Y', 'M', 'D', 'H', 'S', 'AM', 'PM', 'A/P']
-        if not fmt_code or not isinstance(fmt_code, str):
+        if not fmt or not isinstance(fmt, str):
             return False
-        fmt_upper = fmt_code.upper()
+        indicators = ['Y', 'M', 'D', 'H', 'S', 'AM', 'PM', 'A/P']
+        fmt_upper = fmt.upper()
         return any(indicator in fmt_upper for indicator in indicators)
 
 # Импортируем logger из utils
