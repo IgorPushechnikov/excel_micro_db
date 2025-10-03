@@ -15,13 +15,14 @@ from pathlib import Path
 # from analyzer.logic_documentation import analyze_excel_file # Импорт будет в AnalysisManager
 
 # Импортируем хранилище
-from storage.base import ProjectDBStorage
+from backend.storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: Импорт теперь из backend.storage
 
 # Импортируем экспортёры
 # from exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # Импорт будет в ExportManager
 
 # Импортируем logger из utils
-from utils.logger import get_logger
+# ИСПРАВЛЕНО: Корректный путь к logger внутри backend
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 # --- Исключения ---
 from exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
@@ -143,6 +144,10 @@ class AppController:
         """Получает редактируемые данные листа."""
         return self.data_manager.get_sheet_editable_data(sheet_name)
 
+    def get_sheet_raw_data(self, sheet_name: str) -> Optional[Dict[str, Any]]:
+        """Получает "сырые" данные листа (включая формулы, стили и т.д.)."""
+        return self.data_manager.get_sheet_raw_data(sheet_name)
+
     def update_sheet_cell_in_project(self, sheet_name: str, row_index: int, column_name: str, new_value: str) -> bool:
         """Обновляет значение ячейки в проекте."""
         return self.data_manager.update_sheet_cell_in_project(sheet_name, row_index, column_name, new_value)
@@ -159,7 +164,7 @@ class AppController:
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
         """Анализирует Excel-файл и сохраняет результаты в БД проекта."""
         # Пока вызываем напрямую, но в будущем будет через AnalysisManager
-        from analyzer.logic_documentation import analyze_excel_file
+        from backend.analyzer.logic_documentation import analyze_excel_file # <-- ИСПРАВЛЕНО: Импорт теперь из backend.analyzer
         if not self.storage:
             logger.error("Проект не загружен. Невозможно выполнить анализ.")
             return False
@@ -284,7 +289,7 @@ class AppController:
         """Экспортирует проект в Excel-файл (старый метод)."""
         logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}."),
         try:
-            from exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter
+            from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
             if success:
                 logger.info(f"Проект успешно экспортирован в '{output_path}'.")
@@ -300,7 +305,7 @@ class AppController:
         logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter).")
         try:
             # Импортируем xlsxwriter_exporter
-            from exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
+            from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
             
             # Выполняем экспорт
             success = export_project_xlsxwriter(self.project_db_path, output_path)
@@ -357,6 +362,7 @@ class AppController:
         else:
             logger.debug("Обработчик логов проекта не был установлен.")
     # ================================================================
+
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
