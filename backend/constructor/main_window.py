@@ -18,11 +18,11 @@ from PySide6.QtWidgets import (
 
 # Импорт внутренних модулей
 # ИСПРАВЛЕНО: Импорты теперь относительные или абсолютные внутри backend
-from utils.logger import get_logger
-from core.app_controller import create_app_controller, AppController
-from constructor.widgets.project_explorer import ProjectExplorer
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
+from backend.core.app_controller import create_app_controller, AppController
+from backend.constructor.widgets.project_explorer import ProjectExplorer
 # ИСПРАВЛЕНО: Импорт SheetEditor теперь из подпапки sheet_editor
-from constructor.widgets.sheet_editor.sheet_editor_widget import SheetEditor
+from backend.constructor.widgets.sheet_editor.sheet_editor_widget import SheetEditor
 
 # Встроенный WelcomeWidget для устранения ошибки импорта
 class WelcomeWidget(QWidget):
@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
                 logger.error(error_msg)
                 QMessageBox.critical(self, "Ошибка", f"{error_msg}\nУбедитесь, что проект корректно загружен.")
             else:
-                logger.error("sheet_editor не инициализирован при попытке загрузки листа.")
+                logger.error("sheet_editor или stacked_widget не инициализированы при попытке загрузки листа.")
         else:
             error_msg = "sheet_editor или stacked_widget не инициализированы."
             logger.error(error_msg)
