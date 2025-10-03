@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
 import xlsxwriter # Импортируем xlsxwriter
+import datetime # Импортируем datetime для проверки типов
 
 # Импортируем ProjectDBStorage для взаимодействия с БД
 from storage.base import ProjectDBStorage
@@ -141,6 +142,22 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
     return success
 
 
+def _write_value_with_format(worksheet, row: int, col: int, value: Any, cell_format):
+    """
+    Вспомогательная функция для записи значения в ячейку xlsxwriter с корректным форматом.
+    Использует write_datetime/write_date для объектов datetime, если задан формат.
+    """
+    if isinstance(value, datetime.datetime):
+        worksheet.write_datetime(row, col, value, cell_format)
+    elif isinstance(value, datetime.date):
+        worksheet.write_date(row, col, value, cell_format)
+    elif isinstance(value, datetime.time):
+        worksheet.write_datetime(row, col, datetime.datetime.combine(datetime.date.min, value), cell_format)
+    else:
+        # Для остальных типов используем обычный write
+        worksheet.write(row, col, value, cell_format)
+
+
 def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas: List[Dict[str, Any]], cell_format_map: Dict[tuple[int, int], Any]) -> set[tuple[int, int]]:
     """
     Записывает данные и формулы на лист xlsxwriter, применяя стили из cell_format_map.
@@ -166,7 +183,8 @@ def _write_data_and_formulas(worksheet, raw_data: List[Dict[str, Any]], formulas
             row, col = _xl_cell_to_row_col(address)
             # Проверяем, есть ли формат для этой ячейки
             cell_format = cell_format_map.get((row, col))
-            worksheet.write(row, col, value, cell_format)
+            # Используем новую вспомогательную функцию
+            _write_value_with_format(worksheet, row, col, value, cell_format)
             written_cells.add((row, col))
         except Exception as e:
             logger.warning(f"Не удалось записать данные в ячейку {address}: {e}")
