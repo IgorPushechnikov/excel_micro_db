@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from core.app_controller import AppController
 
 # ИСПРАВЛЕНО: Импорт logger теперь из utils внутри backend
-from utils.logger import get_logger
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 # --- ИМПОРТ МОДЕЛИ ДАННЫХ ИЗ ТОЙ ЖЕ ПОДПАПКИ ---
 from .sheet_data_model import SheetDataModel
@@ -290,6 +290,7 @@ class SheetEditor(QWidget):
 
         try:
             # ИЗМЕНЕНО: Используем get_sheet_raw_data вместо get_sheet_editable_data
+            # Это должно вернуть ВСЕ строки, включая строку заголовков.
             editable_data = self.app_controller.get_sheet_raw_data(sheet_name)
             if editable_data is not None and 'rows' in editable_data: # Проверяем наличие данных
                 self._model = SheetDataModel(editable_data)
