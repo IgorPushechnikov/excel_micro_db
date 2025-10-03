@@ -168,7 +168,15 @@ def json_style_to_xlsxwriter_format(style_json_str: str) -> Optional[Dict[str, A
 
     # --- Числовой формат ---
     if 'number_format' in style_dict:
-        xlsxwriter_format['num_format'] = style_dict['number_format']
+        # --- ИЗМЕНЕНИЕ: Заменяем формат даты ---
+        original_format = style_dict['number_format']
+        # Заменяем mm-dd-yy на dd.mm.yyyy
+        if original_format == 'mm-dd-yy':
+            xlsxwriter_format['num_format'] = 'dd.mm.yyyy'
+            logger.debug(f"Заменён формат даты: '{original_format}' -> 'dd.mm.yyyy'")
+        else:
+            xlsxwriter_format['num_format'] = original_format
+        # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
     # --- Защита (обычно не применяется через формат ячейки в xlsxwriter напрямую) ---
     # xlsxwriter управляет защитой листа, а не отдельных ячеек, через worksheet.protect_range() и атрибуты листа.
