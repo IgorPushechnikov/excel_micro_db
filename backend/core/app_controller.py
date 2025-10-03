@@ -25,7 +25,7 @@ from backend.storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: И
 from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 # --- Исключения ---
-from exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
+from backend.exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
 
 # Импорты для новых менеджеров (теперь из поддиректории)
 # from .controller.data_manager import DataManager # <-- УДАЛЯЕМ ОТСЮДА, чтобы избежать циклического импорта
