@@ -4,9 +4,29 @@ import sqlite3
 import logging
 from typing import List, Dict, Any
 import re
+from datetime import datetime
 
 # Получаем логгер для этого модуля
 logger = logging.getLogger(__name__)
+
+# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМАТИРОВАНИЯ ДАТЫ ДЛЯ GUI ---
+
+def _format_datetime_for_gui(dt_str: str) -> str:
+    """
+    Преобразует строку даты из формата 'YYYY-MM-DD HH:MM:SS' в 'DD.MM.YYYY'.
+    Если строка не соответствует формату, возвращается исходная строка.
+    """
+    try:
+        # Пытаемся распарсить строку как datetime
+        dt_obj = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+        # Форматируем в нужный формат для GUI
+        return dt_obj.strftime("%d.%m.%Y")
+    except ValueError:
+        # Если не удалось распарсить, возвращаем исходную строку
+        logger.debug(f"Не удалось преобразовать строку '{dt_str}' в дату для GUI. Возвращается исходная строка.")
+        return dt_str
+
+# --- КОНЕЦ ВСПОМОГАТЕЛЬНОЙ ФУНКЦИИ ---
 
 def _get_raw_data_table_name(sheet_name: str) -> str:
     """
@@ -129,10 +149,16 @@ def load_sheet_raw_data(connection: sqlite3.Connection, sheet_name: str) -> List
         cursor.execute(f"SELECT cell_address, value, value_type FROM {table_name}")
         rows = cursor.fetchall()
         
-        raw_data = [
-            {"cell_address": row[0], "value": row[1], "value_type": row[2]}
-            for row in rows
-        ]
+        raw_data = []
+        for row in rows:
+            cell_address, value, value_type = row
+            # --- ИЗМЕНЕНИЕ: Форматируем дату для GUI ---
+            if value_type == 'datetime' and isinstance(value, str):
+                formatted_value = _format_datetime_for_gui(value)
+                raw_data.append({"cell_address": cell_address, "value": formatted_value, "value_type": value_type})
+            else:
+                raw_data.append({"cell_address": cell_address, "value": value, "value_type": value_type})
+            # --- КОНЕЦ ИЗМЕНЕНИЯ ---
         
         logger.debug(f"Загружено {len(raw_data)} записей сырых данных для листа '{sheet_name}' из таблицы '{table_name}'.")
         return raw_data
