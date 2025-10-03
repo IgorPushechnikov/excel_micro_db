@@ -19,7 +19,7 @@ from PySide6.QtCore import Qt, Signal, Slot
 import sqlite3 # <-- ДОБАВЛЕНО
 
 # ИСПРАВЛЕНО: Импорт logger теперь из utils внутри backend
-from utils.logger import get_logger
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 logger = get_logger(__name__)
 
