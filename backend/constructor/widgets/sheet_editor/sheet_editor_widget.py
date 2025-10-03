@@ -289,7 +289,8 @@ class SheetEditor(QWidget):
             return
 
         try:
-            editable_data = self.app_controller.get_sheet_editable_data(sheet_name)
+            # ИЗМЕНЕНО: Используем get_sheet_raw_data вместо get_sheet_editable_data
+            editable_data = self.app_controller.get_sheet_raw_data(sheet_name)
             if editable_data is not None and 'rows' in editable_data: # Проверяем наличие данных
                 self._model = SheetDataModel(editable_data)
                 # === НОВОЕ: Подключение к новому сигналу модели ===
