@@ -331,6 +331,17 @@ class SheetEditor(QWidget):
                         # --- ДОБАВЛЕНО ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ ---
                         logger.debug(f"SheetEditor.load_sheet: Стили переданы в модель для листа '{sheet_name}'.")
                         # ======================================
+
+                        # === НОВОЕ: Явный вызов dataChanged для всей модели ===
+                        # Это гарантирует, что представление обновится, даже если сигналы не сработали должным образом.
+                        if self._model.rowCount() > 0 and self._model.columnCount() > 0:
+                            top_left = self._model.index(0, 0)
+                            bottom_right = self._model.index(self._model.rowCount() - 1, self._model.columnCount() - 1)
+                            if top_left.isValid() and bottom_right.isValid():
+                                self._model.dataChanged.emit(top_left, bottom_right)
+                                logger.debug("SheetEditor.load_sheet: Явный сигнал dataChanged отправлен для всей модели.")
+                        # ===================================================
+
                     else:
                         logger.warning(f"SheetEditor.load_sheet: Лист '{sheet_name}' не найден в БД при попытке загрузить стили.")
                     conn.close()
