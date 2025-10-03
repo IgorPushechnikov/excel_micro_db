@@ -46,7 +46,7 @@ class SheetDataModel(QAbstractTableModel):
     """
     Модель данных для отображения и редактирования содержимого листа в QTableView.
     Отображает данные как в Excel: первая строка данных - это данные,
-    заголовки столбцов - стандартные имена Excel (A, B, C...).
+    заголовки столбцов - оригинальные имена из Excel (если доступны), иначе стандартные имена (A, B, C...).
     """
 
     # === НОВОЕ: Сигнал, испускаемый ДО изменения данных ===
@@ -286,10 +286,17 @@ class SheetDataModel(QAbstractTableModel):
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = ...) -> Any: # type: ignore
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                if 0 <= section < len(self._generated_column_headers):
+                # Используем оригинальные имена, если они есть и валидны
+                if (self._original_column_names and
+                    0 <= section < len(self._original_column_names) and
+                    self._original_column_names[section] is not None and
+                    self._original_column_names[section] != ""):
+                    return str(self._original_column_names[section])
+                # Иначе — сгенерированные имена Excel
+                elif 0 <= section < len(self._generated_column_headers):
                     return self._generated_column_headers[section]
                 else:
-                    return f"Col_{section}"  # fallback
+                    return f"Col_{section}"
             elif orientation == Qt.Orientation.Vertical:
                 # Номера строк (1-based), как в Excel
                 return str(section + 1)
