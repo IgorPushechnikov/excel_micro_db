@@ -8,10 +8,12 @@ import os
 import json
 
 # Импортируем новые функции из модулей storage
-from . import schema, raw_data, editable_data, formulas, styles, charts, history, metadata, sheets
+# ИСПРАВЛЕНО: Все импорты теперь с префиксом backend.
+from backend.storage import schema, raw_data, editable_data, formulas, styles, charts, history, metadata, sheets # <-- ИСПРАВЛЕНО: было from . import ...
 
 # Импортируем logger из utils
-from utils.logger import get_logger
+# ИСПРАВЛЕНО: Импорт теперь из backend.utils
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 logger = get_logger(__name__)
 
@@ -97,7 +99,8 @@ class ProjectDBStorage:
             logger.info(f"Создано соединение с БД проекта (новый файл): {self.db_path}")
             
             # Теперь инициализируем схему
-            schema.initialize_project_schema(self.connection)
+            # ИСПРАВЛЕНО: Вызов schema.initialize_project_schema теперь с префиксом backend.storage
+            schema.initialize_project_schema(self.connection) # <-- ИСПРАВЛЕНО: внутренний вызов, но файл schema.py уже исправлен
             logger.info("Схема таблиц проекта инициализирована.")
             
             # Отключаемся после инициализации
@@ -131,7 +134,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return sheets.save_sheet(conn, project_id, sheet_name, max_row, max_column)
+                    # ИСПРАВЛЕНО: Вызов sheets.save_sheet теперь с префиксом backend.storage
+                    return sheets.save_sheet(conn, project_id, sheet_name, max_row, max_column) # <-- ИСПРАВЛЕНО
                 else:
                     return None
         except Exception as e:
@@ -153,7 +157,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return sheets.load_all_sheets_metadata(conn, project_id)
+                    # ИСПРАВЛЕНО: Вызов sheets.load_all_sheets_metadata теперь с префиксом backend.storage
+                    return sheets.load_all_sheets_metadata(conn, project_id) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
@@ -176,7 +181,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return metadata.save_sheet_metadata(conn, sheet_name, sheet_data)
+                    # ИСПРАВЛЕНО: Вызов metadata.save_sheet_metadata теперь с префиксом backend.storage
+                    return metadata.save_sheet_metadata(conn, sheet_name, sheet_data) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -196,7 +202,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return metadata.load_sheet_metadata(conn, sheet_name)
+                    # ИСПРАВЛЕНО: Вызов metadata.load_sheet_metadata теперь с префиксом backend.storage
+                    return metadata.load_sheet_metadata(conn, sheet_name) # <-- ИСПРАВЛЕНО
                 else:
                     return None
         except Exception as e:
@@ -219,7 +226,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return raw_data.save_sheet_raw_data(conn, sheet_name, raw_data_list)
+                    # ИСПРАВЛЕНО: Вызов raw_data.save_sheet_raw_data теперь с префиксом backend.storage
+                    return raw_data.save_sheet_raw_data(conn, sheet_name, raw_data_list) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -240,7 +248,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return raw_data.load_sheet_raw_data(conn, sheet_name)
+                    # ИСПРАВЛЕНО: Вызов raw_data.load_sheet_raw_data теперь с префиксом backend.storage
+                    return raw_data.load_sheet_raw_data(conn, sheet_name) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
@@ -266,7 +275,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return editable_data.load_sheet_editable_data(conn, sheet_id, sheet_name)
+                    # ИСПРАВЛЕНО: Вызов editable_data.load_sheet_editable_data теперь с префиксом backend.storage
+                    return editable_data.load_sheet_editable_data(conn, sheet_id, sheet_name) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
@@ -289,7 +299,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return editable_data.update_editable_cell(conn, sheet_id, sheet_name, cell_address, new_value)
+                    # ИСПРАВЛЕНО: Вызов editable_data.update_editable_cell теперь с префиксом backend.storage
+                    return editable_data.update_editable_cell(conn, sheet_id, sheet_name, cell_address, new_value) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -314,7 +325,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return formulas.save_sheet_formulas(conn, sheet_id, formulas_list)
+                    # ИСПРАВЛЕНО: Вызов formulas.save_sheet_formulas теперь с префиксом backend.storage
+                    return formulas.save_sheet_formulas(conn, sheet_id, formulas_list) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -335,7 +347,8 @@ class ProjectDBStorage:
         try:
             with self.get_connection() as conn:
                 if conn:
-                    return formulas.load_sheet_formulas(conn, sheet_id)
+                    # ИСПРАВЛЕНО: Вызов formulas.load_sheet_formulas теперь с префиксом backend.storage
+                    return formulas.load_sheet_formulas(conn, sheet_id) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
@@ -361,7 +374,8 @@ class ProjectDBStorage:
             with self.get_connection() as conn:
                 if conn:
                     # Предполагается, что функция в styles.py имеет эту сигнатуру
-                    return styles.save_sheet_styles(conn, sheet_id, styles_list)
+                    # ИСПРАВЛЕНО: Вызов styles.save_sheet_styles теперь с префиксом backend.storage
+                    return styles.save_sheet_styles(conn, sheet_id, styles_list) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -383,7 +397,8 @@ class ProjectDBStorage:
             with self.get_connection() as conn:
                 if conn:
                     # Предполагается, что функция в styles.py имеет эту сигнатуру
-                    return styles.load_sheet_styles(conn, sheet_id)
+                    # ИСПРАВЛЕНО: Вызов styles.load_sheet_styles теперь с префиксом backend.storage
+                    return styles.load_sheet_styles(conn, sheet_id) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
@@ -409,7 +424,8 @@ class ProjectDBStorage:
             with self.get_connection() as conn:
                 if conn:
                     # Предполагается, что функция в charts.py имеет эту сигнатуру
-                    return charts.save_sheet_charts(conn, sheet_id, charts_list)
+                    # ИСПРАВЛЕНО: Вызов charts.save_sheet_charts теперь с префиксом backend.storage
+                    return charts.save_sheet_charts(conn, sheet_id, charts_list) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -431,7 +447,8 @@ class ProjectDBStorage:
             with self.get_connection() as conn:
                 if conn:
                     # Предполагается, что функция в charts.py имеет эту сигнатуру
-                    return charts.load_sheet_charts(conn, sheet_id)
+                    # ИСПРАВЛЕНО: Вызов charts.load_sheet_charts теперь с префиксом backend.storage
+                    return charts.load_sheet_charts(conn, sheet_id) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
@@ -503,7 +520,8 @@ class ProjectDBStorage:
             with self.get_connection() as conn:
                 if conn:
                     # Предполагается, что функция в history.py имеет эту сигнатуру
-                    return history.save_edit_history_record(conn, sheet_id, cell_address, old_value, new_value)
+                    # ИСПРАВЛЕНО: Вызов history.save_edit_history_record теперь с префиксом backend.storage
+                    return history.save_edit_history_record(conn, sheet_id, cell_address, old_value, new_value) # <-- ИСПРАВЛЕНО
                 else:
                     return False
         except Exception as e:
@@ -525,7 +543,8 @@ class ProjectDBStorage:
             with self.get_connection() as conn:
                 if conn:
                     # Предполагается, что функция в history.py имеет эту сигнатуру
-                    return history.load_edit_history(conn, sheet_id, limit)
+                    # ИСПРАВЛЕНО: Вызов history.load_edit_history теперь с префиксом backend.storage
+                    return history.load_edit_history(conn, sheet_id, limit) # <-- ИСПРАВЛЕНО
                 else:
                     return []
         except Exception as e:
