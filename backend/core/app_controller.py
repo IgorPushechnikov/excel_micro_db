@@ -326,18 +326,10 @@ class AppController:
 
             # Создаем обработчик
             self._project_log_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-            # Создаем форматтер (можно использовать тот же, что и в основном логгере)
-            # или создать отдельный формат для файлового лога
-            # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-             # Используем тот же формат, что и в utils.logger
-            from utils.logger import setup_logger  # Импортируем, чтобы получить форматтер
-            formatter = setup_logger("dummy").handlers[0].formatter if setup_logger("dummy").handlers else None
-            if formatter:
-                 self._project_log_handler.setFormatter(formatter)
-            else:
-                 # Если форматтер не получен, используем простой стандартный
-                 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-                 self._project_log_handler.setFormatter(formatter)
+            # Создаем форматтер, скопированный из utils.logger
+            # LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            self._project_log_handler.setFormatter(formatter)
 
             # Добавляем обработчик к корневому логгеру или к логгеру приложения
             # Выберем корневой, чтобы захватить все сообщения
