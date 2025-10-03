@@ -15,11 +15,9 @@ import threading
 import time
 
 # Добавляем директорию backend в путь поиска модулей
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
-
-from utils.logger import get_logger
+from backend.utils.logger import get_logger
 # Импортируем AppController для интеграции
-from core.app_controller import create_app_controller
+from backend.core.app_controller import create_app_controller
 # ProjectManager больше не импортируем напрямую, так как AppController его использует
 
 # Получаем логгер для этого модуля
@@ -33,7 +31,7 @@ def start_http_server(host: str = "127.0.0.1", port: int = 8000):
     print(f"Попытка запуска FastAPI-сервера на {host}:{port}...")
     try:
         # Импортируем функцию запуска сервера из модуля api
-        from api.fastapi_server import run_server
+        from backend.api.fastapi_server import run_server
         
         # Обработчик сигналов для корректного завершения
         def signal_handler(sig, frame):
@@ -189,7 +187,7 @@ def export_results_cli(export_type: str, output_path: str, project_path: str) ->
             logger.info(f"Начинается создание SQL-дампа БД в: {sql_output_path}")
 
             # Импортируем функцию dump_db_to_sql
-            from utils.db_utils import dump_db_to_sql
+            from backend.utils.db_utils import dump_db_to_sql
             dump_success = dump_db_to_sql(str(project_db_path), str(sql_output_path))
             if dump_success:
                 logger.info(f"SQL-дамп БД успешно создан: {sql_output_path}")
@@ -355,7 +353,7 @@ def main() -> int:
             logger.info("Запуск графического интерфейса...")
             # Импортируем и запускаем GUI
             try:
-                from constructor.gui_app import main as gui_main
+                from backend.constructor.gui_app import main as gui_main
                 logger.debug("Модуль GUI успешно импортирован.")
                 # Передаём управление в GUI
                 # gui_main() не принимает аргументы, как и CLI main()
