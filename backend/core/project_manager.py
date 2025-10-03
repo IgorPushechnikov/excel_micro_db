@@ -21,7 +21,8 @@ from datetime import datetime
 # if str(project_root) not in sys.path:
 #     sys.path.insert(0, str(project_root))
 
-from utils.logger import get_logger
+# ИСПРАВЛЕНО: Импорт logger теперь из utils внутри backend
+from backend.utils.logger import get_logger
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
@@ -124,7 +125,8 @@ class ProjectManager:
             # --- НОВЫЙ ШАГ: Инициализация БД проекта ---
             logger.debug("Инициализация внутренней БД проекта...")
             try:
-                from storage.base import ProjectDBStorage
+                # ИСПРАВЛЕНО: Импорт ProjectDBStorage теперь из backend.storage
+                from backend.storage.base import ProjectDBStorage
                 db_path = project_path_obj / "project_data.db"
                 storage = ProjectDBStorage(str(db_path))
                 # Главное изменение: вызываем initialize_project_tables, а не пытаемся подключиться
@@ -261,7 +263,8 @@ class ProjectManager:
         Returns:
             bool: True если проект загружен успешно, False в противном случае
         """
-        from storage.base import ProjectDBStorage
+        # ИСПРАВЛЕНО: Импорт ProjectDBStorage теперь из backend.storage
+        from backend.storage.base import ProjectDBStorage
 
         try:
             project_path_obj = Path(self.app_controller.project_path).resolve()
@@ -383,7 +386,8 @@ class ProjectManager:
                     return False
 
                 # Пробуем подключиться и выполнить базовую проверку
-                from storage.base import ProjectDBStorage
+                # ИСПРАВЛЕНО: Импорт ProjectDBStorage теперь из backend.storage
+                from backend.storage.base import ProjectDBStorage
                 storage = ProjectDBStorage(str(db_path))
                 if not storage.connect():
                     logger.error(f"Не удалось подключиться к БД проекта для валидации: {db_path}")
