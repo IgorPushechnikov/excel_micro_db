@@ -1,18 +1,34 @@
 # backend/exceptions/app_exceptions.py
 """
-Пользовательские исключения для приложения Excel Micro DB.
+Модуль с пользовательскими исключениями для приложения.
 """
 
-class ProjectError(Exception):
-    """Базовый класс для исключений, связанных с проектом."""
+
+class AppBaseError(Exception):
+    """Базовый класс для всех исключений приложения."""
     pass
 
-class AnalysisError(Exception):
-    """Исключение, возникающее при ошибке анализа Excel-файла."""
+
+class ProjectError(AppBaseError):
+    """Исключение, связанное с операциями над проектом (создание, загрузка, сохранение)."""
     pass
 
-class ExportError(Exception):
-    """Исключение, возникающее при ошибке экспорта данных."""
+
+class AnalysisError(AppBaseError):
+    """Исключение, возникающее во время анализа Excel-файлов."""
     pass
 
-# Дополнительные пользовательские исключения можно добавлять здесь
+
+class ExportError(AppBaseError):
+    """Исключение, возникающее во время экспорта данных проекта."""
+    pass
+
+
+class StorageError(AppBaseError):
+    """Исключение, связанное с операциями в хранилище (БД)."""
+    pass
+
+
+class ValidationError(AppBaseError):
+    """Исключение, возникающее при валидации данных."""
+    pass
