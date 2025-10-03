@@ -33,6 +33,10 @@ if TYPE_CHECKING:
 # ИСПРАВЛЕНО: Импорт logger теперь из utils внутри backend
 from utils.logger import get_logger
 
+# --- НОВОЕ: Импорт модуля форматирования ---
+from .cell_formatting import format_cell_value
+# ---------------------------------------------
+
 logger = get_logger(__name__)
 
 
@@ -209,10 +213,19 @@ class SheetDataModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             if 0 <= row < len(self._rows) and 0 <= col < len(self._rows[row]):
                 value = self._rows[row][col]
-                return str(value) if value is not None else ""
+                # --- ИЗМЕНЕНО: Применение форматирования ---
+                # Получаем стиль для ячейки
+                style = self._cell_styles.get((row, col))
+                number_format_code = style.get("number_format") if style else None
+                # Используем новую функцию для форматирования
+                formatted_value = format_cell_value(value, number_format_code)
+                # logger.debug(f"Форматирование: [{row},{col}] {value} -> {formatted_value} по формату '{number_format_code}'")
+                return formatted_value if formatted_value is not None else ""
+                # --- КОНЕЦ ИЗМЕНЕНИЯ ---
         elif role == Qt.ItemDataRole.ToolTipRole:
             if 0 <= row < len(self._rows) and 0 <= col < len(self._rows[row]):
                 value = self._rows[row][col]
+                # Для ToolTip используем оригинальное значение, возможно, отформатированное проще
                 orig_name = self._original_column_names[col] if col < len(self._original_column_names) else f"Col_{col}"
                 return f"Столбец: {orig_name}\nЗначение: {repr(value)}"
         # === НОВОЕ: Обработка ролей для стилей ===
