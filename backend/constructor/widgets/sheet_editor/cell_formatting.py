@@ -168,7 +168,6 @@ def _contains_time_format(number_format_code: str) -> bool:
     # Регулярное выражение для M, окруженного не-буквами или началом/конец строки, и не после/до M
     # Это сложно. Проще проверить на общие комбинации.
     # Проверим, есть ли 'M' отдельно от 'MM' и 'MONTH'
-    # Удалим MONTH и MM, и посмотрим, осталась ли M
     temp_str = re.sub(r'MM(?![\w])', '', check_str)
     temp_str = re.sub(r'MONTH(?![\w])', '', temp_str)
     # Теперь ищем M как минуту
@@ -181,36 +180,66 @@ def _excel_date_format_to_python_strftime(excel_format: str) -> Optional[str]:
     """
     Пробует преобразовать код формата даты Excel в Python strftime строку.
     Это упрощённая версия, поддерживающая основные коды.
+    Улучшена логика для форматов дд.мм.гггг.
     """
     if not excel_format:
         return None
 
-    # Проверим, не является ли это одним из стандартных форматов
-    # openpyxl может помочь, но мы будем использовать эвристику
-    # Сначала заменим MM (месяц) и HH, SS (время) на временные токены
-    temp_format = excel_format.replace('MM', 'TEMP_MONTH_TOKEN')
-    temp_format = temp_format.replace('HH', 'TEMP_HOUR_TOKEN')
-    temp_format = temp_format.replace('SS', 'TEMP_SEC_TOKEN')
+    # Убираем кавычки и другие специальные символы, которые не влияют на strftime
+    # Например, [RED], $, "текст"
+    # Убираем двойные кавычки и их содержимое
+    temp_format = re.sub(r'\"[^\"]*\"', '', excel_format)
+    # Убираем квадратные скобки и их содержимое (например, [RED])
+    temp_format = re.sub(r'\[[^\]]*\]', '', temp_format)
 
-    # Теперь заменим M (минуты) на M_minute, если он окружен H или S
-    # Это сложная логика. Проще заменить M_minute -> %M, M -> %m, но с осторожностью.
-    # Проверим, есть ли H или S рядом с M
-    # Регулярное выражение для M, окруженного H или S
-    temp_format = re.sub(r'(?<=[HS])M(?=[HS])', 'TEMP_MINUTE_TOKEN', temp_format)
-    temp_format = re.sub(r'(?<=[HS])M(?![A-Z])', 'TEMP_MINUTE_TOKEN', temp_format) # M после H/S
-    temp_format = re.sub(r'(?<![A-Z])M(?=[HS])', 'TEMP_MINUTE_TOKEN', temp_format) # M до H/S
+    # Паттерн: день, разделитель, месяц, разделитель, год (4 или 2 цифры)
+    # DD/MM/YYYY или DD-MM-YYYY или DD.MM.YYYY -> %d.%m.%Y или %d.%m.%y
+    # Используем именованные группы для захвата
+    pattern1 = r'(?P<day>DD|D)[./-](?P<month>MM|M)[./-](?P<year>YYYY|YY)'
+    match1 = re.search(pattern1, temp_format.upper())
+    if match1:
+        day_part = '%d' if match1.group('day') == 'DD' else '%-d'
+        month_part = '%m' if match1.group('month') == 'MM' else '%-m'
+        year_part = '%Y' if match1.group('year') == 'YYYY' else '%y'
+        # Формат dd.mm.yyyy или dd.mm.yy
+        python_format = f"{day_part}.{month_part}.{year_part}"
+        logger.debug(f"_excel_date_format_to_python_strftime: Сопоставлен формат {excel_format} -> {python_format}")
+        return python_format
 
-    # Теперь заменим оставшиеся M (месяцы) на %m
-    python_format = temp_format.replace('M', '%m')
-    # Заменим минуты
+    # Паттерн: год, разделитель, месяц, разделитель, день
+    # YYYY/MM/DD или YYYY-MM-DD или YYYY.MM.DD -> %Y/%m/%d -> %d.%m.%Y (переставляем)
+    pattern2 = r'(?P<year>YYYY|YY)[./-](?P<month>MM|M)[./-](?P<day>DD|D)'
+    match2 = re.search(pattern2, temp_format.upper())
+    if match2:
+        day_part = '%d' if match2.group('day') == 'DD' else '%-d'
+        month_part = '%m' if match2.group('month') == 'MM' else '%-m'
+        year_part = '%Y' if match2.group('year') == 'YYYY' else '%y'
+        # Формат dd.mm.yyyy или dd.mm.yy (переставляем)
+        python_format = f"{day_part}.{month_part}.{year_part}"
+        logger.debug(f"_excel_date_format_to_python_strftime: Сопоставлен формат {excel_format} -> {python_format}")
+        return python_format
+
+    # Попробуем обработать общие форматы, если более специфичные не сработали
+    # Заменим HH (час), SS (секунды) на временные токены
+    temp_format_lower = temp_format.upper()
+    temp_format_lower = temp_format_lower.replace('HH', 'TEMP_HOUR_TOKEN')
+    temp_format_lower = temp_format_lower.replace('SS', 'TEMP_SEC_TOKEN')
+
+    # Теперь обрабатываем минуты. M, окруженная H или S, вероятно, минуты
+    # (?<=[HS])M(?=[HS]) или (?<=[HS])M(?![A-Z]) или (?<![A-Z])M(?=[HS])
+    temp_format_lower = re.sub(r'(?<=[HS])M(?=[HS])', 'TEMP_MINUTE_TOKEN', temp_format_lower)
+    temp_format_lower = re.sub(r'(?<=[HS])M(?![A-Z])', 'TEMP_MINUTE_TOKEN', temp_format_lower)
+    temp_format_lower = re.sub(r'(?<![A-Z])M(?=[HS])', 'TEMP_MINUTE_TOKEN', temp_format_lower)
+
+    # Теперь оставшиеся M - месяцы
+    python_format = temp_format_lower.replace('M', '%m')
+    # Восстановим минуты
     python_format = python_format.replace('TEMP_MINUTE_TOKEN', '%M')
-    # Заменим месяцы
-    python_format = python_format.replace('TEMP_MONTH_TOKEN', '%m')
-    # Заменим часы и секунды
+    # Восстановим часы и секунды
     python_format = python_format.replace('TEMP_HOUR_TOKEN', '%H')
     python_format = python_format.replace('TEMP_SEC_TOKEN', '%S')
 
-    # Теперь заменим DD, YYYY, YY, AM/PM
+    # Заменим DD, YYYY, YY, AM/PM
     python_format = python_format.replace('DD', '%d')
     python_format = python_format.replace('D', '%-d') # День без ведущего нуля
     python_format = python_format.replace('YYYY', '%Y')
@@ -218,16 +247,13 @@ def _excel_date_format_to_python_strftime(excel_format: str) -> Optional[str]:
     python_format = python_format.replace('AM/PM', '%p')
     python_format = python_format.replace('A/P', '%p')
 
-    # Убираем кавычки и другие специальные символы, которые не влияют на strftime
-    # Например, [RED], $, "текст"
-    # Это требует сложной логики. Пока уберем простые кавычки и символы, не являющиеся форматами
-    # Пример: "DD/MM/YYYY" -> %d/%m/%Y
-    # Пример: #,##0.00" руб." -> не дата
-    # Нам нужно убедиться, что это формат даты
-    # Убираем двойные кавычки и их содержимое
-    python_format = re.sub(r'\"[^\"]*\"', '', python_format)
-    # Убираем квадратные скобки и их содержимое (например, [RED])
-    python_format = re.sub(r'\[[^\]]*\]', '', python_format)
+    # Заменяем общие разделители на точку для русского формата, если это дата
+    # Это грубое упрощение. Лучше сначала определить, что это дата с годом, месяцем и днём.
+    if '%Y' in python_format or '%y' in python_format:
+        if '%d' in python_format and '%m' in python_format:
+            # Вероятно, это формат даты. Заменяем разделители на точку.
+            python_format = python_format.replace('-', '.')
+            python_format = python_format.replace('/', '.')
 
     # Убираем символы, не являющиеся спецификаторами формата или разделителями
     # Оставляем только % и символы, которые могут быть в strftime
@@ -236,32 +262,7 @@ def _excel_date_format_to_python_strftime(excel_format: str) -> Optional[str]:
          logger.warning(f"Преобразованный формат '{python_format}' не содержит спецификаторов. Исходный: '{excel_format}'")
          return None
 
-    # --- НОВОЕ: Замена специфичных форматов на русские ---
-    # Заменяем %Y-%m-%d на %d.%m.%y для русского формата
-    # Это упрощённое правило. В реальности может потребоваться более сложная логика.
-    # Например, если формат Excel был "DD.MM.YYYY", то python_format будет "%d.%m.%Y".
-    # Но если формат Excel был "YYYY-MM-DD", то python_format будет "%Y-%m-%d".
-    # Мы хотим привести к виду "03.10.25".
-    # Проверим, содержит ли формат дату
-    if '%Y' in python_format or '%y' in python_format:
-        # Заменяем %Y на %y, если нужно двухзначный год
-        # python_format = python_format.replace('%Y', '%y')
-        # Заменяем разделители на точки
-        python_format = python_format.replace('-', '.')
-        python_format = python_format.replace('/', '.')
-        # Заменяем порядок на DD.MM.YYYY или DD.MM.YY
-        # Это сложно сделать универсально. Проще использовать конкретный формат.
-        # Например, если формат содержит год, месяц и день, то форматируем как "DD.MM.YY"
-        # Но это может быть не всегда корректно.
-        # Попробуем более простой подход: заменить %Y-%m-%d на %d.%m.%y
-        python_format = re.sub(r'%Y[-/.]%m[-/.]%d', '%d.%m.%y', python_format)
-        python_format = re.sub(r'%d[-/.]%m[-/.]%Y', '%d.%m.%y', python_format)
-        python_format = re.sub(r'%d[-/.]%m[-/.]%y', '%d.%m.%y', python_format)
-        # Также заменить %y
-        python_format = re.sub(r'%Y[-/.]%m[-/.]%y', '%d.%m.%y', python_format)
-        
-    # --- КОНЕЦ НОВОГО ---
-
+    logger.debug(f"_excel_date_format_to_python_strftime: Общий сопоставление {excel_format} -> {python_format}")
     return python_format
 
 def format_cell_value(value: Any, number_format_code: Optional[str]) -> str:
@@ -292,9 +293,7 @@ def format_cell_value(value: Any, number_format_code: Optional[str]) -> str:
     # Здесь можно добавить логику для других форматов (числа, проценты и т.д.)
     # Пока что, если это не дата, и не реализовано, возвращаем строку
     # Для чисел можно использовать openpyxl.utils.format_number
-    # Но это требует больше кода. Пока оставим как есть, если не дата.
-    # Попробуем использовать openpyxl.number_to_string как fallback для чисел
-    # Это требует workbook, которого у нас нет. Используем стандартный str.
+    # Но это требует workbook, которого у нас нет. Используем стандартный str.
     # Или можно попробовать использовать locale-aware форматирование, но это сложно.
 
     return str(value)
