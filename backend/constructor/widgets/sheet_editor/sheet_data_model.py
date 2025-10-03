@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from core.app_controller import AppController
 
 # ИСПРАВЛЕНО: Импорт logger теперь из utils внутри backend
-from utils.logger import get_logger
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 # --- ИМПОРТ МОДУЛЯ ФОРМАТИРОВАНИЯ ИЗ ТОЙ ЖЕ ПОДПАПКИ ---
 from .cell_formatting import format_cell_value
