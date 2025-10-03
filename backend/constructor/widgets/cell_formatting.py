@@ -7,9 +7,24 @@
 import re
 from datetime import datetime, date, time
 from typing import Any, Optional
-import openpyxl.styles.numbers as openpyxl_number_formats
+# ИСПРАВЛЕНО: Безопасный импорт функции проверки формата даты из openpyxl
+try:
+    # Попробуем импортировать функцию для проверки формата даты
+    # В разных версиях openpyxl это может быть по-разному
+    from openpyxl.styles.numbers import is_date_format as opx_is_date_format
+except ImportError:
+    # fallback если функция не найдена
+    def opx_is_date_format(fmt_code):
+        # Простая эвристика
+        indicators = ['Y', 'M', 'D', 'H', 'S', 'AM', 'PM', 'A/P']
+        if not fmt_code or not isinstance(fmt_code, str):
+            return False
+        fmt_upper = fmt_code.upper()
+        return any(indicator in fmt_upper for indicator in indicators)
+
 # Импортируем logger из utils
-from utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from src.utils.logger
+# ИСПРАВЛЕНО: Корректный путь к logger внутри backend
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,17 +41,26 @@ EXCEL_TO_PYTHON_DATE_FORMAT_MAP = {
     'A/P': '%p',   # A/P (заменяется на AM/PM)
 }
 
+
 def _is_date_format(number_format_code: str) -> bool:
     """
     Проверяет, является ли код числового формата форматом даты/времени.
-    Основано на эвристике и часто используемых символах.
+    Основано на openpyxl или эвристике.
     """
     # Проверяем, не является ли это одним из стандартных типов, связанных с датой
-    # openpyxl.classify_number_format возвращает 'Date', 'Time', 'DateTime' и т.д.
-    format_type = openpyxl_number_formats.classify_number_format(number_format_code)
-    if format_type in ['Date', 'Time', 'DateTime']:
-        return True
-
+    # ИСПРАВЛЕНО: Используем правильную функцию из openpyxl или fallback
+    try:
+        if opx_is_date_format is not None and callable(opx_is_date_format):
+            return opx_is_date_format(number_format_code)
+        else:
+            logger.debug("Функция opx_is_date_format не доступна, используем эвристику.")
+    except Exception as e:
+        logger.debug(f"Ошибка при вызове opx_is_date_format: {e}. Используем эвристику.")
+    
+    # fallback на эвристику, если openpyxl не помог
+    if not number_format_code or not isinstance(number_format_code, str):
+        return False
+        
     # Проверяем на наличие общих признаков даты/времени в пользовательских форматах
     # Используем версию с MM_minute для минут, чтобы избежать конфликта с месяцем
     date_time_indicators = ['Y', 'M', 'D', 'H', 'S', 'AM', 'PM', 'A/P']
@@ -49,19 +73,10 @@ def _is_date_format(number_format_code: str) -> bool:
     for indicator in date_time_indicators:
         if indicator.upper() in check_str:
             # Если встречается 'M', нужно проверить контекст, чтобы отличить от минут
-            if indicator == 'M':
-                # Проверим, есть ли рядом H или S, что указывает на минуты
-                # Это упрощённая проверка
-                m_pos = check_str.find('MINUTE_OR_MONTH')
-                if m_pos != -1:
-                    # Проверим окрестности M на наличие H или S
-                    context = check_str[max(0, m_pos-5):m_pos+5]
-                    if 'H' in context or 'S' in context:
-                        # Возможно, это минуты, но если M встречается и как месяц, всё равно считаем датой
-                        # Лучше уж показать как дату, чем как число, если не уверен
-                        pass # Продолжаем проверку других индикаторов
+            # (логика упрощена в этом примере)
             return True
     return False
+
 
 def _apply_date_format(value: Any, number_format_code: str) -> Optional[str]:
     """
@@ -103,6 +118,7 @@ def _apply_date_format(value: Any, number_format_code: str) -> Optional[str]:
     logger.debug(f"Значение '{value}' типа {type(value)} не является датой, но формат '{number_format_code}' помечен как дата.")
     return str(value)
 
+
 def _contains_time_format(number_format_code: str) -> bool:
     """Проверяет, содержит ли формат время (H, M(минуты), S)."""
     # Заменяем MM на MONTH, чтобы не мешало минутам
@@ -123,6 +139,7 @@ def _contains_time_format(number_format_code: str) -> bool:
     if re.search(r'(?<!M)M(?!M)', temp_str): # M, не предшествуемая и не за которой следует M
         return True
     return False
+
 
 def _excel_date_format_to_python_strftime(excel_format: str) -> Optional[str]:
     """
@@ -202,6 +219,7 @@ def format_cell_value(value: Any, number_format_code: Optional[str]) -> str:
         return str(value) if value is not None else ""
 
     # Проверяем, является ли формат форматом даты/времени
+    # ИСПРАВЛЕНО: Используем исправленную функцию проверки
     if _is_date_format(number_format_code):
         formatted_date_str = _apply_date_format(value, number_format_code)
         if formatted_date_str is not None:
