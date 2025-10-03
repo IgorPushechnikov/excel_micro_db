@@ -46,7 +46,7 @@ class SheetDataModel(QAbstractTableModel):
     """
     Модель данных для отображения и редактирования содержимого листа в QTableView.
     Отображает данные как в Excel: первая строка данных - это данные,
-    заголовки столбцов - оригинальные имена из Excel (если доступны), иначе стандартные имена (A, B, C...).
+    заголовки столбцов - значения из первой строки данных (если они есть), иначе стандартные имена (A, B, C...).
     """
 
     # === НОВОЕ: Сигнал, испускаемый ДО изменения данных ===
@@ -61,8 +61,8 @@ class SheetDataModel(QAbstractTableModel):
     def __init__(self, editable_data: Dict[str, Any], parent=None):
         super().__init__(parent)
         self._editable_data = editable_data
-        # Сохраняем оригинальные имена столбцов (из первой строки Excel)
-        self._original_column_names = self._editable_data.get("column_names", [])
+        # Сохраняем оригинальные имена столбцов (из первой строки Excel) - УДАЛЕНО, так как не используется как заголовки
+        # self._original_column_names = self._editable_data.get("column_names", [])
         # Данные ячеек
         raw_rows = self._editable_data.get("rows", [])
         self._rows: List[List[Any]] = [list(row_tuple) for row_tuple in raw_rows]
@@ -217,8 +217,9 @@ class SheetDataModel(QAbstractTableModel):
             if 0 <= row < len(self._rows) and 0 <= col < len(self._rows[row]):
                 value = self._rows[row][col]
                 # Для ToolTip используем оригинальное значение, возможно, отформатированное проще
-                orig_name = self._original_column_names[col] if col < len(self._original_column_names) else f"Col_{col}"
-                return f"Столбец: {orig_name}\nЗначение: {repr(value)}"
+                # Используем индекс столбца как "имя" для ToolTip, если _original_column_names не используется как заголовки
+                col_name_for_tooltip = self._generated_column_headers[col] if col < len(self._generated_column_headers) else f"Col_{col}"
+                return f"Столбец: {col_name_for_tooltip}\nЗначение: {repr(value)}"
         # === НОВОЕ: Обработка ролей для стилей ===
         elif role == Qt.ItemDataRole.BackgroundRole:
             style = self._cell_styles.get((row, col))
@@ -286,13 +287,11 @@ class SheetDataModel(QAbstractTableModel):
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = ...) -> Any: # type: ignore
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                # Используем оригинальные имена, если они есть и валидны
-                if (self._original_column_names and
-                    0 <= section < len(self._original_column_names) and
-                    self._original_column_names[section] is not None and
-                    self._original_column_names[section] != ""):
-                    return str(self._original_column_names[section])
-                # Иначе — сгенерированные имена Excel
+                # Используем значения из ПЕРВОЙ СТРОКИ ДАННЫХ как заголовки
+                if self._rows and len(self._rows) > 0 and 0 <= section < len(self._rows[0]):
+                    # Возвращаем значение из первой строки (row 0) для столбца section
+                    return str(self._rows[0][section])
+                # Иначе — сгенерированные имена Excel (резервный вариант)
                 elif 0 <= section < len(self._generated_column_headers):
                     return self._generated_column_headers[section]
                 else:
