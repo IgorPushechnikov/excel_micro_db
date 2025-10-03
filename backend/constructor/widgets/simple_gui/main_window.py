@@ -98,7 +98,7 @@ class SimpleMainWindow(QMainWindow):
         self.action_close_file = QAction("&Закрыть файл", self)
         self.action_close_file.triggered.connect(self._on_close_file)
         self.action_close_file.setEnabled(False)
-        
+
         self.action_exit = QAction("&Выход", self)
         self.action_exit.setShortcut("Ctrl+Q")
         self.action_exit.triggered.connect(self.close)
@@ -106,7 +106,7 @@ class SimpleMainWindow(QMainWindow):
     def _create_menus(self):
         """Создание меню."""
         menubar = self.menuBar()
-        
+
         # Меню "Файл"
         file_menu = menubar.addMenu("&Файл")
         file_menu.addAction(self.action_import_excel)
@@ -135,6 +135,15 @@ class SimpleMainWindow(QMainWindow):
             if self.file_explorer:
                 self.file_explorer.clear_file()
     
+    def _load_first_sheet(self):
+        """Загружает первый лист проекта, если он существует."""
+        if self.sheet_names:
+            first_sheet_name = self.sheet_names[0]
+            logger.info(f"Автоматическая загрузка первого листа: {first_sheet_name}")
+            self._on_sheet_selected(first_sheet_name)
+        else:
+            logger.warning("Нет доступных листов для автоматической загрузки.")
+
     def _on_import_excel(self):
         """Обработчик импорта Excel-файла."""
         logger.info("Начало импорта Excel-файла")
@@ -193,11 +202,15 @@ class SimpleMainWindow(QMainWindow):
                 self.file_explorer.load_excel_file(file_path, self.sheet_names)
             self.action_export_excel.setEnabled(True)
             self.action_close_file.setEnabled(True)
-            self._show_welcome_screen()  # Остаемся на приветственном экране
             
+            # --- ИЗМЕНЕНИЕ ---
+            # Вместо _show_welcome_screen() вызываем загрузку первого листа
+            self._load_first_sheet()
+            # ---------------
+
             logger.info(f"Файл успешно проанализирован: {file_path}, БД: {self.project_db_path}")
             QMessageBox.information(self, "Успех", "Файл успешно проанализирован!")
-            
+
         except Exception as e:
             logger.error(f"Ошибка при импорте/анализе файла: {e}", exc_info=True)
             QMessageBox.critical(self, "Ошибка", f"Не удалось проанализировать файл:\n{e}")
@@ -285,13 +298,19 @@ class SimpleMainWindow(QMainWindow):
     def _on_sheet_selected(self, sheet_name: str):
         """Обработчик выбора листа."""
         logger.debug(f"Выбран лист: {sheet_name}")
+        print(f"[DEBUG MainWin] _on_sheet_selected вызван для листа '{sheet_name}'") # <-- Добавим print
         if not self.project_db_path:
             logger.warning("Нет активной БД")
+            print(f"[DEBUG MainWin] _on_sheet_selected: self.project_db_path = {self.project_db_path}") # <-- Добавим print
             return
-        
+
+        print(f"[DEBUG MainWin] _on_sheet_selected: self.sheet_editor = {self.sheet_editor is not None}, self.stacked_widget = {self.stacked_widget is not None}") # <-- Добавим print
         if self.sheet_editor and self.stacked_widget:
+            print(f"[DEBUG MainWin] _on_sheet_selected: Переключаюсь на sheet_editor и вызываю load_sheet для '{sheet_name}' с БД {self.project_db_path}") # <-- Добавим print
             self.stacked_widget.setCurrentWidget(self.sheet_editor)
             self.sheet_editor.load_sheet(self.project_db_path, sheet_name)
+        else:
+            logger.warning("sheet_editor или stacked_widget не инициализированы")
     
     def _on_export_excel(self):
         """Обработчик экспорта в Excel."""
@@ -315,7 +334,7 @@ class SimpleMainWindow(QMainWindow):
         
         if not output_path.lower().endswith('.xlsx'):
             output_path += '.xlsx'
-        
+
         try:
             logger.info(f"Экспорт в файл: {output_path}")
             success = export_project_xlsxwriter(self.project_db_path, output_path)

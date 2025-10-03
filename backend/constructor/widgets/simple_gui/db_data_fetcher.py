@@ -94,7 +94,8 @@ def fetch_sheet_data(sheet_name: str, db_path: str) -> Tuple[List[List[Any]], Di
         cursor = conn.cursor()
 
         # 1. Получаем ID листа
-        cursor.execute("SELECT sheet_id FROM sheets WHERE name = ?", (sheet_name,))
+        # Исправлено: SELECT id вместо SELECT sheet_id
+        cursor.execute("SELECT id FROM sheets WHERE name = ?", (sheet_name,))
         sheet_row = cursor.fetchone()
         if not sheet_row:
             logger.warning(f"fetch_sheet_data: Лист '{sheet_name}' не найден в БД {db_path}")

@@ -1,28 +1,27 @@
 # backend/constructor/widgets/simple_gui/simple_sheet_model.py
 """
 Модель данных для упрощённого табличного редактора.
-Загружает данные и стили из БД и предоставляет их QTableView.
+Загружает данные и стили из БД через db_data_fetcher и предоставляет их QTableView.
 """
-import sqlite3
 import json
-import re
-from typing import Dict, Any, List, Optional
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QBrush, QColor, QFont
-import logging
 
-from backend.utils.logger import get_logger
-
-logger = get_logger(__name__)
+from backend.constructor.widgets.simple_gui.db_data_fetcher import fetch_sheet_data
 
 
 class SimpleSheetModel(QAbstractTableModel):
     """Модель данных для отображения содержимого листа Excel."""
-    
+
     def __init__(self, db_path: str, sheet_name: str, parent=None):
         """
         Инициализирует модель с данными из БД.
-        
+
         Args:
             db_path (str): Путь к файлу БД.
             sheet_name (str): Имя листа для загрузки.
@@ -31,203 +30,201 @@ class SimpleSheetModel(QAbstractTableModel):
         super().__init__(parent)
         self.db_path = db_path
         self.sheet_name = sheet_name
-        
+
+        # Настройка логгера для записи в файл проекта
+        self.logger = self._setup_logger()
+
         # Данные таблицы
         self._data: List[List[Any]] = []
         # Стили ячеек: {(row, col): {"font_color": "#FF0000", "bg_color": "#FFFFFF", ...}}
-        self._cell_styles: Dict[tuple, Dict[str, Any]] = {}
-        
-        # Заголовки столбцов Excel (A, B, C...)
-        self._column_headers = []
-        
-        self._load_data_from_db()
-        self._generate_column_headers()
-    
-    def _load_data_from_db(self):
-        """Загружает данные и стили из БД."""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # 1. Получаем ID листа
-            cursor.execute("SELECT id FROM sheets WHERE name = ?", (self.sheet_name,))
-            sheet_row = cursor.fetchone()
-            if not sheet_row:
-                logger.warning(f"Лист '{self.sheet_name}' не найден в БД")
-                return
-            sheet_id = sheet_row[0]
-            
-            # 2. Загружаем "сырые" данные
-            cursor.execute(
-                "SELECT cell_address, value FROM raw_data WHERE sheet_name = ? ORDER BY cell_address",
-                (self.sheet_name,)
-            )
-            raw_data_rows = cursor.fetchall()
-            
-            # 3. Загружаем стили
-            cursor.execute(
-                "SELECT range_address, style_attributes FROM sheet_styles WHERE sheet_id = ?",
-                (sheet_id,)
-            )
-            style_rows = cursor.fetchall()
-            
-            conn.close()
-            
-            # Обработка данных
-            max_row = 0
-            max_col = 0
-            data_map = {}
-            
-            for addr, val in raw_data_rows:
-                row_idx, col_idx = self._parse_cell_address(addr)
-                if row_idx is not None and col_idx is not None:
-                    data_map[(row_idx, col_idx)] = val
-                    max_row = max(max_row, row_idx)
-                    max_col = max(max_col, col_idx)
-            
-            # Создание 2D списка
-            self._data = [[""] * (max_col + 1) for _ in range(max_row + 1)]
-            for (r, c), val in data_map.items():
-                if 0 <= r <= max_row and 0 <= c <= max_col:
-                    self._data[r][c] = val
-            
-            # Обработка стилей
-            for range_addr, style_attrs_json in style_rows:
-                style_attrs = json.loads(style_attrs_json)
-                self._apply_style_to_range(range_addr, style_attrs)
-            
-            logger.info(f"Загружено {len(self._data)} строк данных и {len(self._cell_styles)} стилей для листа '{self.sheet_name}'")
-            
-        except Exception as e:
-            logger.error(f"Ошибка загрузки данных из БД для листа '{self.sheet_name}': {e}", exc_info=True)
-    
-    def _parse_cell_address(self, addr: str) -> tuple:
-        """Парсит адрес ячейки (например, A1) в индексы (row, col)."""
-        try:
-            col_part = ''.join(filter(str.isalpha, addr)).upper()
-            row_part = ''.join(filter(str.isdigit, addr))
-            
-            if not row_part or not col_part:
-                return None, None
-            
-            row_idx = int(row_part) - 1  # 1-based to 0-based
-            col_idx = self._column_letter_to_index(col_part)
-            
-            return row_idx, col_idx
-        except:
-            return None, None
-    
-    def _column_letter_to_index(self, letter: str) -> int:
-        """Преобразует букву столбца Excel (например, 'A', 'Z', 'AA') в 0-базовый индекс."""
-        result = 0
-        for char in letter:
-            result = result * 26 + (ord(char) - ord('A') + 1)
-        return result - 1  # 0-based index
-    
-    def _apply_style_to_range(self, range_addr: str, style_attrs: Dict[str, Any]):
-        """Применяет стиль к диапазону ячеек."""
-        # Парсер адреса диапазона Excel (например, A1:B2)
-        range_pattern = re.compile(r'^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$')
-        match = range_pattern.match(range_addr)
-        if not match:
-            logger.warning(f"Не удалось распознать формат адреса '{range_addr}'. Пропущено.")
-            return
-        
-        start_col_letter, start_row_str, end_col_letter, end_row_str = match.groups()
-        if end_col_letter is None or end_row_str is None:
-            end_col_letter = start_col_letter
-            end_row_str = start_row_str
-        
-        try:
-            start_col_index = self._column_letter_to_index(start_col_letter)
-            start_row_index = int(start_row_str) - 1
-            end_col_index = self._column_letter_to_index(end_col_letter)
-            end_row_index = int(end_row_str) - 1
+        self._cell_styles: Dict[Tuple[int, int], Dict[str, Any]] = {}
 
-            for r in range(start_row_index, end_row_index + 1):
-                for c in range(start_col_index, end_col_index + 1):
-                    self._cell_styles[(r, c)] = style_attrs
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Ошибка преобразования индексов для '{range_addr}': {e}")
-    
+        # Заголовки столбцов Excel (A, B, C...)
+        self._column_headers: List[str] = []
+
+        # Максимальные индексы для rowCount/columnCount
+        self._max_row = -1
+        self._max_col = -1
+
+        self.logger.info(f"Инициализация SimpleSheetModel для листа '{self.sheet_name}' из БД: {self.db_path}")
+        self._load_data_from_fetcher()
+        self._generate_column_headers()
+        self.logger.info(f"SimpleSheetModel для листа '{self.sheet_name}' успешно инициализирована.")
+
+    def _setup_logger(self) -> logging.Logger:
+        """Настраивает логгер для записи в файл проекта."""
+        logger_name = f"SimpleSheetModel_{self.sheet_name}"
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+
+        # Очищаем существующие хендлеры, чтобы избежать дублирования
+        logger.handlers.clear()
+
+        # Определяем путь к папке проекта и папке логов
+        db_path_obj = Path(self.db_path)
+        project_dir = db_path_obj.parent
+        logs_dir = project_dir / "logs"
+        logs_dir.mkdir(exist_ok=True)  # Создаем папку logs, если она не существует
+
+        log_file_path = logs_dir / "simple_sheet_model.log"
+
+        # Создаем FileHandler
+        file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+
+        # Форматтер для логов
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        file_handler.setFormatter(formatter)
+
+        logger.addHandler(file_handler)
+        return logger
+
+    def _load_data_from_fetcher(self):
+        """Загружает данные и стили из БД через db_data_fetcher."""
+        try:
+            self.logger.debug("Вызов db_data_fetcher.fetch_sheet_data...")
+            rows_2d, styles_map = fetch_sheet_data(self.sheet_name, self.db_path)
+            self.logger.debug(f"Получено от fetch_sheet_data: {len(rows_2d)} строк, {len(styles_map)} стилей")
+
+            self._data = rows_2d
+            self._cell_styles = styles_map
+
+            # Вычисляем max_row и max_col
+            if self._data:
+                self._max_row = len(self._data) - 1
+                self._max_col = len(self._data[0]) - 1 if self._data[0] else -1
+            else:
+                self._max_row = -1
+                self._max_col = -1
+
+            self.logger.info(f"Данные загружены: max_row={self._max_row}, max_col={self._max_col}")
+
+        except Exception as e:
+            self.logger.error(f"Ошибка при загрузке данных через fetch_sheet_data: {e}", exc_info=True)
+            # Инициализируем пустую модель в случае ошибки
+            self._data = []
+            self._cell_styles = {}
+            self._max_row = -1
+            self._max_col = -1
+
     def _generate_column_headers(self):
         """Генерирует имена столбцов Excel (A, B, ..., Z, AA, AB...)."""
-        if not self._data:
-            self._column_headers = []
-            return
-        
-        num_cols = len(self._data[0]) if self._data else 0
         self._column_headers = []
-        for i in range(num_cols):
+        if self._max_col < 0:
+            return
+
+        for i in range(self._max_col + 1):
             name = ""
             temp = i
-            while temp >= 0:
+            while True:
                 name = chr(temp % 26 + ord('A')) + name
                 temp = temp // 26 - 1
                 if temp < 0:
                     break
-            self._column_headers.append(name if name else "A")
-    
+            self._column_headers.append(name)
+
+    def _column_index_to_letter(self, index: int) -> str:
+        """Преобразует 0-базовый индекс столбца в букву Excel (A, B, ..., AA, AB...)."""
+        if index < 0:
+            return ""
+        name = ""
+        temp = index
+        while True:
+            name = chr(temp % 26 + ord('A')) + name
+            temp = temp // 26 - 1
+            if temp < 0:
+                break
+        return name
+
     # Реализация QAbstractTableModel
-    def rowCount(self, parent=QModelIndex()):
-        return len(self._data)
-    
-    def columnCount(self, parent=QModelIndex()):
-        return len(self._data[0]) if self._data else 0
-    
-    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
+    def rowCount(self, parent=QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
+        return self._max_row + 1 if self._max_row >= 0 else 0
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        if parent.isValid():
+            return 0
+        return self._max_col + 1 if self._max_col >= 0 else 0
+
+    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
+            self.logger.debug("data: index is not valid")
             return None
-        
+
         row = index.row()
         col = index.column()
-        
-        if row >= len(self._data) or col >= len(self._data[0]):
+
+        if row > self._max_row or col > self._max_col or row < 0 or col < 0:
+            self.logger.debug(f"data: index out of bounds: row={row}, col={col}, max_row={self._max_row}, max_col={self._max_col}")
             return None
-        
-        if role == Qt.ItemDataRole.DisplayRole:
-            return self._data[row][col]
-        elif role == Qt.ItemDataRole.BackgroundRole:
-            style = self._cell_styles.get((row, col))
-            if style:
-                bg_color = style.get("fill_fg_color") or style.get("fill_bg_color")
-                if bg_color and isinstance(bg_color, str) and bg_color.startswith('#'):
-                    return QBrush(QColor(bg_color))
-        elif role == Qt.ItemDataRole.ForegroundRole:
-            style = self._cell_styles.get((row, col))
-            if style:
-                font_color = style.get("font_color")
-                if font_color and isinstance(font_color, str) and font_color.startswith('#'):
-                    return QBrush(QColor(font_color))
-        elif role == Qt.ItemDataRole.FontRole:
-            style = self._cell_styles.get((row, col))
-            if style:
-                font = QFont()
-                 # Жирность
-                font_b = style.get("font_b")
-                if font_b in (True, '1', 'true', 'True'):
-                    font.setBold(True)
-                # Курсив
-                font_i = style.get("font_i")
-                if font_i in (True, '1', 'true', 'True'):
-                    font.setItalic(True)
-                # Подчеркивание
-                font_u = style.get("font_u")
-                if font_u and font_u != "none":
-                    font.setUnderline(True)
-                # Зачеркивание
-                font_strike = style.get("font_strike")
-                if font_strike in (True, '1', 'true', 'True'):
-                    font.setStrikeOut(True)
-                return font
-        
+
+        try:
+            if role == Qt.ItemDataRole.DisplayRole:
+                value = self._data[row][col]
+                self.logger.debug(f"data: DisplayRole for [{row}, {col}] = '{value}'")
+                return value
+            elif role == Qt.ItemDataRole.BackgroundRole:
+                style = self._cell_styles.get((row, col))
+                if style:
+                    bg_color = style.get("fill_fg_color") or style.get("fill_bg_color")
+                    if bg_color and isinstance(bg_color, str) and bg_color.startswith('#'):
+                        self.logger.debug(f"data: BackgroundRole for [{row}, {col}] = '{bg_color}'")
+                        return QBrush(QColor(bg_color))
+            elif role == Qt.ItemDataRole.ForegroundRole:
+                style = self._cell_styles.get((row, col))
+                if style:
+                    font_color = style.get("font_color")
+                    if font_color and isinstance(font_color, str) and font_color.startswith('#'):
+                        self.logger.debug(f"data: ForegroundRole for [{row}, {col}] = '{font_color}'")
+                        return QBrush(QColor(font_color))
+            elif role == Qt.ItemDataRole.FontRole:
+                style = self._cell_styles.get((row, col))
+                if style:
+                    font = QFont()
+                    # Жирность
+                    font_b = style.get("font_b")
+                    if font_b in (True, '1', 'true', 'True'):
+                        font.setBold(True)
+                    # Курсив
+                    font_i = style.get("font_i")
+                    if font_i in (True, '1', 'true', 'True'):
+                        font.setItalic(True)
+                    # Подчеркивание
+                    font_u = style.get("font_u")
+                    if font_u and font_u != "none":
+                        font.setUnderline(True)
+                    # Зачеркивание
+                    font_strike = style.get("font_strike")
+                    if font_strike in (True, '1', 'true', 'True'):
+                        font.setStrikeOut(True)
+                    self.logger.debug(f"data: FontRole for [{row}, {col}] applied")
+                    return font
+        except Exception as e:
+            self.logger.error(f"data: Ошибка при обработке роли {role} для [{row}, {col}]: {e}", exc_info=True)
+
         return None
-    
-    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole):
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole) -> Any:
         if role == Qt.ItemDataRole.DisplayRole:
-            if orientation == Qt.Orientation.Horizontal:
-                if 0 <= section < len(self._column_headers):
-                    return self._column_headers[section]
-            elif orientation == Qt.Orientation.Vertical:
-                return str(section + 1)  # Номера строк 1-based
+            try:
+                if orientation == Qt.Orientation.Horizontal:
+                    if 0 <= section <= self._max_col:
+                        header = self._column_headers[section]
+                        self.logger.debug(f"headerData: Horizontal header for section {section} = '{header}'")
+                        return header
+                elif orientation == Qt.Orientation.Vertical:
+                    header = str(section + 1)  # Номера строк 1-based
+                    self.logger.debug(f"headerData: Vertical header for section {section} = '{header}'")
+                    return header
+            except Exception as e:
+                self.logger.error(f"headerData: Ошибка при получении заголовка для section {section}, orientation {orientation}: {e}", exc_info=True)
         return None
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+        """Возвращает флаги для ячейки. Ячейки только для чтения."""
+        if not index.isValid():
+            return Qt.ItemFlag.NoItemFlags
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
