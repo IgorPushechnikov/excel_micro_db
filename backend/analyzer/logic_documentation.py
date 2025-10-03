@@ -12,7 +12,8 @@ import json
 import re
 
 # Импортируем logger из utils
-from utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from src.utils.logger
+# ИСПРАВЛЕНО: Импорт теперь из backend.utils
+from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
 
 logger = get_logger(__name__)
 
