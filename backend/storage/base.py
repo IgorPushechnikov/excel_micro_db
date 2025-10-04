@@ -100,7 +100,7 @@ class ProjectDBStorage:
             
             # Теперь инициализируем схему
             # ИСПРАВЛЕНО: Вызов schema.initialize_project_schema теперь с префиксом backend.storage
-            schema.initialize_project_schema(self.connection) # <-- ИСПРАВЛЕНО: внутренний вызов, но файл schema.py уже исправлен
+            schema.initialize_project_schema(self.connection) # <-- ИСПРАВЛЕНО
             logger.info("Схема таблиц проекта инициализирована.")
             
             # Отключаемся после инициализации
@@ -164,6 +164,31 @@ class ProjectDBStorage:
         except Exception as e:
             logger.error(f"Ошибка при загрузке списка листов для проекта ID {project_id}: {e}", exc_info=True)
             return []
+
+    # --- НОВОЕ: Метод для переименования листа ---
+    def rename_sheet(self, project_id: int, old_name: str, new_name: str) -> bool:
+        """
+        Переименовывает лист в таблице 'sheets'.
+
+        Args:
+            project_id (int): ID проекта.
+            old_name (str): Текущее имя листа.
+            new_name (str): Новое имя листа.
+
+        Returns:
+            bool: True, если переименование успешно, иначе False.
+        """
+        try:
+            with self.get_connection() as conn:
+                if conn:
+                    # Вызов sheets.rename_sheet
+                    return sheets.rename_sheet(conn, project_id, old_name, new_name)
+                else:
+                    return False
+        except Exception as e:
+            logger.error(f"Ошибка при переименовании листа '{old_name}' в '{new_name}': {e}", exc_info=True)
+            return False
+    # --- КОНЕЦ НОВОГО ---
 
     # --- Методы для работы с дополнительными метаданными листов (таблица project_metadata) ---
 
