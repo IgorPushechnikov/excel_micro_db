@@ -30,6 +30,10 @@ FILE_LOG_LEVEL = logging.DEBUG
 # Уровень логирования для консольного хендлера
 CONSOLE_LOG_LEVEL = logging.INFO
 
+# --- НОВОЕ: Глобальная переменная для состояния логирования ---
+_LOGGING_ENABLED = True # По умолчанию включено
+# --- КОНЕЦ НОВОГО ---
+
 # --- Глобальные переменные для логгера ---
 # _logger_instance будет хранить экземпляр корневого логгера приложения
 _logger_instance: Optional[logging.Logger] = None
@@ -54,7 +58,7 @@ def setup_logger(log_file_path: Optional[str] = None, force_recreate: bool = Fal
     Returns:
         logging.Logger: Настроенный экземпляр корневого логгера приложения.
     """
-    global _logger_instance, _log_file_path
+    global _logger_instance, _log_file_path, _LOGGING_ENABLED # Добавляем _LOGGING_ENABLED в глобальные
 
     # Проверяем, существует ли уже настроенный логгер
     if _logger_instance is not None and not force_recreate:
@@ -69,7 +73,8 @@ def setup_logger(log_file_path: Optional[str] = None, force_recreate: bool = Fal
     logger = logging.getLogger("excel_micro_db")
 
     # Устанавливаем базовый уровень логирования для логгера
-    logger.setLevel(BASE_LOG_LEVEL)
+    # Используем глобальную переменную _LOGGING_ENABLED для определения уровня
+    logger.setLevel(BASE_LOG_LEVEL if _LOGGING_ENABLED else logging.CRITICAL + 1)
 
     # --- Очистка существующих хендлеров (если force_recreate=True или при повторной настройке) ---
     # Это важно, чтобы избежать дублирования сообщений в логе при повторных вызовах setup_logger
@@ -80,7 +85,7 @@ def setup_logger(log_file_path: Optional[str] = None, force_recreate: bool = Fal
     formatter = logging.Formatter(LOG_FORMAT)
 
     # --- Настройка файлового хендлера ---
-    if log_file_path:
+    if log_file_path and _LOGGING_ENABLED: # Добавляем проверку _LOGGING_ENABLED
         try:
             # Создаем директорию для файла лога, если её нет
             log_file_dir = Path(log_file_path).parent
@@ -90,7 +95,7 @@ def setup_logger(log_file_path: Optional[str] = None, force_recreate: bool = Fal
             # mode='a' означает "append" - добавлять к существующему файлу
             # encoding='utf-8' гарантирует корректную запись кириллицы и других символов
             file_handler = logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
-            file_handler.setLevel(FILE_LOG_LEVEL)
+            file_handler.setLevel(FILE_LOG_LEVEL if _LOGGING_ENABLED else logging.CRITICAL + 1) # Устанавливаем уровень в зависимости от состояния
             file_handler.setFormatter(formatter)
 
             # Добавляем FileHandler к логгеру
@@ -108,23 +113,26 @@ def setup_logger(log_file_path: Optional[str] = None, force_recreate: bool = Fal
             # Не прерываем настройку из-за ошибки файла лога
 
     # --- Настройка консольного хендлера ---
-    console_handler = logging.StreamHandler(sys.stdout) # Используем stdout для INFO и ниже, stderr для WARNING и выше?
-    console_handler.setLevel(CONSOLE_LOG_LEVEL)
-    console_handler.setFormatter(formatter)
+    if _LOGGING_ENABLED: # Добавляем проверку _LOGGING_ENABLED
+        console_handler = logging.StreamHandler(sys.stdout) # Используем stdout для INFO и ниже, stderr для WARNING и выше?
+        console_handler.setLevel(CONSOLE_LOG_LEVEL if _LOGGING_ENABLED else logging.CRITICAL + 1) # Устанавливаем уровень в зависимости от состояния
+        console_handler.setFormatter(formatter)
 
-    # Добавляем ConsoleHandler к логгеру
-    logger.addHandler(console_handler)
+        # Добавляем ConsoleHandler к логгеру
+        logger.addHandler(console_handler)
 
-    logger.debug("ConsoleHandler добавлен.")
+        logger.debug("ConsoleHandler добавлен.")
 
     # --- Сохранение экземпляра логгера ---
     _logger_instance = logger
 
     logger.info("Корневой логгер приложения 'excel_micro_db' успешно настроен.")
-    if _log_file_path:
+    if _log_file_path and _LOGGING_ENABLED:
         logger.info(f"Логирование в файл включено: {_log_file_path}")
-    else:
+    elif _LOGGING_ENABLED:
         logger.info("Логирование в файл отключено.")
+    else:
+        logger.info("Все логирование отключено.") # Сообщение, если логирование выключено
 
     return logger
 
@@ -159,6 +167,38 @@ def get_log_file_path() -> Optional[str]:
     """
     return _log_file_path
 
+# --- НОВОЕ: Функции для включения/отключения логирования ---
+def set_logging_enabled(enabled: bool):
+    """
+    Включает или отключает логирование для всего приложения.
+
+    Args:
+        enabled (bool): True для включения, False для отключения.
+    """
+    global _LOGGING_ENABLED
+    _LOGGING_ENABLED = enabled
+    logger_instance = logging.getLogger("excel_micro_db")
+    if logger_instance and logger_instance.hasHandlers():
+        # Устанавливаем уровень для всех хендлеров
+        level_to_set = BASE_LOG_LEVEL if enabled else logging.CRITICAL + 1
+        for handler in logger_instance.handlers:
+            handler.setLevel(level_to_set)
+        # Также устанавливаем уровень для самого логгера
+        logger_instance.setLevel(level_to_set)
+    # Если логгер еще не настроен, изменения вступят в силу при вызове setup_logger
+    # Проверим, что _logger_instance существует, прежде чем логировать
+    if _logger_instance:
+        _logger_instance.info(f"Логирование {'включено' if enabled else 'отключено'}.")
+
+def is_logging_enabled() -> bool:
+    """
+    Проверяет, включено ли логирование.
+
+    Returns:
+        bool: True, если логирование включено, иначе False.
+    """
+    return _LOGGING_ENABLED
+# --- КОНЕЦ НОВОГО ---
 
 # --- Автоматическая настройка логгера при импорте модуля (опционально) ---
 # Это может быть полезно для скриптов, которые не вызывают setup_logger напрямую.
