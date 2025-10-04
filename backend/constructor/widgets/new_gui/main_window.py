@@ -31,7 +31,7 @@ class AnalysisWorker(QThread):
     def __init__(self, excel_file_path, options=None):
         super().__init__()
         self.excel_file_path = excel_file_path
-        self.options = options or {}
+        self.options = options or {} # options пока не используются в анализе, но могут пригодиться
 
     def run(self):
         """
@@ -43,9 +43,10 @@ class AnalysisWorker(QThread):
             from backend.analyzer.logic_documentation import analyze_excel_file
 
             # Вызываем анализатор напрямую
-            # Здесь можно передать self.options, если analyze_excel_file их поддерживает
-            # для выборочной загрузки. Пока передаём пустой словарь или те опции, что есть.
-            analysis_results = analyze_excel_file(self.excel_file_path, self.options)
+            # NOTE: analyze_excel_file принимает только file_path, опции обрабатываются внутри или не поддерживаются напрямую.
+            # Для выборочной загрузки нужно будет модифицировать сам analyze_excel_file или AppController.
+            # Пока передаём только путь.
+            analysis_results = analyze_excel_file(self.excel_file_path) # <-- Убран self.options
             logger.info(f"Анализ файла {self.excel_file_path} завершён в потоке {id(QThread.currentThread())}.")
 
             # Отправляем результат анализа и флаг успеха
@@ -245,7 +246,7 @@ class MainWindow(QMainWindow):
             self.import_options = {'import_type': import_type}
             self.analysis_worker = AnalysisWorker(
                 str(excel_file_path), # Передаём путь к файлу
-                options={'import_type': import_type} # Передаём тип импорта как опцию
+                options={'import_type': import_type} # Передаём тип импорта как опцию (пока не используется в анализе)
             )
             # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             self.analysis_worker.finished.connect(self._on_analysis_finished)
