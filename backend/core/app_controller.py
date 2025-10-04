@@ -480,6 +480,257 @@ class AppController:
         return is_logging_enabled()
     # --- КОНЕЦ НОВОГО ---
 
+    # --- НОВОЕ: Методы для импорта по типам и режимам ---
+
+    def import_raw_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только "сырые" данные (значения ячеек) из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_raw_data_from_excel as import_func
+        return import_func(self, file_path, options)
+
+    def import_styles_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только стили из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_styles_from_excel as import_func
+        return import_func(self, file_path, options)
+
+    def import_charts_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только диаграммы из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_charts_from_excel as import_func
+        return import_func(self, file_path, options)
+
+    def import_formulas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только формулы из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_formulas_from_excel as import_func
+        return import_func(self, file_path, options)
+
+    def import_raw_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только "сырые" данные выборочно из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_raw_data_from_excel_selective as import_func
+        return import_func(self, file_path, options)
+
+    def import_styles_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только стили выборочно из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_styles_from_excel_selective as import_func
+        return import_func(self, file_path, options)
+
+    def import_charts_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только диаграммы выборочно из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_charts_from_excel_selective as import_func
+        return import_func(self, file_path, options)
+
+    def import_formulas_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Импортирует только формулы выборочно из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_formulas_from_excel_selective as import_func
+        return import_func(self, file_path, options)
+
+    def import_raw_data_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+        """
+        Импортирует только "сырые" данные частями из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            chunk_options (Dict[str, Any]): Опции для разбиения на части.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_raw_data_from_excel_in_chunks as import_func
+        return import_func(self, file_path, chunk_options)
+
+    def import_styles_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+        """
+        Импортирует только стили частями из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            chunk_options (Dict[str, Any]): Опции для разбиения на части.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_styles_from_excel_in_chunks as import_func
+        return import_func(self, file_path, chunk_options)
+
+    def import_charts_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+        """
+        Импортирует только диаграммы частями из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            chunk_options (Dict[str, Any]): Опции для разбиения на части.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_charts_from_excel_in_chunks as import_func
+        return import_func(self, file_path, chunk_options)
+
+    def import_formulas_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+        """
+        Импортирует только формулы частями из Excel-файла.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            chunk_options (Dict[str, Any]): Опции для разбиения на части.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_formulas_from_excel_in_chunks as import_func
+        return import_func(self, file_path, chunk_options)
+
+    def import_raw_data_fast_with_pandas(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Импортируем функцию из нового модуля
+        from .app_controller_data_import import import_raw_data_fast_with_pandas as import_func
+        return import_func(self, file_path, options)
+
+    # --- КОНЕЦ НОВОГО ---
+
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
