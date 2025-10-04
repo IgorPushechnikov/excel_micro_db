@@ -3,7 +3,6 @@
 """
 CLI точка входа в Excel Micro DB.
 Поддерживает различные режимы работы через аргументы командной строки.
-Теперь также может запускать HTTP-сервер.
 """
 
 import argparse
@@ -11,8 +10,6 @@ import sys
 import os
 import logging
 from pathlib import Path
-import threading
-import time
 
 # Добавляем директорию backend в путь поиска модулей
 from backend.utils.logger import get_logger
@@ -22,42 +19,6 @@ from backend.core.app_controller import create_app_controller
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
-
-def start_http_server(host: str = "127.0.0.1", port: int = 8000):
-    """
-    Запускает HTTP-сервер (FastAPI).
-    """
-    logger.info(f"Запуск HTTP-сервера на {host}:{port}...")
-    print(f"Попытка запуска FastAPI-сервера на {host}:{port}...")
-    try:
-        # Импортируем функцию запуска сервера из модуля api
-        from backend.api.fastapi_server import run_server
-        
-        # Обработчик сигналов для корректного завершения
-        def signal_handler(sig, frame):
-            logger.info("Получен сигнал завершения. Остановка сервера...")
-            print("\nПолучен сигнал завершения (Ctrl+C). Остановка сервера...")
-            sys.exit(0)
-        
-        import signal
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        # Запускаем сервер (uvicorn.run блокирует выполнение)
-        run_server(host, port)
-        logger.info("FastAPI-сервер завершил работу.")
-        print("FastAPI-сервер завершил работу.")
-    except ImportError as e:
-        logger.error(f"Не удалось импортировать api.fastapi_server: {e}")
-        print(f"Ошибка: Не удалось импортировать api.fastapi_server: {e}")
-        # Завершаем работу CLI с ошибкой
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Критическая ошибка при запуске HTTP-сервера: {e}")
-        print(f"Ошибка: Критическая ошибка при запуске HTTP-сервера: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
 
 def initialize_project(project_path: str) -> None:
     """Инициализация нового проекта."""
@@ -243,12 +204,10 @@ def main() -> int:
   python main.py --export excel --output ./output/result.xlsx --project-path ./my_project
   python main.py --process --config config/batch.yaml
   python main.py --interactive
-  python main.py --gui
         """
     )
 
     # Группы взаимоисключающих аргументов (режимы работы)
-    # Обновляем группу, чтобы включить --export и --http-server
     mode_group = parser.add_mutually_exclusive_group(required=True)
 
     mode_group.add_argument(
@@ -283,19 +242,6 @@ def main() -> int:
         help='Запуск интерактивного режима (REPL)'
     )
 
-    mode_group.add_argument(
-        '--gui',
-        action='store_true',
-        help='Запуск графического интерфейса пользователя (GUI)'
-    )
-
-    # ДОБАВЛЕН: Новый режим HTTP-сервера
-    mode_group.add_argument(
-        '--http-server',
-        action='store_true',
-        help='Запуск HTTP-сервера для взаимодействия с GUI (FastAPI)'
-    )
-
     # Дополнительные аргументы
     parser.add_argument(
         '--project-path',
@@ -316,61 +262,12 @@ def main() -> int:
         help='Путь к выходному файлу (для --export)'
     )
 
-    # Аргументы для HTTP-сервера
-    parser.add_argument(
-        '--host',
-        metavar='HOST',
-        default='127.0.0.1',
-        help='Хост для HTTP-сервера (по умолчанию: 127.0.0.1, для --http-server)'
-    )
-
-    parser.add_argument(
-        '--port',
-        metavar='PORT',
-        type=int,
-        default=8000,
-        help='Порт для HTTP-сервера (по умолчанию: 8000, для --http-server)'
-    )
-
     # Парсим аргументы
     args = parser.parse_args()
 
     try:
         # Обработка выбранных режимов
-        if args.http_server:
-            # --- НОВОЕ: Запуск HTTP-сервера ---
-            logger.info(f"Запуск HTTP-сервера на {args.host}:{args.port}...")
-            # FastAPI (uvicorn) сам блокирует основной поток, поэтому нам не нужен daemon=True и join()
-            # Запускаем сервер напрямую, он будет работать до получения сигнала (Ctrl+C)
-            start_http_server(args.host, args.port)
-            # После завершения start_http_server (например, по Ctrl+C), возвращаем 0
-            logger.info("HTTP-сервер завершил работу по запросу.")
-            return 0 # Возвращаем 0 при корректной остановке сервера
-            # --- КОНЕЦ НОВОГО ---
-
-        elif args.gui:
-            # --- НОВОЕ: Запуск GUI ---
-            logger.info("Запуск графического интерфейса...")
-            # Импортируем и запускаем GUI
-            try:
-                from backend.constructor.gui_app import main as gui_main
-                logger.debug("Модуль GUI успешно импортирован.")
-                # Передаём управление в GUI
-                # gui_main() не принимает аргументы, как и CLI main()
-                # Если нужно передать project_path из CLI, это нужно предусмотреть в gui_main
-                # Пока просто запускаем
-                return gui_main() # Возвращаем код завершения из GUI
-            except ImportError as ie:
-                logger.critical(f"Не удалось импортировать GUI: {ie}")
-                print("Ошибка: Не удалось загрузить графический интерфейс. Убедитесь, что PySide6 установлен.")
-                return 1
-            except Exception as e_gui:
-                logger.critical(f"Критическая ошибка при запуске GUI: {e_gui}", exc_info=True)
-                print(f"Ошибка: Критическая ошибка при запуске GUI: {e_gui}")
-                return 1
-            # --- КОНЕЦ НОВОГО ---
-
-        elif args.init:
+        if args.init:
             if not args.project_path:
                 parser.error("--init требует указания --project-path")
             initialize_project(args.project_path)
