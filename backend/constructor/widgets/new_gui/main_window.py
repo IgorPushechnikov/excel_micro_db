@@ -7,14 +7,15 @@
 import logging
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QMainWindow, QMenuBar, QStatusBar, QToolBar, QComboBox, QFileDialog,
-    QMessageBox, QProgressDialog, QWidget, QStackedWidget
+    QMainWindow, QMenuBar, QStatusBar, QToolBar, QComboBox, QFileDialog, # <-- Добавлен QComboBox
+    QMessageBox, QProgressDialog, QWidget, QStackedWidget, QHBoxLayout, QSplitter
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QAction, QIcon
 
 from backend.core.app_controller import create_app_controller
 from .sheet_editor_widget import SheetEditorWidget
+from .sheet_explorer_widget import SheetExplorerWidget # <-- Новый импорт
 from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -111,13 +112,14 @@ class MainWindow(QMainWindow):
         tool_bar = QToolBar("Основная", self)
         self.addToolBar(tool_bar)
 
-        # Комбобокс для выбора листа
-        self.sheet_combo_box = QComboBox(self)
-        self.sheet_combo_box.addItem("Выберите лист...")
-        tool_bar.addWidget(self.sheet_combo_box)
+        # --- УДАЛЕНО: Комбобокс для выбора листа ---
+        # self.sheet_combo_box = QComboBox(self)
+        # self.sheet_combo_box.addItem("Выберите лист...")
+        # tool_bar.addWidget(self.sheet_combo_box)
+        # --- КОНЕЦ УДАЛЕНИЯ ---
 
         # Выпадающий список для импорта
-        self.import_combo_box = QComboBox(self)
+        self.import_combo_box = QComboBox(self) # <-- QComboBox используется для выбора типа импорта
         self.import_combo_box.addItems(["Все данные", "Последовательный", "Выборочный"])
         # Добавляем его как кнопку с выпадающим списком
         import_button = tool_bar.addWidget(self.import_combo_box)
@@ -128,12 +130,28 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Готов.")
 
-        # Центральный виджет (для SheetEditorWidget)
+        # --- НОВОЕ: Центральный виджет с разделителем (Splitter) ---
+        central_widget = QWidget(self)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Создаем обозреватель листов
+        self.sheet_explorer = SheetExplorerWidget(self.app_controller, self)
+
+        # Создаем стек для редакторов листов
         self.stacked_widget = QStackedWidget(self)
         placeholder_widget = QWidget(self)
-        # Можно добавить QLabel с приветствием или инструкцией
         self.stacked_widget.addWidget(placeholder_widget)
-        self.setCentralWidget(self.stacked_widget)
+
+        # Создаем разделитель
+        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        splitter.addWidget(self.sheet_explorer)
+        splitter.addWidget(self.stacked_widget)
+        splitter.setSizes([200, 1000]) # Примерное соотношение ширины
+
+        main_layout.addWidget(splitter)
+        self.setCentralWidget(central_widget)
+        # --- КОНЕЦ НОВОГО ---
 
     def _setup_connections(self):
         """
@@ -144,7 +162,14 @@ class MainWindow(QMainWindow):
         self.save_project_action.triggered.connect(self._on_save_project_triggered)
         self.import_action.triggered.connect(self._on_import_triggered)
         self.export_action.triggered.connect(self._on_export_triggered)
-        self.sheet_combo_box.currentTextChanged.connect(self._on_sheet_changed)
+        # --- УДАЛЕНО: Подключение комбобокса ---
+        # self.sheet_combo_box.currentTextChanged.connect(self._on_sheet_changed)
+        # --- КОНЕЦ УДАЛЕНИЯ ---
+
+        # --- НОВОЕ: Подключение сигналов обозревателя ---
+        self.sheet_explorer.sheet_selected.connect(self._on_sheet_selected)
+        self.sheet_explorer.sheet_renamed.connect(self._on_sheet_renamed)
+        # --- КОНЕЦ НОВОГО ---
 
     def _on_new_project_triggered(self):
         """
@@ -353,31 +378,18 @@ class MainWindow(QMainWindow):
 
     def _update_sheet_list(self):
         """
-        Обновляет список листов в комбобоксе.
+        Обновляет список листов в обозревателе.
         """
-        if not self.app_controller.is_project_loaded:
-            self.sheet_combo_box.clear()
-            self.sheet_combo_box.addItem("Нет проекта")
-            return
+        # --- НОВОЕ: Обновление через SheetExplorerWidget ---
+        self.sheet_explorer.update_sheet_list()
+        # --- КОНЕЦ НОВОГО ---
 
-        try:
-            sheet_names = self.app_controller.get_sheet_names()
-            logger.debug(f"Получены имена листов: {sheet_names}")
-            self.sheet_combo_box.clear()
-            if sheet_names:
-                self.sheet_combo_box.addItems(sheet_names)
-            else:
-                self.sheet_combo_box.addItem("Нет листов")
-        except Exception as e:
-            logger.error(f"Ошибка при получении списка листов: {e}", exc_info=True)
-            self.sheet_combo_box.clear()
-            self.sheet_combo_box.addItem("Ошибка загрузки")
-
-    def _on_sheet_changed(self, sheet_name: str):
+    # --- НОВЫЕ МЕТОДЫ ДЛЯ ОБРАБОТКИ СИГНАЛОВ ОТ SHEET_EXPLORER ---
+    def _on_sheet_selected(self, sheet_name: str):
         """
-        Обработчик смены активного листа.
+        Обработчик выбора листа в обозревателе.
         """
-        if not sheet_name or sheet_name in ["Выберите лист...", "Нет проекта", "Нет листов", "Ошибка загрузки"]:
+        if not sheet_name:
             return
 
         logger.info(f"Смена активного листа на: {sheet_name}")
@@ -395,3 +407,15 @@ class MainWindow(QMainWindow):
         self.stacked_widget.setCurrentWidget(self.sheet_editor_widget)
 
         self.status_bar.showMessage(f"Активный лист: {sheet_name}")
+
+    def _on_sheet_renamed(self, old_name: str, new_name: str):
+        """
+        Обработчик успешного переименования листа.
+        Может использоваться для обновления UI или логирования.
+        Пока просто обновим статусную строку.
+        """
+        self.status_bar.showMessage(f"Лист переименован: '{old_name}' -> '{new_name}'")
+        # Если активный лист был переименован, обновим current_sheet_name
+        if self.current_sheet_name == old_name:
+            self.current_sheet_name = new_name
+    # --- КОНЕЦ НОВЫХ МЕТОДОВ ---
