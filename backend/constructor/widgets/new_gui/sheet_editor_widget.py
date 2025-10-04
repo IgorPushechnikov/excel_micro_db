@@ -5,9 +5,9 @@
 """
 
 import logging
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLineEdit, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLineEdit, QHBoxLayout, QPushButton, QApplication # <-- Добавлен QApplication
 from PySide6.QtCore import Qt, QModelIndex
-from PySide6.QtGui import QKeySequence, QShortcut, QClipboard, QApplication
+from PySide6.QtGui import QKeySequence, QShortcut, QClipboard
 
 from .qt_model_adapter import DBTableModel
 from backend.utils.logger import get_logger
@@ -87,7 +87,7 @@ class SheetEditorWidget(QWidget):
         Извлекает данные из буфера обмена и вставляет их в модель,
         начиная с текущего индекса.
         """
-        clipboard = QApplication.clipboard()
+        clipboard = QApplication.clipboard() # <-- Теперь QApplication доступен
         clipboard_text = clipboard.text()
         if not clipboard_text:
             logger.debug("Буфер обмена пуст.")
@@ -133,7 +133,7 @@ class SheetEditorWidget(QWidget):
     def _on_cell_clicked(self, index: QModelIndex):
         """
         Обработчик клика по ячейке в QTableView.
-        Обновляет строку формuls значением из ячейки.
+        Обновляет строку формул значением из ячейки.
         """
         if index.isValid():
             self._current_index = index
