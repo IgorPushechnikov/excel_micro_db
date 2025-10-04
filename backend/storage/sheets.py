@@ -1,4 +1,4 @@
-# src/storage/sheets.py
+# backend/storage/sheets.py
 
 import sqlite3
 import logging
@@ -147,10 +147,10 @@ def load_sheet_by_name(connection: sqlite3.Connection, project_id: int, sheet_na
         logger.error(f"Неожиданная ошибка при загрузке листа '{sheet_name}' из проекта ID {project_id}: {e}", exc_info=True)
         return None
 
-# --- НОВОЕ: Функция для переименования листа ---
+# --- ОБНОВЛЕНО: Функция для переименования листа ---
 def rename_sheet(connection: sqlite3.Connection, project_id: int, old_name: str, new_name: str) -> bool:
     """
-    Переименовывает лист в таблице 'sheets'.
+    Переименовывает лист в таблице 'sheets' и обновляет связанные таблицы.
 
     Args:
         connection (sqlite3.Connection): Активное соединение с БД проекта.
@@ -185,12 +185,29 @@ def rename_sheet(connection: sqlite3.Connection, project_id: int, old_name: str,
 
     try:
         cursor = connection.cursor()
+        # 1. Обновляем имя в основной таблице 'sheets'
         cursor.execute(
             "UPDATE sheets SET name = ? WHERE project_id = ? AND name = ?",
             (new_name, project_id, old_name)
         )
-        connection.commit()
-        if cursor.rowcount > 0:
+        rows_affected = cursor.rowcount
+
+        if rows_affected > 0:
+            # 2. Обновляем sheet_name в таблице 'sheet_styles'
+            cursor.execute(
+                "UPDATE sheet_styles SET sheet_name = ? WHERE sheet_name = ?",
+                (new_name, old_name)
+            )
+            logger.debug(f"Обновлены стили для листа '{old_name}' -> '{new_name}'.")
+
+            # 3. Обновляем name в таблице 'project_metadata'
+            cursor.execute(
+                "UPDATE project_metadata SET name = ? WHERE name = ?",
+                (new_name, old_name)
+            )
+            logger.debug(f"Обновлены метаданные в project_metadata для листа '{old_name}' -> '{new_name}'.")
+
+            connection.commit()
             logger.info(f"Лист '{old_name}' успешно переименован в '{new_name}' в проекте ID {project_id}.")
             return True
         else:
@@ -202,4 +219,4 @@ def rename_sheet(connection: sqlite3.Connection, project_id: int, old_name: str,
     except Exception as e:
         logger.error(f"Неожиданная ошибка при переименовании листа '{old_name}' в '{new_name}' для проекта ID {project_id}: {e}", exc_info=True)
         return False
-# --- КОНЕЦ НОВОГО ---
+# --- КОНЕЦ ОБНОВЛЕНИЯ ---
