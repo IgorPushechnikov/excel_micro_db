@@ -13,7 +13,9 @@ from PySide6.QtWidgets import QApplication
 from backend.constructor.widgets.new_gui.main_window import MainWindow
 
 # Импортируем логгер
-from backend.utils.logger import setup_logging, get_logger
+# from backend.utils.logger import setup_logging, get_logger # <-- Убран setup_logging из импорта
+from backend.utils.logger import get_logger # <-- Только get_logger
+
 
 def main():
     """
