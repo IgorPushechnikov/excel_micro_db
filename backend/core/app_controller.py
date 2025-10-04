@@ -55,6 +55,9 @@ class AppController:
         # --- НОВОЕ: Атрибут для обработчика логов проекта ---
         self._project_log_handler: Optional[logging.FileHandler] = None
         # ================================================
+        # --- НОВОЕ: Атрибут для хранения пути к последнему импортированному файлу ---
+        self.last_imported_file_path: Optional[str] = None
+        # ================================================
 
         # --- Инициализация менеджеров ---
         # Импортируем DataManager локально, чтобы избежать циклического импорта
@@ -135,6 +138,9 @@ class AppController:
         self.project_db_path = ""
         # ----------------------------------------------------------------------
         self._current_project_data = None
+        # --- ОБНУЛЕНИЕ last_imported_file_path при закрытии проекта ---
+        self.last_imported_file_path = None
+        # -------------------------------------------------------------
 
     def shutdown(self):
         """Полное завершение работы контроллера."""
@@ -227,6 +233,17 @@ class AppController:
         return success
     # --- КОНЕЦ НОВОГО ---
 
+    # --- НОВОЕ: Метод для обновления last_imported_file_path ---
+    def _update_last_imported_file_path(self, file_path: str):
+        """
+        Обновляет атрибут last_imported_file_path.
+
+        Args:
+            file_path (str): Путь к импортированному файлу.
+        """
+        self.last_imported_file_path = file_path
+        logger.debug(f"Путь к последнему импортированному файлу обновлён: {file_path}")
+
     # --- Анализ Excel-файлов (делегировано AnalysisManager - заглушка) ---
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
         """Анализирует Excel-файл и сохраняет результаты в БД проекта."""
@@ -295,6 +312,10 @@ class AppController:
                 if not self.storage.save_sheet_charts(sheet_id, sheet_data.get("charts", [])):
                     logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
 
+            # --- НОВОЕ: Обновляем last_imported_file_path после успешного анализа ---
+            self._update_last_imported_file_path(file_path)
+            # -------------------------------------------------------------------------
+
             logger.info(f"Анализ и сохранение данных из '{file_path}' завершены.")
             return True
         except Exception as e:
@@ -355,7 +376,7 @@ class AppController:
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """Экспортирует проект в Excel-файл (старый метод)."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}." )
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
         try:
             from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
