@@ -17,7 +17,7 @@ from backend.storage.base import ProjectDBStorage # <-- ИСПРАВЛЕНО: И
 
 # Импортируем logger из utils
 # ИСПРАВЛЕНО: Корректный путь к logger внутри backend
-from backend.utils.logger import get_logger # <-- ИСПРАВЛЕНО: было from utils.logger
+from backend.utils.logger import get_logger, set_logging_enabled, is_logging_enabled # <-- ИСПРАВЛЕНО: было from utils.logger
 
 # --- Исключения ---
 from backend.exceptions.app_exceptions import ProjectError, AnalysisError, ExportError
@@ -459,6 +459,26 @@ class AppController:
         else:
             logger.debug("Обработчик логов проекта не был установлен.")
     # ================================================================
+
+    # --- НОВОЕ: Методы для управления глобальным логированием ---
+    def set_logging_enabled(self, enabled: bool):
+        """
+        Включает или отключает логирование для всего приложения.
+
+        Args:
+            enabled (bool): True для включения, False для отключения.
+        """
+        set_logging_enabled(enabled)
+
+    def is_logging_enabled(self) -> bool:
+        """
+        Проверяет, включено ли логирование.
+
+        Returns:
+            bool: True, если логирование включено, иначе False.
+        """
+        return is_logging_enabled()
+    # --- КОНЕЦ НОВОГО ---
 
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
