@@ -9,7 +9,7 @@ import os
 import logging
 import sqlite3
 from typing import Dict, Any, List, Optional, Tuple, Union
-from pathlib import Path
+from pathlib import Path # <-- ДОБАВЛЕНО: Импорт Path из pathlib
 
 # Импортируем анализатор
 # from analyzer.logic_documentation import analyze_excel_file # Импорт будет в AnalysisManager
@@ -105,6 +105,10 @@ class AppController:
             # --- НОВОЕ: Настройка логирования проекта ---
             self._setup_project_logging(project_path)
             # ==========================================
+            # --- ИСПРАВЛЕНО: Обновление self.project_db_path при создании проекта ---
+            self.project_path = project_path
+            self.project_db_path = os.path.join(project_path, "project_data.db")
+            # ----------------------------------------------------------------------
         return success
 
     def create_new_project(self, project_name: str) -> bool:
@@ -120,6 +124,10 @@ class AppController:
             # --- НОВОЕ: Настройка логирования проекта ---
             self._setup_project_logging(load_path)
             # ==========================================
+            # --- ИСПРАВЛЕНО: Обновление self.project_db_path при загрузке проекта ---
+            self.project_path = load_path
+            self.project_db_path = os.path.join(load_path, "project_data.db")
+            # ----------------------------------------------------------------------
         return success
 
     def close_project(self):
@@ -128,6 +136,9 @@ class AppController:
         self._remove_project_logging()
         # ==============================================
         self.project_manager.close_project()
+        # --- ИСПРАВЛЕНО: Обнуление self.project_db_path при закрытии проекта ---
+        self.project_db_path = ""
+        # ----------------------------------------------------------------------
         self._current_project_data = None
 
     def shutdown(self):
@@ -209,7 +220,7 @@ class AppController:
             # который storage может принять
             # Для каждого листа в результатах анализа
             for sheet_data in analysis_results.get("sheets", []):
-                sheet_name = sheet_data["name"]
+                sheet_name = sheet_data["name"] # <-- ВОЗВРАЩЕНО: присваивание sheet_name внутри цикла
                 logger.info(f"Сохранение данных для листа: {sheet_name}")
 
                 # --- Получаем или создаем запись листа в БД ---
@@ -224,6 +235,7 @@ class AppController:
 
                 # --- Сохраняем метаданные листа ---
                 metadata_to_save = {
+                    "max_row": sheet_data.get("max_row"),
                     "max_row": sheet_data.get("max_row"),
                     "max_column": sheet_data.get("max_column"),
                     "merged_cells": sheet_data.get("merged_cells", [])
@@ -313,7 +325,7 @@ class AppController:
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """Экспортирует проект в Excel-файл (старый метод)."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.") 
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}." )
         try:
             from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
@@ -328,6 +340,14 @@ class AppController:
 
     def export_project_with_xlsxwriter(self, output_path: str) -> bool:
         """Экспортирует проект в Excel-файл с использованием Python-экспортера (xlsxwriter)."""
+        # --- НОВОЕ: Проверка и добавление расширения .xlsx ---
+        output_path_obj = Path(output_path)
+        if output_path_obj.suffix.lower() != '.xlsx':
+            output_path_obj = output_path_obj.with_suffix('.xlsx')
+            output_path = str(output_path_obj)
+            logger.info(f"К пути экспорта добавлено расширение '.xlsx'. Новый путь: {output_path}")
+        # ----------------------------------------------------
+
         logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter).")
         try:
             # Импортируем xlsxwriter_exporter
