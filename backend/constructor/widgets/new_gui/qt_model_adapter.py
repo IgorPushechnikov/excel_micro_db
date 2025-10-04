@@ -60,27 +60,71 @@ class DBTableModel(QAbstractTableModel):
                 logger.error(f"Не удалось получить ID листа '{self.sheet_name}'.")
                 return
 
-            # Получаем метаданные листа
+            # --- ИСПРАВЛЕНО: Получение и вычисление max_row/max_column ---
+            # Получаем метаданные листа из current_project
             sheet_metadata = self.app_controller.current_project.get('sheets', {}).get(self.sheet_name, {})
-            self.max_row = sheet_metadata.get('max_row', 0)
-            self.max_column = sheet_metadata.get('max_column', 0)
+            stored_max_row = sheet_metadata.get('max_row', 0)
+            stored_max_column = sheet_metadata.get('max_column', 0)
+            logger.debug(f"Метаданные листа '{self.sheet_name}': stored_max_row={stored_max_row}, stored_max_column={stored_max_column}")
 
-            # Инициализируем пустую таблицу размером max_row x max_col
+            # Вычисляем максимальные row/col из raw_data_list, чтобы убедиться, что модель охватывает все данные
+            calculated_max_row = -1
+            calculated_max_column = -1
+            if raw_data_list:
+                for item in raw_data_list:
+                    cell_addr = item.get('cell_address', '')
+                    if cell_addr:
+                        try:
+                            row, col = self._xl_cell_to_row_col(cell_addr)
+                            if row > calculated_max_row:
+                                calculated_max_row = row
+                            if col > calculated_max_column:
+                                calculated_max_column = col
+                        except ValueError as ve:
+                            logger.warning(f"Ошибка преобразования адреса ячейки '{cell_addr}' из raw_data: {ve}")
+            logger.debug(f"Вычисленные из raw_data максимальные индексы: calculated_max_row={calculated_max_row}, calculated_max_column={calculated_max_column}")
+
+            # Используем максимум из сохранённых и вычисленных значений
+            self.max_row = max(stored_max_row, calculated_max_row)
+            self.max_column = max(stored_max_column, calculated_max_column)
+            logger.info(f"Окончательные размеры модели для '{self.sheet_name}': max_row={self.max_row}, max_column={self.max_column}")
+
+            # Если данные есть, но max_row/max_column отрицательны (например, raw_data_list пуст или только с ошибками)
+            # устанавливаем их в 0, чтобы избежать отрицательных индексов.
+            if self.max_row < 0:
+                self.max_row = 0
+            if self.max_column < 0:
+                self.max_column = 0
+
+            # Инициализируем пустую таблицу размером (max_row + 1) x (max_column + 1)
+            # +1 потому что max_row/max_column - это индексы (0-based), а размер - количество элементов
             self._data = [[None for _ in range(self.max_column + 1)] for _ in range(self.max_row + 1)]
             self._headers = [self._index_to_column_name(i) for i in range(self.max_column + 1)]
             self._row_headers = [str(i + 1) for i in range(self.max_row + 1)]
+            logger.debug(f"Модель инициализирована. Размеры _data: {len(self._data)}x{len(self._data[0]) if self._data else 0}")
+            logger.debug(f"Размеры _headers: {len(self._headers)}, _row_headers: {len(self._row_headers)}")
 
             # Заполняем таблицу данными из raw_data_list
+            filled_cells_count = 0
             for item in raw_data_list:
                 cell_addr = item.get('cell_address', '')
                 value = item.get('value', '')
                 # logger.debug(f"Обработка ячейки {cell_addr} со значением {value}")
 
                 if cell_addr:
-                    row, col = self._xl_cell_to_row_col(cell_addr)
-                    if 0 <= row <= self.max_row and 0 <= col <= self.max_column:
-                        self._data[row][col] = value
-                        # logger.debug(f"Значение {value} записано в ({row}, {col})")
+                    try:
+                        row, col = self._xl_cell_to_row_col(cell_addr)
+                        # Проверяем, попадает ли ячейка в инициализированные границы
+                        # (на случай, если calculated_max_* был больше stored_max_*)
+                        if 0 <= row < len(self._data) and 0 <= col < len(self._data[0]):
+                            self._data[row][col] = value
+                            filled_cells_count += 1
+                            # logger.debug(f"Значение {value} записано в ({row}, {col})")
+                        else:
+                             logger.warning(f"Ячейка {cell_addr} ({row}, {col}) вне инициализированных границ модели ({len(self._data)}, {len(self._data[0])}). Пропущена.")
+                    except ValueError as ve:
+                        logger.error(f"Ошибка преобразования адреса ячейки '{cell_addr}' при заполнении _data: {ve}")
+            logger.info(f"Заполнено {filled_cells_count} ячеек в модели для листа '{self.sheet_name}'.")
 
             # Загружаем стили и объединения
             self._load_styles_from_controller(sheet_id)
@@ -90,6 +134,7 @@ class DBTableModel(QAbstractTableModel):
 
         except Exception as e:
             logger.error(f"Ошибка при загрузке данных для листа '{self.sheet_name}': {e}", exc_info=True)
+
 
     def _get_sheet_id_by_name(self, sheet_name: str) -> Optional[int]:
         """
@@ -177,6 +222,13 @@ class DBTableModel(QAbstractTableModel):
         """
         logger.info(f"Загрузка стилей для листа ID {sheet_id}.")
         try:
+            # --- ИСПРАВЛЕНО: Обработка отсутствия метода AppController ---
+            # Проверяем, существует ли метод перед вызовом
+            if not hasattr(self.app_controller, 'load_sheet_styles'):
+                logger.warning(f"AppController не имеет метода 'load_sheet_styles'. Загрузка стилей пропущена для листа ID {sheet_id}.")
+                self._styles = {} # Убедимся, что стили пусты
+                return
+
             # Вызываем метод AppController для загрузки стилей для конкретного листа
             # AppController.load_sheet_styles(sheet_id) должен возвращать список
             # [{'range_address': 'A1:B2', 'style_attributes': '{\"font\": {...}, \"fill\": {...}}'}, ...]
@@ -209,6 +261,10 @@ class DBTableModel(QAbstractTableModel):
                         logger.error(f"Ошибка преобразования диапазона {range_addr}: {ve}")
             logger.info(f"Стили для листа ID {sheet_id} загружены в модель.")
 
+        except AttributeError as ae:
+            # Перехватываем конкретное исключение AttributeError, если оно возникло не на hasattr, а при вызове
+            logger.error(f"AppController не имеет метода 'load_sheet_styles' (AttributeError): {ae}")
+            self._styles = {} # Убедимся, что стили пусты
         except Exception as e:
             logger.error(f"Ошибка при загрузке стилей для листа ID {sheet_id}: {e}", exc_info=True)
 
@@ -218,6 +274,13 @@ class DBTableModel(QAbstractTableModel):
         """
         logger.info(f"Загрузка объединений для листа ID {sheet_id}.")
         try:
+            # --- ИСПРАВЛЕНО: Обработка отсутствия метода AppController ---
+            # Проверяем, существует ли метод перед вызовом
+            if not hasattr(self.app_controller, 'load_sheet_merged_cells'):
+                logger.warning(f"AppController не имеет метода 'load_sheet_merged_cells'. Загрузка объединений пропущена для листа ID {sheet_id}.")
+                self._merged_cells = [] # Убедимся, что объединения пусты
+                return
+
             # Вызываем метод AppController для загрузки объединений для конкретного листа
             # AppController.load_sheet_merged_cells(sheet_id) должен возвращать список строк ('A1:B2')
             merged_ranges = self.app_controller.load_sheet_merged_cells(sheet_id)
@@ -235,6 +298,10 @@ class DBTableModel(QAbstractTableModel):
                     logger.error(f"Ошибка преобразования диапазона объединения {range_str}: {ve}")
             logger.info(f"Объединения для листа ID {sheet_id} загружены в модель.")
 
+        except AttributeError as ae:
+             # Перехватываем конкретное исключение AttributeError
+            logger.error(f"AppController не имеет метода 'load_sheet_merged_cells' (AttributeError): {ae}")
+            self._merged_cells = [] # Убедимся, что объединения пусты
         except Exception as e:
             logger.error(f"Ошибка при загрузке объединений для листа ID {sheet_id}: {e}", exc_info=True)
 
