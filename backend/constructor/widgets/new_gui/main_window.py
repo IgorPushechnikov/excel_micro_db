@@ -298,16 +298,23 @@ class MainWindow(QMainWindow):
             try:
                 # Вызов AppController.analyze_excel_file в основном потоке
                 # Используем путь и опции, сохранённые в _on_import_triggered
-                app_controller_success = self.app_controller.analyze_excel_file(self.excel_file_path_to_import, self.import_options)
-                if app_controller_success:
-                    logger.info("Сохранение результатов анализа в БД через AppController успешно завершено.")
-                    self.status_bar.showMessage("Импорт завершён успешно.")
-                    # Обновляем список листов, так как могли появиться новые
-                    self._update_sheet_list()
+                # --- ИСПРАВЛЕНО: Добавлена проверка на None для excel_file_path_to_import ---
+                if self.excel_file_path_to_import is not None:
+                    app_controller_success = self.app_controller.analyze_excel_file(self.excel_file_path_to_import, self.import_options)
+                    if app_controller_success:
+                        logger.info("Сохранение результатов анализа в БД через AppController успешно завершено.")
+                        self.status_bar.showMessage("Импорт завершён успешно.")
+                        # Обновляем список листов, так как могли появиться новые
+                        self._update_sheet_list()
+                    else:
+                        logger.error("AppController не смог сохранить результаты анализа в БД.")
+                        self.status_bar.showMessage("Ошибка сохранения в БД после анализа.")
+                        QMessageBox.critical(self, "Ошибка", "AppController не смог сохранить результаты анализа в БД.")
                 else:
-                    logger.error("AppController не смог сохранить результаты анализа в БД.")
-                    self.status_bar.showMessage("Ошибка сохранения в БД после анализа.")
-                    QMessageBox.critical(self, "Ошибка", "AppController не смог сохранить результаты анализа в БД.")
+                    logger.error("Путь к файлу для импорта не установлен (excel_file_path_to_import is None).")
+                    self.status_bar.showMessage("Критическая ошибка: путь к файлу не найден.")
+                    QMessageBox.critical(self, "Ошибка", "Критическая ошибка: путь к файлу не найден.")
+                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             except Exception as e_app:
                 logger.error(f"Ошибка при вызове AppController.analyze_excel_file: {e_app}", exc_info=True)
                 self.status_bar.showMessage("Ошибка вызова AppController.")
