@@ -43,7 +43,7 @@ class AnalysisWorker(QThread):
             # и предполагаем, что он может сообщать о прогрессе через callback
             # или мы можем опрашивать его состояние
             # Для упрощения пока просто вызываем метод и отправляем фиктивный прогресс
-            logger.info(f"Начало анализа файла {self.excel_file_path} в потоке {int(QThread.currentThread())}")
+            logger.info(f"Начало анализа файла {self.excel_file_path} в потоке {id(QThread.currentThread())}")
             
             # Имитация прогресса (в реальности зависит от реализации analyze_excel_file)
             import time
