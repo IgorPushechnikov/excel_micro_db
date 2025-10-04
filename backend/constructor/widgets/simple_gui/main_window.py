@@ -246,10 +246,14 @@ class SimpleMainWindow(QMainWindow):
             self.db_storage = ProjectDBStorage(self.project_db_path)
 
             # Проверяем, инициализирована ли БД
-            if not self.db_storage.connect():
+            if not self.db_storage or not self.db_storage.connect():
                  raise Exception("Не удалось подключиться к БД")
             # Простая проверка наличия таблиц (можно улучшить)
+            # --- ИЗМЕНЕНИЕ: Проверка на None для connection ---
+            if not self.db_storage.connection:
+                 raise Exception("Соединение с БД не установлено после connect()")
             cursor = self.db_storage.connection.cursor()
+            # -----------------------------------------------
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='project_info';")
             if not cursor.fetchone():
                 logger.error(f"Файл БД {db_path} не содержит корректных таблиц проекта.")
@@ -273,9 +277,15 @@ class SimpleMainWindow(QMainWindow):
 
     def _update_gui_after_project_load(self):
         """Обновляет состояние GUI после загрузки проекта."""
-        if self.file_explorer:
-            # Пока что передаём пустой список, если не загружены листы
+        # --- ИЗМЕНЕНИЕ: Проверка на None для project_path ---
+        if self.file_explorer and self.project_path:
+            # Передаём путь к папке проекта, так как имя Excel-файла может быть неизвестно
+            # или можно передать имя БД, если file_explorer это поддерживает.
+            # Для совместимости с текущим file_explorer, передадим путь к БД как "имя файла".
+            # Альтернатива: обновить file_explorer.load_excel_file, чтобы он принимал Optional[str]
+            # и обрабатывал случай, когда file_path - None.
             self.file_explorer.load_excel_file(self.project_path, self.sheet_names)
+        # -----------------------------------------------
         self.action_export_excel.setEnabled(True)
         self.action_close_file.setEnabled(True)
         # Возможно, нужно обновить статусбар или другие элементы
@@ -290,15 +300,21 @@ class SimpleMainWindow(QMainWindow):
             if not self.db_storage.connect():
                 raise Exception("Не удалось подключиться к БД для загрузки имён листов")
 
+            # --- ИЗМЕНЕНИЕ: Проверка на None для connection ---
+            if not self.db_storage.connection:
+                 raise Exception("Соединение с БД не установлено для загрузки имён листов")
             cursor = self.db_storage.connection.cursor()
+            # -----------------------------------------------
             cursor.execute("SELECT name FROM sheets ORDER BY name;")
             rows = cursor.fetchall()
             self.sheet_names = [row[0] for row in rows]
             logger.info(f"Загружено {len(self.sheet_names)} имён листов из БД.")
 
             # Обновляем проводник
-            if self.file_explorer:
+            # --- ИЗМЕНЕНИЕ: Проверка на None для project_path ---
+            if self.file_explorer and self.project_path:
                  self.file_explorer.load_excel_file(self.project_path, self.sheet_names)
+            # -----------------------------------------------
 
         except Exception as e:
             logger.error(f"Ошибка при загрузке имён листов из БД: {e}", exc_info=True)
@@ -309,7 +325,8 @@ class SimpleMainWindow(QMainWindow):
     # --- Возвращаем старые методы, но адаптируем под новую логику ---
     def _on_import_excel(self):
         """Обработчик импорта Excel-файла."""
-        if not self.project_db_path:
+        # Проверка на наличие project_db_path теперь включает проверку на None для self.db_storage
+        if not self.project_db_path or not self.db_storage:
             QMessageBox.warning(self, "Предупреждение", "Пожалуйста, сначала создайте или откройте проект.")
             return
 
@@ -348,8 +365,10 @@ class SimpleMainWindow(QMainWindow):
             self.current_excel_file = file_path
             
             # Обновляем UI
-            if self.file_explorer:
-                self.file_explorer.load_excel_file(file_path, self.sheet_names)
+            # --- ИЗМЕНЕНИЕ: Проверка на None для file_explorer и current_excel_file ---
+            if self.file_explorer and self.current_excel_file:
+                self.file_explorer.load_excel_file(self.current_excel_file, self.sheet_names)
+            # -----------------------------------------------
             # self.action_export_excel.setEnabled(True) # Уже включена при открытии/создании проекта
             # self.action_close_file.setEnabled(True) # Уже включена при открытии/создании проекта
             
@@ -547,3 +566,4 @@ class SimpleMainWindow(QMainWindow):
         logger.info("Закрытие приложения")
         self._cleanup_resources()
         event.accept()
+        
