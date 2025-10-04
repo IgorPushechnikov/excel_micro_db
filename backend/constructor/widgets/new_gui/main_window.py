@@ -23,13 +23,13 @@ logger = get_logger(__name__)
 class AnalysisWorker(QThread):
     """
     Рабочий поток для выполнения анализа Excel-файла.
+    Выполняет анализ в отдельном потоке, не взаимодействуя напрямую с AppController.
     """
-    finished = Signal(bool)  # Сигнал завершения (успех/ошибка)
-    progress = Signal(int, str)  # Сигнал прогресса (процент, сообщение)
+    # finished = Signal(bool)  # Старый сигнал
+    finished = Signal(object, bool)  # Новый сигнал: (результат_анализа, успех/ошибка)
 
-    def __init__(self, app_controller, excel_file_path, options=None):
+    def __init__(self, excel_file_path, options=None):
         super().__init__()
-        self.app_controller = app_controller
         self.excel_file_path = excel_file_path
         self.options = options or {}
 
@@ -38,26 +38,22 @@ class AnalysisWorker(QThread):
         Запускает анализ в отдельном потоке.
         """
         try:
-            # Пример простого прогресса, реальный анализ может быть сложнее
-            # Здесь мы просто вызываем метод AppController
-            # и предполагаем, что он может сообщать о прогрессе через callback
-            # или мы можем опрашивать его состояние
-            # Для упрощения пока просто вызываем метод и отправляем фиктивный прогресс
             logger.info(f"Начало анализа файла {self.excel_file_path} в потоке {id(QThread.currentThread())}")
-            
-            # Имитация прогресса (в реальности зависит от реализации analyze_excel_file)
-            import time
-            total_steps = 10
-            for i in range(1, total_steps + 1):
-                time.sleep(0.1)  # Имитация работы
-                progress_percent = int((i / total_steps) * 100)
-                self.progress.emit(progress_percent, f"Анализ листа {i}/{total_steps}...")
-            
-            success = self.app_controller.analyze_excel_file(self.excel_file_path, self.options)
-            self.finished.emit(success)
+            # Импортируем анализатор
+            from backend.analyzer.logic_documentation import analyze_excel_file
+
+            # Вызываем анализатор напрямую
+            # Здесь можно передать self.options, если analyze_excel_file их поддерживает
+            # для выборочной загрузки. Пока передаём пустой словарь или те опции, что есть.
+            analysis_results = analyze_excel_file(self.excel_file_path, self.options)
+            logger.info(f"Анализ файла {self.excel_file_path} завершён в потоке {id(QThread.currentThread())}.")
+
+            # Отправляем результат анализа и флаг успеха
+            self.finished.emit(analysis_results, True)
         except Exception as e:
-            logger.error(f"Ошибка в потоке анализа: {e}", exc_info=True)
-            self.finished.emit(False)
+            logger.error(f"Ошибка в потоке анализа для файла {self.excel_file_path}: {e}", exc_info=True)
+            # Отправляем None и флаг ошибки
+            self.finished.emit(None, False)
 
 # --- Основное окно ---
 class MainWindow(QMainWindow):
@@ -73,6 +69,10 @@ class MainWindow(QMainWindow):
         self.sheet_editor_widget = None
         self.analysis_worker = None
         self.progress_dialog = None
+        # NOTE: Добавим атрибут для хранения пути к файлу, который нужно импортировать
+        # Он будет установлен в _on_import_triggered и использован в _on_analysis_finished
+        self.excel_file_path_to_import = None
+        self.import_options = None
 
         self.setWindowTitle("Excel Micro DB GUI")
         self.setGeometry(100, 100, 1200, 800)
@@ -177,25 +177,29 @@ class MainWindow(QMainWindow):
         """
         Обработчик открытия существующего проекта.
         """
-        project_path_str, ok = QFileDialog.getExistingDirectory(
+        # --- ИСПРАВЛЕНО: getExistingDirectory возвращает только строку ---
+        project_path_str = QFileDialog.getExistingDirectory(
             self, "Открыть проект", "", options=QFileDialog.Option.DontUseNativeDialog
         )
-        if ok and project_path_str:
-            project_path = Path(project_path_str)
-            try:
-                # Загружаем проект через AppController
-                success = self.app_controller.load_project(str(project_path))
-                if success:
-                    logger.info(f"Проект загружен: {project_path}")
-                    self.current_project_path = project_path
-                    self._update_sheet_list()
-                    self.status_bar.showMessage(f"Проект загружен: {project_path}")
-                else:
-                    logger.error(f"Не удалось загрузить проект: {project_path}")
-                    QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить проект: {project_path}")
-            except Exception as e:
-                logger.error(f"Ошибка при загрузке проекта: {e}", exc_info=True)
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при загрузке проекта: {e}")
+        # Проверяем, пустой ли путь (означает отмену)
+        if not project_path_str:
+            return
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+        project_path = Path(project_path_str)
+        try:
+            # Загружаем проект через AppController
+            success = self.app_controller.load_project(str(project_path))
+            if success:
+                logger.info(f"Проект загружен: {project_path}")
+                self.current_project_path = project_path
+                self._update_sheet_list()
+                self.status_bar.showMessage(f"Проект загружен: {project_path}")
+            else:
+                logger.error(f"Не удалось загрузить проект: {project_path}")
+                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить проект: {project_path}")
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке проекта: {e}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при загрузке проекта: {e}")
 
     def _on_save_project_triggered(self):
         """
@@ -235,13 +239,15 @@ class MainWindow(QMainWindow):
             self.progress_dialog.setMinimumDuration(0) # Показываем сразу
             self.progress_dialog.setValue(0)
 
-            # Создаём и запускаем рабочий поток
+            # --- ИСПРАВЛЕНО: Передаём excel_file_path и options в AnalysisWorker ---
+            # Запоминаем путь и опции для использования в _on_analysis_finished
+            self.excel_file_path_to_import = str(excel_file_path)
+            self.import_options = {'import_type': import_type}
             self.analysis_worker = AnalysisWorker(
-                self.app_controller,
-                str(excel_file_path),
+                str(excel_file_path), # Передаём путь к файлу
                 options={'import_type': import_type} # Передаём тип импорта как опцию
             )
-            self.analysis_worker.progress.connect(self._on_analysis_progress)
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             self.analysis_worker.finished.connect(self._on_analysis_finished)
             self.analysis_worker.start()
 
@@ -267,7 +273,7 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage("Анализ отменён.")
                 return
 
-    def _on_analysis_finished(self, success):
+    def _on_analysis_finished(self, analysis_results, success):
         """
         Обработчик завершения анализа.
         """
@@ -279,13 +285,35 @@ class MainWindow(QMainWindow):
             self.analysis_worker.wait() # Убедиться, что поток завершён
             self.analysis_worker = None
 
-        if success:
-            logger.info("Анализ файла успешно завершён.")
-            self.status_bar.showMessage("Импорт завершён успешно.")
-            # Обновляем список листов, так как могли появиться новые
-            self._update_sheet_list()
+        if success and analysis_results is not None:
+            logger.info("Анализ файла успешно завершён в отдельном потоке. Начинаю сохранение в БД через AppController в основном потоке.")
+            # --- НОВОЕ: Вызываем AppController в основном потоке ---
+            # NOTE: Здесь мы снова вызываем analyze_excel_file, который сам анализирует файл.
+            # Это неэффективно. Лучше было бы модифицировать AppController,
+            # чтобы он мог принимать уже проанализированные данные (analysis_results).
+            # Но для простоты и соответствия текущей структуре AppController,
+            # мы вызываем его снова. Главное, что теперь это происходит в основном потоке.
+            # TODO: Рассмотреть передачу analysis_results в AppController.
+            try:
+                # Вызов AppController.analyze_excel_file в основном потоке
+                # Используем путь и опции, сохранённые в _on_import_triggered
+                app_controller_success = self.app_controller.analyze_excel_file(self.excel_file_path_to_import, self.import_options)
+                if app_controller_success:
+                    logger.info("Сохранение результатов анализа в БД через AppController успешно завершено.")
+                    self.status_bar.showMessage("Импорт завершён успешно.")
+                    # Обновляем список листов, так как могли появиться новые
+                    self._update_sheet_list()
+                else:
+                    logger.error("AppController не смог сохранить результаты анализа в БД.")
+                    self.status_bar.showMessage("Ошибка сохранения в БД после анализа.")
+                    QMessageBox.critical(self, "Ошибка", "AppController не смог сохранить результаты анализа в БД.")
+            except Exception as e_app:
+                logger.error(f"Ошибка при вызове AppController.analyze_excel_file: {e_app}", exc_info=True)
+                self.status_bar.showMessage("Ошибка вызова AppController.")
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при вызове AppController: {e_app}")
+            # --- КОНЕЦ НОВОГО ---
         else:
-            logger.error("Анализ файла завершился с ошибкой.")
+            logger.error("Анализ файла завершился с ошибкой в отдельном потоке или результат пуст.")
             self.status_bar.showMessage("Ошибка импорта.")
             QMessageBox.critical(self, "Ошибка", "Ошибка при импорте файла.")
 
