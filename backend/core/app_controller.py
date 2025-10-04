@@ -1,9 +1,4 @@
 # backend/core/app_controller.py
-"""
-Модуль для центрального контроллера приложения.
-Управляет жизненным циклом приложения и координирует работу
-между различными менеджерами (DataManager, AnalysisManager и т.д.).
-"""
 
 import os
 import logging
@@ -196,6 +191,41 @@ class AppController:
         except Exception as e:
             logger.error(f"Неожиданная ошибка при получении списка листов: {e}", exc_info=True)
             return []
+
+    # --- НОВОЕ: Метод для переименования листа ---
+    def rename_sheet(self, old_name: str, new_name: str) -> bool:
+        """
+        Переименовывает лист в проекте.
+
+        Args:
+            old_name (str): Текущее имя листа.
+            new_name (str): Новое имя листа.
+
+        Returns:
+            bool: True, если переименование успешно, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно переименовать лист.")
+            return False
+
+        if not old_name or not new_name:
+            logger.error("Имена листов (старое и новое) не могут быть пустыми.")
+            return False
+
+        # Получаем project_id. В MVP предполагаем, что это 1, но лучше бы получить из метаданных проекта.
+        # Для простоты используем 1, как в других местах.
+        project_id = 1
+
+        logger.info(f"Попытка переименования листа '{old_name}' в '{new_name}' для проекта ID {project_id}.")
+        success = self.storage.rename_sheet(project_id, old_name, new_name)
+        if success:
+            logger.info(f"Лист '{old_name}' успешно переименован в '{new_name}'.")
+            # Возможно, нужно обновить внутренние кэши или уведомить другие компоненты
+            # о смене имени, но для базовой реализации этого достаточно.
+        else:
+            logger.error(f"Не удалось переименовать лист '{old_name}' в '{new_name}'.")
+        return success
+    # --- КОНЕЦ НОВОГО ---
 
     # --- Анализ Excel-файлов (делегировано AnalysisManager - заглушка) ---
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
