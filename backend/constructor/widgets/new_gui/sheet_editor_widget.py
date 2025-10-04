@@ -7,7 +7,7 @@
 import logging
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLineEdit, QHBoxLayout, QPushButton
 from PySide6.QtCore import Qt, QModelIndex
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QClipboard, QApplication
 
 from .qt_model_adapter import DBTableModel
 from backend.utils.logger import get_logger
@@ -69,10 +69,71 @@ class SheetEditorWidget(QWidget):
         # Текущий индекс для отслеживания изменений
         self._current_index = QModelIndex()
 
+    def keyPressEvent(self, event):
+        """
+        Обрабатывает события нажатия клавиш.
+        Реализует вставку из буфера обмена по Ctrl+V.
+        """
+        # Проверяем, нажат ли Ctrl+V
+        if event.key() == Qt.Key.Key_V and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self._paste_from_clipboard()
+            event.accept() # Сообщаем, что событие обработано
+            return
+        # Вызываем базовую реализацию для остальных клавиш
+        super().keyPressEvent(event)
+
+    def _paste_from_clipboard(self):
+        """
+        Извлекает данные из буфера обмена и вставляет их в модель,
+        начиная с текущего индекса.
+        """
+        clipboard = QApplication.clipboard()
+        clipboard_text = clipboard.text()
+        if not clipboard_text:
+            logger.debug("Буфер обмена пуст.")
+            return
+
+        logger.debug(f"Получены данные из буфера обмена (первые 100 символов): {clipboard_text[:100]}...")
+
+        # Разбор данных из буфера (обычно табуляция и новая строка)
+        rows = clipboard_text.strip().split('\n')
+        if not rows:
+            logger.debug("Нет строк для вставки из буфера.")
+            return
+
+        # Удаляем пустую строку, если она была в конце (например, если буфер заканчивался на \n)
+        if rows and rows[-1] == '':
+            rows.pop()
+
+        # Разделяем каждую строку на ячейки (обычно по табуляции)
+        parsed_data = []
+        for row_text in rows:
+            cells = row_text.split('\t')
+            parsed_data.append(cells)
+
+        if not parsed_data:
+            logger.debug("Нет данных для вставки после разбора.")
+            return
+
+        # Получаем текущий индекс (ячейка, в которую вставляем)
+        current_index = self.table_view.currentIndex()
+        if not current_index.isValid():
+            # Если нет текущего индекса, можно вставить, например, в A1
+            current_index = self.model.index(0, 0)
+            logger.debug("Текущий индекс недействителен, вставка начинается с (0, 0).")
+
+        start_row = current_index.row()
+        start_col = current_index.column()
+
+        logger.info(f"Вставка данных из буфера в ячейку ({start_row}, {start_col}). Размер данных: {len(parsed_data)}x{len(parsed_data[0]) if parsed_data else 0}")
+
+        # Вызываем метод модели для вставки данных
+        self.model.insert_data_from_clipboard(parsed_data, start_row, start_col)
+
     def _on_cell_clicked(self, index: QModelIndex):
         """
         Обработчик клика по ячейке в QTableView.
-        Обновляет строку формул значением из ячейки.
+        Обновляет строку формuls значением из ячейки.
         """
         if index.isValid():
             self._current_index = index
