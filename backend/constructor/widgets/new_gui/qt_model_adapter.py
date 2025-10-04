@@ -452,6 +452,118 @@ class DBTableModel(QAbstractTableModel):
         # Делаем ячейки редактируемыми
         return super().flags(index) | Qt.ItemFlag.ItemIsEditable
 
+    # --- Новый метод для вставки данных из буфера обмена ---
+    def insert_data_from_clipboard(self, parsed_data: List[List[str]], start_row: int, start_col: int):
+        """
+        Вставляет данные из буфера обмена в модель и БД, начиная с указанной ячейки.
+
+        Args:
+            parsed_data (List[List[str]]): Двумерный список значений для вставки.
+            start_row (int): Начальная строка (0-based).
+            start_col (int): Начальный столбец (0-based).
+        """
+        if not parsed_data or not parsed_data[0]:
+            logger.debug("Попытка вставить пустые данные из буфера.")
+            return
+
+        logger.info(f"Начало вставки данных из буфера. Размер: {len(parsed_data)}x{len(parsed_data[0])}. Начало: ({start_row}, {start_col})")
+
+        # Определим новые максимальные размеры таблицы после вставки
+        end_row = start_row + len(parsed_data) - 1
+        end_col = start_col + len(parsed_data[0]) - 1
+        new_max_row = max(self.max_row, end_row)
+        new_max_column = max(self.max_column, end_col)
+
+        # --- Пакетная вставка через AppController ---
+        # Соберём все изменения в один список для потенциальной оптимизации в AppController
+        # или выполним в цикле, если AppController не поддерживает пакетную вставку напрямую
+        # через update_cell_value.
+        # Пока что используем update_cell_value в цикле.
+        # TODO: Рассмотреть добавление метода в AppController для пакетного обновления ячеек.
+        batch_success = True
+        for r_idx, row_data in enumerate(parsed_data):
+            for c_idx, cell_value in enumerate(row_data):
+                abs_row = start_row + r_idx
+                abs_col = start_col + c_idx
+                cell_address = self._index_to_cell_address(abs_row, abs_col)
+
+                try:
+                    # Вызываем AppController для обновления ячейки в БД
+                    success = self.app_controller.update_cell_value(self.sheet_name, cell_address, cell_value)
+                    if not success:
+                        logger.error(f"AppController не смог обновить ячейку {cell_address} при вставке из буфера.")
+                        batch_success = False
+                        # В реальной реализации возможно прерывание или откат транзакции
+                        # Пока просто логируем ошибку и продолжаем
+                except Exception as e:
+                    logger.error(f"Ошибка при обновлении ячейки {cell_address} через AppController: {e}", exc_info=True)
+                    batch_success = False
+                    # В реальной реализации возможно прерывание или откат транзакции
+                    # Пока просто логируем ошибку и продолжаем
+
+        if not batch_success:
+            logger.error("Одна или несколько ячеек не были обновлены при вставке из буфера.")
+            # В реальной реализации можно показать сообщение пользователю
+            return
+
+        # --- Обновление внутреннего представления модели ---
+        # Увеличиваем размеры _data, если нужно
+        if new_max_row > self.max_row or new_max_column > self.max_column:
+            # Увеличиваем количество строк
+            current_row_count = len(self._data)
+            if new_max_row + 1 > current_row_count:
+                for _ in range(new_max_row + 1 - current_row_count):
+                    self._data.append([None for _ in range(self.max_column + 1)])
+            # Увеличиваем количество столбцов в каждой строке
+            current_col_count = len(self._data[0]) if self._data else 0
+            if new_max_column + 1 > current_col_count:
+                for row in self._data:
+                    row.extend([None for _ in range(new_max_column + 1 - current_col_count)])
+            # Обновляем max_ переменные
+            self.max_row = new_max_row
+            self.max_column = new_max_column
+            # Обновляем заголовки
+            self._headers = [self._index_to_column_name(i) for i in range(self.max_column + 1)]
+            self._row_headers = [str(i + 1) for i in range(self.max_row + 1)]
+            logger.info(f"Размеры модели увеличены до ({self.max_row + 1}, {self.max_column + 1}).")
+
+        # Заполняем _data новыми значениями
+        for r_idx, row_data in enumerate(parsed_data):
+            for c_idx, cell_value in enumerate(row_data):
+                abs_row = start_row + r_idx
+                abs_col = start_col + c_idx
+                if 0 <= abs_row < len(self._data) and 0 <= abs_col < len(self._data[0]):
+                    self._data[abs_row][abs_col] = cell_value
+                    logger.debug(f"Значение '{cell_value}' вставлено в модель в ячейку ({abs_row}, {abs_col})")
+
+        # Уведомляем QTableView об изменениях
+        # layoutChanged.emit() говорит представлению, что структура данных (размеры) могла измениться.
+        # dataChanged.emit() говорит, что содержимое изменилось.
+        # Так как мы могли изменить размеры и содержимое, вызовем оба.
+        # top_left = self.index(start_row, start_col)
+        # bottom_right = self.index(min(end_row, self.max_row), min(end_col, self.max_column))
+        # self.dataChanged.emit(top_left, bottom_right, [Qt.DisplayRole])
+        # self.layoutChanged.emit() # Это может быть избыточно, если мы точно знаем, что изменили только данные.
+        # Более точный способ - уведомить только об изменении данных, если размеры не менялись.
+        # Но так как размеры *могут* измениться, и мы обновляем _data/_headers/_row_headers,
+        # layoutChanged.emit() более безопасен, чтобы QTableView пересчитал размеры.
+        # Однако, layoutChanged может быть ресурсоемким. Попробуем с dataChanged и проверим.
+        # Если вставка за пределы текущего размера не отображается сразу, добавим layoutChanged.
+        # Для начала вызовем dataChanged для диапазона вставки.
+        top_left = self.index(start_row, start_col)
+        bottom_right = self.index(min(end_row, self.max_row), min(end_col, self.max_column))
+        self.dataChanged.emit(top_left, bottom_right, [Qt.ItemDataRole.DisplayRole])
+
+        # Если размеры таблицы изменились, вызываем layoutChanged.
+        if new_max_row > self.max_row or new_max_column > self.max_column:
+             self.layoutChanged.emit()
+        # Или, если мы точно уверены, что размеры могли измениться, всегда вызываем layoutChanged.
+        # self.layoutChanged.emit() # Это более консервативный подход.
+
+        logger.info(f"Вставка данных из буфера завершена. Обновлён диапазон ({start_row}, {start_col}) - ({end_row}, {end_col}).")
+
+    # --- Конец нового метода ---
+
     def _index_to_cell_address(self, row: int, col: int) -> str:
         """
         Преобразует индексы строки и столбца (0-based) в адрес ячейки Excel (e.g., 'A1').
