@@ -43,7 +43,7 @@ class AnalysisWorker(QThread):
             # и предполагаем, что он может сообщать о прогрессе через callback
             # или мы можем опрашивать его состояние
             # Для упрощения пока просто вызываем метод и отправляем фиктивный прогресс
-            logger.info(f"Начало анализа файла {self.excel_file_path} в потоке {QThread.currentThreadId()}")
+            logger.info(f"Начало анализа файла {self.excel_file_path} в потоке {int(QThread.currentThread())}")
             
             # Имитация прогресса (в реальности зависит от реализации analyze_excel_file)
             import time
@@ -256,8 +256,11 @@ class MainWindow(QMainWindow):
             if self.progress_dialog.wasCanceled():
                 # AppController должен поддерживать отмену, если возможно
                 # Пока просто останавливаем поток (не идеально)
-                self.analysis_worker.terminate()
-                self.analysis_worker.wait()
+                # --- ИСПРАВЛЕНО: Проверка на None перед terminate и wait ---
+                if self.analysis_worker:
+                    self.analysis_worker.terminate()
+                    self.analysis_worker.wait()
+                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                 self.progress_dialog = None
                 self.analysis_worker = None
                 logger.info("Анализ отменён пользователем.")
