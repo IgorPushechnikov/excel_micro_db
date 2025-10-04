@@ -21,7 +21,7 @@ from backend.utils.logger import get_logger
 from backend.analyzer.logic_documentation import analyze_excel_file
 from backend.storage.base import ProjectDBStorage
 from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
-from backend.constructor.widgets.simple_gui.welcome_widget import WelcomeWidget
+# from backend.constructor.widgets.simple_gui.welcome_widget import WelcomeWidget # Больше не используется
 from backend.constructor.widgets.simple_gui.file_explorer import ExcelFileExplorer
 from backend.constructor.widgets.simple_gui.simple_sheet_editor import SimpleSheetEditor
 
@@ -45,7 +45,7 @@ class SimpleMainWindow(QMainWindow):
         self.sheet_names: List[str] = []
         
         # Виджеты
-        self.welcome_widget: Optional[WelcomeWidget] = None
+        # self.welcome_widget: Optional[WelcomeWidget] = None # Больше не используется
         self.sheet_editor: Optional[SimpleSheetEditor] = None
         self.stacked_widget: Optional[QStackedWidget] = None
         self.file_explorer: Optional[ExcelFileExplorer] = None
@@ -57,8 +57,11 @@ class SimpleMainWindow(QMainWindow):
         self._create_toolbars()
         self._create_status_bar()
         
-        # Показываем приветственный экран
-        self._show_welcome_screen()
+        # --- ИЗМЕНЕНИЕ: Убран вызов _show_welcome_screen ---
+        # Показываем редактор с пустой таблицей
+        if self.stacked_widget and self.sheet_editor:
+            self.stacked_widget.setCurrentWidget(self.sheet_editor)
+        # -----------------------------------------------
         
         logger.info("SimpleMainWindow инициализировано")
     
@@ -69,23 +72,37 @@ class SimpleMainWindow(QMainWindow):
         self.setCentralWidget(self.stacked_widget)
         
         # Создаем виджеты
-        self.welcome_widget = WelcomeWidget()
+        # self.welcome_widget = WelcomeWidget() # Больше не используется
         self.sheet_editor = SimpleSheetEditor()
         
         # Добавляем в стек
-        self.stacked_widget.addWidget(self.welcome_widget)
+        # self.stacked_widget.addWidget(self.welcome_widget) # Больше не используется
         self.stacked_widget.addWidget(self.sheet_editor)
         
         # Создаем проводник файла
         self.file_explorer = ExcelFileExplorer(self)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.file_explorer)
         
-        # Подключаем сигналы
-        self.welcome_widget.import_requested.connect(self._on_import_excel)
-        self.file_explorer.sheet_selected.connect(self._on_sheet_selected)
-    
+        # --- ИЗМЕНЕНИЕ: Убрана связь с welcome_widget ---
+        # self.welcome_widget.import_requested.connect(self._on_import_excel)
+        # -------------------------------------------
+        
+        # Подключаем сигналы, если нужно
+        # self.file_explorer.sheet_selected.connect(self._on_sheet_selected)
+        # Пока что не подключаем, так как нет файла
+
     def _create_actions(self):
         """Создание действий для меню и панелей инструментов."""
+        # --- ИЗМЕНЕНИЕ: Добавлены действия для нового/открытия проекта ---
+        self.action_new_project = QAction("&Новый проект", self)
+        self.action_new_project.setShortcut("Ctrl+N")
+        self.action_new_project.triggered.connect(self._on_new_project)
+        
+        self.action_open_project = QAction("&Открыть проект", self)
+        self.action_open_project.setShortcut("Ctrl+Shift+O")
+        self.action_open_project.triggered.connect(self._on_open_project)
+        # -------------------------------------------------------------
+
         self.action_import_excel = QAction("&Импорт Excel-файла", self)
         self.action_import_excel.setShortcut("Ctrl+O")
         self.action_import_excel.triggered.connect(self._on_import_excel)
@@ -109,6 +126,11 @@ class SimpleMainWindow(QMainWindow):
 
         # Меню "Файл"
         file_menu = menubar.addMenu("&Файл")
+        # --- ИЗМЕНЕНИЕ: Добавлены пункты меню для нового/открытия проекта ---
+        file_menu.addAction(self.action_new_project)
+        file_menu.addAction(self.action_open_project)
+        file_menu.addSeparator()
+        # -------------------------------------------------------------
         file_menu.addAction(self.action_import_excel)
         file_menu.addAction(self.action_export_excel)
         file_menu.addSeparator()
@@ -118,6 +140,11 @@ class SimpleMainWindow(QMainWindow):
     def _create_toolbars(self):
         """Создание панелей инструментов."""
         toolbar = self.addToolBar("Основные")
+        # --- ИЗМЕНЕНИЕ: Добавлены кнопки для нового/открытия проекта ---
+        toolbar.addAction(self.action_new_project)
+        toolbar.addAction(self.action_open_project)
+        toolbar.addSeparator()
+        # -------------------------------------------------------------
         toolbar.addAction(self.action_import_excel)
         toolbar.addAction(self.action_export_excel)
     
@@ -125,27 +152,167 @@ class SimpleMainWindow(QMainWindow):
         """Создание строки состояния."""
         self.statusBar().showMessage("Готов")
     
-    def _show_welcome_screen(self):
-        """Показывает приветственный экран."""
-        if self.stacked_widget and self.welcome_widget:
-            self.stacked_widget.setCurrentWidget(self.welcome_widget)
-            # Убраны строки, которые принудительно выключали кнопки
-            # self.action_export_excel.setEnabled(False)
-            # self.action_close_file.setEnabled(False)
-            if self.file_explorer:
-                self.file_explorer.clear_file()
-    
-    def _load_first_sheet(self):
-        """Загружает первый лист проекта, если он существует."""
-        if self.sheet_names:
-            first_sheet_name = self.sheet_names[0]
-            logger.info(f"Автоматическая загрузка первого листа: {first_sheet_name}")
-            self._on_sheet_selected(first_sheet_name)
-        else:
-            logger.warning("Нет доступных листов для автоматической загрузки.")
+    # --- ИЗМЕНЕНИЕ: Убран метод _show_welcome_screen ---
+    # -----------------------------------------------
 
+    # --- ИЗМЕНЕНИЕ: Убран метод _load_first_sheet ---
+    # ----------------------------------------------
+
+    # --- ИЗМЕНЕНИЕ: Новые методы для управления проектом ---
+    def _on_new_project(self):
+        """Обработчик создания нового проекта."""
+        logger.info("Начало создания нового проекта")
+        # Спрашиваем у пользователя папку проекта
+        project_path = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите директорию для нового проекта",
+            "",
+        )
+        if not project_path:
+            logger.info("Пользователь отменил выбор папки проекта.")
+            return
+
+        project_path = Path(project_path).resolve()
+        db_path = project_path / "project_data.db"
+
+        # Проверяем, существует ли БД
+        if db_path.exists():
+            reply = QMessageBox.question(
+                self,
+                'Подтверждение',
+                f'Файл БД {db_path} уже существует. Перезаписать его (это сотрёт все данные)?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                logger.info("Пользователь отменил перезапись существующего файла БД.")
+                return
+            else:
+                # Удаляем существующую БД
+                try:
+                    db_path.unlink()
+                    logger.info(f"Существующая БД {db_path} удалена.")
+                except OSError as e:
+                    logger.error(f"Не удалось удалить существующую БД {db_path}: {e}")
+                    QMessageBox.critical(self, "Ошибка", f"Не удалось удалить старый файл БД:\n{e}")
+                    return
+
+        # Инициализируем новую БД
+        try:
+            self.project_path = str(project_path)
+            self.project_db_path = str(db_path)
+            self.db_storage = ProjectDBStorage(self.project_db_path)
+
+            if not self.db_storage.initialize_project_tables():
+                raise Exception("Не удалось инициализировать БД")
+
+            logger.info(f"Новый проект создан: {self.project_path}, БД: {self.project_db_path}")
+            QMessageBox.information(self, "Успех", f"Новый проект создан в:\n{self.project_path}\n\nТеперь вы можете импортировать Excel-файл.")
+
+            # Обновляем состояние GUI
+            self._update_gui_after_project_load()
+
+        except Exception as e:
+            logger.error(f"Ошибка при создании нового проекта: {e}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось создать новый проект:\n{e}")
+            self._cleanup_resources()
+
+    def _on_open_project(self):
+        """Обработчик открытия существующего проекта."""
+        logger.info("Начало открытия существующего проекта")
+        # Спрашиваем у пользователя папку проекта
+        project_path = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите директорию проекта",
+            "",
+        )
+        if not project_path:
+            logger.info("Пользователь отменил выбор папки проекта.")
+            return
+
+        project_path = Path(project_path).resolve()
+        db_path = project_path / "project_data.db"
+
+        # Проверяем, существует ли БД
+        if not db_path.exists():
+            logger.error(f"Файл БД {db_path} не найден.")
+            QMessageBox.critical(self, "Ошибка", f"Файл БД проекта не найден:\n{db_path}")
+            return
+
+        # Загружаем существующую БД
+        try:
+            self.project_path = str(project_path)
+            self.project_db_path = str(db_path)
+            self.db_storage = ProjectDBStorage(self.project_db_path)
+
+            # Проверяем, инициализирована ли БД
+            if not self.db_storage.connect():
+                 raise Exception("Не удалось подключиться к БД")
+            # Простая проверка наличия таблиц (можно улучшить)
+            cursor = self.db_storage.connection.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='project_info';")
+            if not cursor.fetchone():
+                logger.error(f"Файл БД {db_path} не содержит корректных таблиц проекта.")
+                self.db_storage.disconnect()
+                raise Exception("Файл БД не содержит корректных таблиц проекта")
+            self.db_storage.disconnect()
+
+            logger.info(f"Существующий проект открыт: {self.project_path}, БД: {self.project_db_path}")
+            QMessageBox.information(self, "Успех", f"Проект открыт из:\n{self.project_path}")
+
+            # Обновляем состояние GUI
+            self._update_gui_after_project_load()
+
+            # Загружаем имена листов из БД
+            self._load_sheet_names_from_db()
+
+        except Exception as e:
+            logger.error(f"Ошибка при открытии проекта: {e}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть проект:\n{e}")
+            self._cleanup_resources()
+
+    def _update_gui_after_project_load(self):
+        """Обновляет состояние GUI после загрузки проекта."""
+        if self.file_explorer:
+            # Пока что передаём пустой список, если не загружены листы
+            self.file_explorer.load_excel_file(self.project_path, self.sheet_names)
+        self.action_export_excel.setEnabled(True)
+        self.action_close_file.setEnabled(True)
+        # Возможно, нужно обновить статусбар или другие элементы
+
+    def _load_sheet_names_from_db(self):
+        """Загружает имена листов из БД."""
+        if not self.db_storage or not self.project_db_path:
+            logger.error("Нет подключения к БД для загрузки имён листов.")
+            return
+
+        try:
+            if not self.db_storage.connect():
+                raise Exception("Не удалось подключиться к БД для загрузки имён листов")
+
+            cursor = self.db_storage.connection.cursor()
+            cursor.execute("SELECT name FROM sheets ORDER BY name;")
+            rows = cursor.fetchall()
+            self.sheet_names = [row[0] for row in rows]
+            logger.info(f"Загружено {len(self.sheet_names)} имён листов из БД.")
+
+            # Обновляем проводник
+            if self.file_explorer:
+                 self.file_explorer.load_excel_file(self.project_path, self.sheet_names)
+
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке имён листов из БД: {e}", exc_info=True)
+        finally:
+            if self.db_storage:
+                self.db_storage.disconnect()
+
+    # --- Возвращаем старые методы, но адаптируем под новую логику ---
     def _on_import_excel(self):
         """Обработчик импорта Excel-файла."""
+        if not self.project_db_path:
+            QMessageBox.warning(self, "Предупреждение", "Пожалуйста, сначала создайте или откройте проект.")
+            return
+
         logger.info("Начало импорта Excel-файла")
         file_path, _ = QFileDialog.getOpenFileName(
             self, 
@@ -156,19 +323,7 @@ class SimpleMainWindow(QMainWindow):
         
         if not file_path:
             return
-        
-        # Спрашиваем у пользователя папку проекта
-        project_path = QFileDialog.getExistingDirectory(
-            self,
-            "Выберите директорию для проекта",
-            "",
-        )
-        if not project_path:
-            logger.info("Пользователь отменил выбор папки проекта.")
-            return
-        
-        project_path = Path(project_path).resolve()
-        
+
         try:
             # Анализируем файл
             logger.info(f"Анализ файла: {file_path}")
@@ -182,15 +337,10 @@ class SimpleMainWindow(QMainWindow):
             if not self.sheet_names:
                 raise Exception("В файле не найдено листов")
             
-            # Устанавливаем пути к проекту и БД
-            self.project_path = str(project_path)
-            self.project_db_path = str(project_path / "project_data.db")
-            self.db_storage = ProjectDBStorage(self.project_db_path)
-            
-            # Инициализируем схему БД
-            if not self.db_storage.initialize_project_tables():
-                raise Exception("Не удалось инициализировать БД")
-            
+            # Убедимся, что self.db_storage указывает на правильную БД
+            if not self.db_storage or self.db_storage.db_path != self.project_db_path:
+                 self.db_storage = ProjectDBStorage(self.project_db_path)
+
             # Сохраняем результаты анализа в БД (с подключением внутри)
             self._save_analysis_to_db(analysis_results)
             
@@ -200,13 +350,11 @@ class SimpleMainWindow(QMainWindow):
             # Обновляем UI
             if self.file_explorer:
                 self.file_explorer.load_excel_file(file_path, self.sheet_names)
-            self.action_export_excel.setEnabled(True)
-            self.action_close_file.setEnabled(True)
+            # self.action_export_excel.setEnabled(True) # Уже включена при открытии/создании проекта
+            # self.action_close_file.setEnabled(True) # Уже включена при открытии/создании проекта
             
-            # --- ИЗМЕНЕНИЕ ---
-            # Вместо _show_welcome_screen() вызываем загрузку первого листа
+            # Загружаем первый лист
             self._load_first_sheet()
-            # ---------------
 
             logger.info(f"Файл успешно проанализирован: {file_path}, БД: {self.project_db_path}")
             QMessageBox.information(self, "Успех", "Файл успешно проанализирован!")
@@ -214,8 +362,8 @@ class SimpleMainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Ошибка при импорте/анализе файла: {e}", exc_info=True)
             QMessageBox.critical(self, "Ошибка", f"Не удалось проанализировать файл:\n{e}")
-            self._cleanup_resources()
-    
+            # _cleanup_resources не вызываем, т.к. проект может остаться валидным
+
     def _save_analysis_to_db(self, analysis_results: Dict[str, Any]):
         """Сохраняет результаты анализа в БД проекта."""
         if not self.db_storage:
@@ -294,6 +442,15 @@ class SimpleMainWindow(QMainWindow):
             logger.error(f"Ошибка при получении/создании sheet_id для '{sheet_name}': {e}", exc_info=True)
             return None
     
+    def _load_first_sheet(self):
+        """Загружает первый лист проекта, если он существует."""
+        if self.sheet_names:
+            first_sheet_name = self.sheet_names[0]
+            logger.info(f"Автоматическая загрузка первого листа: {first_sheet_name}")
+            self._on_sheet_selected(first_sheet_name)
+        else:
+            logger.warning("Нет доступных листов для автоматической загрузки.")
+
     @Slot(str)
     def _on_sheet_selected(self, sheet_name: str):
         """Обработчик выбора листа."""
@@ -354,15 +511,18 @@ class SimpleMainWindow(QMainWindow):
         reply = QMessageBox.question(
             self, 
             'Подтверждение', 
-            'Вы уверены, что хотите закрыть текущий файл?',
+            'Вы уверены, что хотите закрыть текущий проект?',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
         
         if reply == QMessageBox.StandardButton.Yes:
             self._cleanup_resources()
-            self._show_welcome_screen()
-            logger.info("Файл закрыт")
+            # После закрытия показываем пустой редактор
+            if self.stacked_widget and self.sheet_editor:
+                self.stacked_widget.setCurrentWidget(self.sheet_editor)
+                self.sheet_editor.clear_sheet() # Очищаем отображение
+            logger.info("Проект закрыт")
     
     def _cleanup_resources(self):
         """Очищает ресурсы."""
@@ -376,6 +536,11 @@ class SimpleMainWindow(QMainWindow):
         self.project_path = None
         self.project_db_path = None
         self.sheet_names = []
+        # Сбрасываем состояние UI
+        if self.file_explorer:
+            self.file_explorer.clear_file()
+        self.action_export_excel.setEnabled(False)
+        self.action_close_file.setEnabled(False)
     
     def closeEvent(self, event):
         """Обработчик закрытия окна."""
