@@ -109,8 +109,7 @@ def main():
     project_name = f"integration_test_project_{timestamp}"
     project_path = project_root / "test_workspace" / project_name
     excel_file = project_root / "data" / "samples" / "test_sample.xlsx"
-    # Выходные файлы для разных экспортеров
-    output_file_go = project_path / "output" / "exports" / "recreated_test_sample_go_excelize.xlsx"
+    # Выходной файл для Python-экспортера
     output_file_py = project_path / "output" / "exports" / "recreated_test_sample_py_xlsxwriter.xlsx"
     # Путь для копии исходного файла
     original_excel_copy = project_path / "output" / "exports" / "original_test_sample.xlsx"
@@ -128,7 +127,6 @@ def main():
 
     logger.info(f"Проект будет создан в: {project_path}")
     logger.info(f"Тестовый файл: {excel_file}")
-    # logger.info(f"Выходной файл (Go): {output_file_go}")
     logger.info(f"Выходной файл (Python): {output_file_py}")
 
     all_steps_passed = True
@@ -173,12 +171,6 @@ def main():
         else:
             logger.error(f"✗ Файл БД проекта НЕ НАЙДЕН: {db_file}")
             all_steps_passed = False
-
-        # if output_file_go.exists():
-        #     logger.info(f"✓ Выходной Excel-файл (Go) создан: {output_file_go}")
-        # else:
-        #     logger.error(f"✗ Выходной Excel-файл (Go) НЕ НАЙДЕН: {output_file_go}")
-        #     all_steps_passed = False
         
         if output_file_py.exists():
             logger.info(f"✓ Выходной Excel-файл (Python) создан: {output_file_py}")
@@ -190,8 +182,8 @@ def main():
         if all_steps_passed:
             try:
                 import shutil
-                # Определяем путь к папке экспорта (берем из одного из выходных файлов)
-                output_exports_dir_path = output_file_go.parent
+                # Определяем путь к папке экспорта (берем из выходного файла Python)
+                output_exports_dir_path = output_file_py.parent
                 # Создаем папку logs, если её нет
                 export_logs_dir = output_exports_dir_path / "logs"
                 export_logs_dir.mkdir(parents=True, exist_ok=True)
@@ -220,7 +212,7 @@ def main():
     if all_steps_passed:
         logger.info("Тест пройден успешно!")
         print("[СКРИПТ] Тест пройден успешно!")
-        print(f"[СКРИПТ] Выходной файл (Go): {output_file_go}")
+        # print(f"[СКРИПТ] Выходной файл (Go): {output_file_go}") # Убрано
         print(f"[СКРИПТ] Выходной файл (Python): {output_file_py}")
         print(f"[СКРИПТ] Исходный файл: {original_excel_copy}")
         sys.exit(0)
