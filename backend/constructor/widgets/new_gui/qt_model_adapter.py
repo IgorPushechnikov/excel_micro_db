@@ -6,10 +6,10 @@
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union # <-- Добавлен Union
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, QPersistentModelIndex, QSize # <-- Добавлены QPersistentModelIndex, QSize
 from PySide6.QtGui import QFont, QColor, QBrush, QTextOption
 
 # Импортируем AppController
@@ -298,19 +298,19 @@ class DBTableModel(QAbstractTableModel):
         # logger.debug(f"[КООРД] Результат для диапазона '{range_str}': {coords}")
         return coords
 
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int: # <-- Изменено
         """Возвращает количество строк."""
         if parent.isValid():
             return 0
         return len(self._data)
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int: # <-- Изменено
         """Возвращает количество столбцов."""
         if parent.isValid():
             return 0
         return len(self._data[0]) if self._data else 0
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = Qt.ItemDataRole.DisplayRole) -> Any: # <-- Изменено
         """Возвращает данные для указанной ячейки и роли."""
         if not index.isValid():
             return None
@@ -404,7 +404,7 @@ class DBTableModel(QAbstractTableModel):
                 return self._row_headers[section]
         return None
 
-    def setData(self, index: QModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
+    def setData(self, index: Union[QModelIndex, QPersistentModelIndex], value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool: # <-- Изменено
         """
         Устанавливает данные для указанной ячейки.
         Вызывается при редактировании в QTableView.
@@ -444,13 +444,13 @@ class DBTableModel(QAbstractTableModel):
             logger.error(f"Ошибка при обновлении ячейки {cell_address} через AppController: {e}", exc_info=True)
             return False
 
-    def flags(self, index: QModelIndex) -> Qt.ItemFlags:
+    def flags(self, index: Union[QModelIndex, QPersistentModelIndex]) -> Qt.ItemFlag: # <-- Изменено
         """Определяет флаги для ячейки (редактируемая, доступная и т.д.)."""
         if not index.isValid():
-            return Qt.ItemFlag.NoItemFlags
+            return Qt.ItemFlag.NoItemFlags # <-- Исправлено ItemFlags -> ItemFlag
 
         # Делаем ячейки редактируемыми
-        return super().flags(index) | Qt.ItemFlag.ItemIsEditable
+        return super().flags(index) | Qt.ItemFlag.ItemIsEditable # <-- Исправлено ItemFlags -> ItemFlag
 
     # --- Новый метод для вставки данных из буфера обмена ---
     def insert_data_from_clipboard(self, parsed_data: List[List[str]], start_row: int, start_col: int):
@@ -572,17 +572,26 @@ class DBTableModel(QAbstractTableModel):
         row_num = row + 1
         return f"{col_name}{row_num}"
 
-    def span(self, row: int, column: int) -> tuple[int, int]:
+    # --- Исправленный метод span ---
+    def span(self, index: Union[QModelIndex, QPersistentModelIndex]) -> QSize: # <-- Изменена сигнатура
         """
-        Возвращает размер объединённой области для ячейки (row, column).
+        Возвращает размер объединённой области для ячейки index.
         Используется QTableView для отображения объединённых ячеек.
         """
+        if not index.isValid():
+            return QSize(1, 1)
+
+        row = index.row()
+        col = index.column()
+
         # logger.debug(f"Запрос span для ({row}, {column})")
         for top_row, left_col, bottom_row, right_col in self._merged_cells:
-            if top_row <= row <= bottom_row and left_col <= column <= right_col:
+            if top_row <= row <= bottom_row and left_col <= col <= right_col:
                 row_span = bottom_row - top_row + 1
                 col_span = right_col - left_col + 1
                 # logger.debug(f"Ячейка ({row}, {column}) принадлежит объединению ({top_row}, {left_col})-({bottom_row}, {right_col}). Span: ({row_span}, {col_span})")
-                return row_span, col_span
+                return QSize(col_span, row_span) # <-- Возвращаем QSize(width, height), где width - колонки, height - строки
         # logger.debug(f"Ячейка ({row}, {column}) не объединена. Span: (1, 1)")
-        return 1, 1
+        return QSize(1, 1) # <-- Возвращаем QSize(1, 1)
+
+    # --- Конец исправленного метода span ---
