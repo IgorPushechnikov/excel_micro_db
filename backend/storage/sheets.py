@@ -146,3 +146,60 @@ def load_sheet_by_name(connection: sqlite3.Connection, project_id: int, sheet_na
     except Exception as e:
         logger.error(f"Неожиданная ошибка при загрузке листа '{sheet_name}' из проекта ID {project_id}: {e}", exc_info=True)
         return None
+
+# --- НОВОЕ: Функция для переименования листа ---
+def rename_sheet(connection: sqlite3.Connection, project_id: int, old_name: str, new_name: str) -> bool:
+    """
+    Переименовывает лист в таблице 'sheets'.
+
+    Args:
+        connection (sqlite3.Connection): Активное соединение с БД проекта.
+        project_id (int): ID проекта.
+        old_name (str): Текущее имя листа.
+        new_name (str): Новое имя листа.
+
+    Returns:
+        bool: True, если переименование успешно, иначе False.
+    """
+    if not connection:
+        logger.error("Нет активного соединения с БД для переименования листа.")
+        return False
+
+    # Проверим, что новый лист с таким именем не существует
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?",
+            (project_id, new_name)
+        )
+        result = cursor.fetchone()
+        if result:
+            logger.warning(f"Лист с именем '{new_name}' уже существует в проекте ID {project_id}. Переименование невозможно.")
+            return False
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка SQLite при проверке существования листа '{new_name}' для переименования: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при проверке существования листа '{new_name}' для переименования: {e}", exc_info=True)
+        return False
+
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "UPDATE sheets SET name = ? WHERE project_id = ? AND name = ?",
+            (new_name, project_id, old_name)
+        )
+        connection.commit()
+        if cursor.rowcount > 0:
+            logger.info(f"Лист '{old_name}' успешно переименован в '{new_name}' в проекте ID {project_id}.")
+            return True
+        else:
+            logger.warning(f"Лист '{old_name}' не найден в проекте ID {project_id} для переименования.")
+            return False
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка SQLite при переименовании листа '{old_name}' в '{new_name}' для проекта ID {project_id}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при переименовании листа '{old_name}' в '{new_name}' для проекта ID {project_id}: {e}", exc_info=True)
+        return False
+# --- КОНЕЦ НОВОГО ---
