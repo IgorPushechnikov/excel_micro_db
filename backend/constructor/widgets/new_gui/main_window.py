@@ -9,10 +9,10 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QStatusBar, QToolBar, QFileDialog,
     QMessageBox, QProgressDialog, QWidget, QStackedWidget, QHBoxLayout, QSplitter,
-    QCheckBox, QPushButton, QMenu, QAction, QActionGroup # <-- Новые импорты
+    QCheckBox, QPushButton, QMenu # <-- QAction, QActionGroup убраны отсюда
 )
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QActionGroup # <-- QActionGroup добавлен сюда
 
 from backend.core.app_controller import create_app_controller
 from .sheet_editor_widget import SheetEditorWidget
