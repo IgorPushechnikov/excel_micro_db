@@ -4,8 +4,9 @@
 """
 
 import logging
+from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QMenu, QMessageBox
+    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, QMenu, QMessageBox, QLabel
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCursor
@@ -45,6 +46,13 @@ class SheetExplorerWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0) # Убираем лишние отступы
 
+        # --- НОВОЕ: QLabel для отображения имени файла проекта ---
+        self.project_name_label = QLabel("Проект: <не загружен>")
+        self.project_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.project_name_label.setStyleSheet("font-weight: bold; padding: 5px;") # Простой стиль
+        layout.addWidget(self.project_name_label)
+        # --- КОНЕЦ НОВОГО ---
+
         self.list_widget = QListWidget(self)
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         # Подключаем сигнал itemChanged здесь, он будет работать для пользовательских изменений
@@ -61,7 +69,7 @@ class SheetExplorerWidget(QWidget):
 
     def update_sheet_list(self):
         """
-        Обновляет список листов из AppController.
+        Обновляет список листов из AppController и имя файла проекта.
         Важно: временно отключает сигнал itemChanged, чтобы избежать ложных срабатываний
         при программном заполнении списка.
         """
@@ -69,6 +77,9 @@ class SheetExplorerWidget(QWidget):
         self.list_widget.clear()
         if not self.app_controller.is_project_loaded:
             self.list_widget.itemChanged.connect(self._on_item_changed)
+            # --- ОБНОВЛЕНИЕ ИМЕНИ ФАЙЛА ПРИ ОТСУТСТВИИ ПРОЕКТА ---
+            self.project_name_label.setText("Проект: <не загружен>")
+            # ---------------------------------------------
             return
 
         try:
@@ -86,6 +97,19 @@ class SheetExplorerWidget(QWidget):
         
         # Включаем сигнал обратно
         self.list_widget.itemChanged.connect(self._on_item_changed)
+
+        # --- НОВОЕ: Обновление имени файла проекта ---
+        try:
+            project_path_str = self.app_controller.project_path
+            project_path = Path(project_path_str)
+            project_name = project_path.name # Имя директории проекта или файла
+            # project_name = project_path.stem # Имя файла без расширения, если project_path был .db
+            self.project_name_label.setText(f"Проект: {project_name}")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении имени файла проекта в обозревателе: {e}", exc_info=True)
+            self.project_name_label.setText("Проект: <ошибка загрузки>")
+        # --- КОНЕЦ НОВОГО ---
+
 
     def _on_item_selection_changed(self):
         """Обработчик изменения выделения в списке."""
