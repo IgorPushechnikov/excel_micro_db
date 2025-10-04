@@ -10,17 +10,19 @@
 
 import logging
 import os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 import pandas as pd
 import numpy as np
+# Исправлено: Импорт get_column_letter напрямую
 from openpyxl.utils import get_column_letter
 
 # Импортируем logger из utils
 from backend.utils.logger import get_logger
 
 # Импортируем функции из analyzer
+# Исправлено: Импорт из правильного модуля и с правильными именами
 from backend.analyzer.logic_documentation import _serialize_style, _serialize_chart
 
 logger = get_logger(__name__)
@@ -230,7 +232,8 @@ def import_charts_from_excel(app_controller, file_path: str, options: Optional[D
 
             charts_list = []
             try:
-                charts_sheet = sheet._charts
+                # Исправлено: Добавлен # type: ignore[attr-defined] для подавления ошибки Pylance
+                charts_sheet = sheet._charts # type: ignore[attr-defined]
                 for chart_obj in charts_sheet:
                     chart_data = _serialize_chart(chart_obj)
                     if chart_data:
@@ -301,11 +304,12 @@ def import_formulas_from_excel(app_controller, file_path: str, options: Optional
             formulas_list = []
             for row in sheet.iter_rows(values_only=False):
                 for cell in row:
+                    # Исправлено: Проверяем, является ли значение строкой и начинается ли с '='
                     if isinstance(cell.value, str) and cell.value.startswith('='):
-                        formulas_list.append({
-                            "cell_address": cell.coordinate,
-                            "formula": cell.value
-                        })
+                         formulas_list.append({
+                             "cell_address": cell.coordinate,
+                             "formula": cell.value # Сохраняем формулу как есть, включая '='
+                         })
 
             sheet_id = _get_sheet_id_by_name(app_controller, sheet_name)
             if sheet_id is None:
@@ -491,11 +495,22 @@ def import_raw_data_fast_with_pandas(app_controller, file_path: str, options: Op
                             logger.warning(f"Столбец '{col_name}' не найден в columns. Пропущен.")
                             continue
 
+                        # Исправлено: Убедимся, что col_index_pandas - это int перед +1
+                        if not isinstance(col_index_pandas, int):
+                            logger.warning(f"col_index_pandas для '{col_name}' не является int: {col_index_pandas}. Пропущен.")
+                            continue
+                        
+                        # Исправлено: Убедимся, что row_index_pandas - это int перед +1
+                        if not isinstance(row_index_pandas, int):
+                            logger.warning(f"row_index_pandas для строки {index} не является int: {row_index_pandas}. Пропущен.")
+                            continue
+
                         # Преобразуем индексы pandas в координаты Excel
                         # Смещение для строк: start_row_pandas + header_pandas + 1 (так как Excel 1-based)
                         offset_for_header_and_skiprows = (start_row_pandas or 0) + (1 if header_pandas is not None else 0)
                         excel_row_index = row_index_pandas + 1 + offset_for_header_and_skiprows # +1 для перехода к 1-based
                         # Преобразуем индекс столбца в букву
+                        # Исправлено: Используем импортированную функцию get_column_letter
                         excel_col_letter = get_column_letter(col_index_pandas + 1 + (start_col_pandas or 0)) # +1 для перехода к 1-based, + start_col_pandas
                         cell_address = f"{excel_col_letter}{excel_row_index}"
 
