@@ -18,9 +18,10 @@ from PySide6.QtGui import QAction
 
 # Импорт внутренних модулей
 from backend.utils.logger import get_logger
-from backend.analyzer.logic_documentation import analyze_excel_file
-from backend.storage.base import ProjectDBStorage
-from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
+# УДАЛЯЕМ: from backend.analyzer.logic_documentation import analyze_excel_file
+# УДАЛЯЕМ: from backend.storage.base import ProjectDBStorage
+# УДАЛЯЕМ: from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter
+from backend.core.app_controller import create_app_controller, AppController
 # from backend.constructor.widgets.simple_gui.welcome_widget import WelcomeWidget # Больше не используется
 from backend.constructor.widgets.simple_gui.file_explorer import ExcelFileExplorer
 from backend.constructor.widgets.simple_gui.simple_sheet_editor import SimpleSheetEditor
@@ -40,8 +41,9 @@ class SimpleMainWindow(QMainWindow):
         # Атрибуты для работы с файлом
         self.current_excel_file: Optional[str] = None
         self.project_path: Optional[str] = None
-        self.project_db_path: Optional[str] = None
-        self.db_storage: Optional[ProjectDBStorage] = None
+        # УДАЛЯЕМ: self.project_db_path: Optional[str] = None
+        # УДАЛЯЕМ: self.db_storage: Optional[ProjectDBStorage] = None
+        self.app_controller: Optional[AppController] = None  # <-- НОВОЕ
         self.sheet_names: List[str] = []
         
         # Виджеты
@@ -172,45 +174,29 @@ class SimpleMainWindow(QMainWindow):
             logger.info("Пользователь отменил выбор папки проекта.")
             return
 
-        project_path = Path(project_path).resolve()
-        db_path = project_path / "project_data.db"
-
-        # Проверяем, существует ли БД
-        if db_path.exists():
-            reply = QMessageBox.question(
-                self,
-                'Подтверждение',
-                f'Файл БД {db_path} уже существует. Перезаписать его (это сотрёт все данные)?',
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.No:
-                logger.info("Пользователь отменил перезапись существующего файла БД.")
-                return
-            else:
-                # Удаляем существующую БД
-                try:
-                    db_path.unlink()
-                    logger.info(f"Существующая БД {db_path} удалена.")
-                except OSError as e:
-                    logger.error(f"Не удалось удалить существующую БД {db_path}: {e}")
-                    QMessageBox.critical(self, "Ошибка", f"Не удалось удалить старый файл БД:\n{e}")
-                    return
-
-        # Инициализируем новую БД
         try:
-            self.project_path = str(project_path)
-            self.project_db_path = str(db_path)
-            self.db_storage = ProjectDBStorage(self.project_db_path)
+            # Создаем контроллер и инициализируем проект
+            self.project_path = project_path
+            self.app_controller = create_app_controller(self.project_path)
 
-            if not self.db_storage.initialize_project_tables():
-                raise Exception("Не удалось инициализировать БД")
+            # Проверяем, что app_controller инициализирован
+            if not self.app_controller:
+                raise Exception("AppController не инициализирован")
 
-            logger.info(f"Новый проект создан: {self.project_path}, БД: {self.project_db_path}")
-            QMessageBox.information(self, "Успех", f"Новый проект создан в:\n{self.project_path}\n\nТеперь вы можете импортировать Excel-файл.")
+            # Создаём структуру проекта
+            create_success = self.app_controller.create_project(self.project_path)
+            if not create_success:
+                raise Exception("Не удалось создать структуру проекта")
+
+            # Явно загружаем созданный проект, чтобы установить storage
+            load_success = self.app_controller.load_project(self.project_path)
+            if not load_success:
+                raise Exception("Не удалось загрузить только что созданный проект")
 
             # Обновляем состояние GUI
             self._update_gui_after_project_load()
+
+            QMessageBox.information(self, "Успех", f"Новый проект создан в:\n{self.project_path}\n\nТеперь вы можете импортировать Excel-файл.")
 
         except Exception as e:
             logger.error(f"Ошибка при создании нового проекта: {e}", exc_info=True)
@@ -230,50 +216,31 @@ class SimpleMainWindow(QMainWindow):
             logger.info("Пользователь отменил выбор папки проекта.")
             return
 
-        project_path = Path(project_path).resolve()
-        db_path = project_path / "project_data.db"
-
-        # Проверяем, существует ли БД
-        if not db_path.exists():
-            logger.error(f"Файл БД {db_path} не найден.")
-            QMessageBox.critical(self, "Ошибка", f"Файл БД проекта не найден:\n{db_path}")
-            return
-
-        # Загружаем существующую БД
         try:
-            self.project_path = str(project_path)
-            self.project_db_path = str(db_path)
-            self.db_storage = ProjectDBStorage(self.project_db_path)
+            # Создаем контроллер и загружаем проект
+            self.project_path = project_path
+            self.app_controller = create_app_controller(self.project_path)
 
-            # Проверяем, инициализирована ли БД
-            if not self.db_storage or not self.db_storage.connect():
-                 raise Exception("Не удалось подключиться к БД")
-            # Простая проверка наличия таблиц (можно улучшить)
-            # --- ИЗМЕНЕНИЕ: Проверка на None для connection ---
-            if not self.db_storage.connection:
-                 raise Exception("Соединение с БД не установлено после connect()")
-            cursor = self.db_storage.connection.cursor()
-            # -----------------------------------------------
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='project_info';")
-            if not cursor.fetchone():
-                logger.error(f"Файл БД {db_path} не содержит корректных таблиц проекта.")
-                self.db_storage.disconnect()
-                raise Exception("Файл БД не содержит корректных таблиц проекта")
-            self.db_storage.disconnect()
+            # Проверяем, что app_controller инициализирован
+            if not self.app_controller:
+                raise Exception("AppController не инициализирован")
 
-            logger.info(f"Существующий проект открыт: {self.project_path}, БД: {self.project_db_path}")
-            QMessageBox.information(self, "Успех", f"Проект открыт из:\n{self.project_path}")
+            if not self.app_controller.load_project(self.project_path):
+                raise Exception("Не удалось загрузить проект")
 
             # Обновляем состояние GUI
             self._update_gui_after_project_load()
 
-            # Загружаем имена листов из БД
-            self._load_sheet_names_from_db()
+            # Загружаем имена листов из контроллера
+            self._load_sheet_names_from_controller()
+
+            QMessageBox.information(self, "Успех", f"Проект открыт из:\n{self.project_path}")
 
         except Exception as e:
             logger.error(f"Ошибка при открытии проекта: {e}", exc_info=True)
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть проект:\n{e}")
             self._cleanup_resources()
+
 
     def _update_gui_after_project_load(self):
         """Обновляет состояние GUI после загрузки проекта."""
@@ -290,43 +257,27 @@ class SimpleMainWindow(QMainWindow):
         self.action_close_file.setEnabled(True)
         # Возможно, нужно обновить статусбар или другие элементы
 
-    def _load_sheet_names_from_db(self):
-        """Загружает имена листов из БД."""
-        if not self.db_storage or not self.project_db_path:
-            logger.error("Нет подключения к БД для загрузки имён листов.")
+    def _load_sheet_names_from_controller(self):
+        """Загружает имена листов из AppController."""
+        if not self.app_controller:
+            logger.error("Нет активного AppController для загрузки имён листов.")
             return
 
         try:
-            if not self.db_storage.connect():
-                raise Exception("Не удалось подключиться к БД для загрузки имён листов")
-
-            # --- ИЗМЕНЕНИЕ: Проверка на None для connection ---
-            if not self.db_storage.connection:
-                 raise Exception("Соединение с БД не установлено для загрузки имён листов")
-            cursor = self.db_storage.connection.cursor()
-            # -----------------------------------------------
-            cursor.execute("SELECT name FROM sheets ORDER BY name;")
-            rows = cursor.fetchall()
-            self.sheet_names = [row[0] for row in rows]
-            logger.info(f"Загружено {len(self.sheet_names)} имён листов из БД.")
+            self.sheet_names = self.app_controller.get_sheet_names()
+            logger.info(f"Загружено {len(self.sheet_names)} имён листов через AppController.")
 
             # Обновляем проводник
-            # --- ИЗМЕНЕНИЕ: Проверка на None для project_path ---
             if self.file_explorer and self.project_path:
-                 self.file_explorer.load_excel_file(self.project_path, self.sheet_names)
-            # -----------------------------------------------
+                self.file_explorer.load_excel_file(self.project_path, self.sheet_names)
 
         except Exception as e:
-            logger.error(f"Ошибка при загрузке имён листов из БД: {e}", exc_info=True)
-        finally:
-            if self.db_storage:
-                self.db_storage.disconnect()
+            logger.error(f"Ошибка при загрузке имён листов из контроллера: {e}", exc_info=True)
 
     # --- Возвращаем старые методы, но адаптируем под новую логику ---
     def _on_import_excel(self):
         """Обработчик импорта Excel-файла."""
-        # Проверка на наличие project_db_path теперь включает проверку на None для self.db_storage
-        if not self.project_db_path or not self.db_storage:
+        if not self.project_path or not self.app_controller:
             QMessageBox.warning(self, "Предупреждение", "Пожалуйста, сначала создайте или откройте проект.")
             return
 
@@ -342,160 +293,62 @@ class SimpleMainWindow(QMainWindow):
             return
 
         try:
-            # Анализируем файл
-            logger.info(f"Анализ файла: {file_path}")
-            analysis_results = analyze_excel_file(file_path)
+            # Вызываем анализ через контроллер
+            success = self.app_controller.analyze_excel_file(file_path)
             
-            if not analysis_results or "sheets" not in analysis_results:
-                raise Exception("Анализ не вернул ожидаемые результаты")
-            
-            # Получаем имена листов
-            self.sheet_names = [sheet["name"] for sheet in analysis_results["sheets"]]
-            if not self.sheet_names:
-                raise Exception("В файле не найдено листов")
-            
-            # Убедимся, что self.db_storage указывает на правильную БД
-            if not self.db_storage or self.db_storage.db_path != self.project_db_path:
-                 self.db_storage = ProjectDBStorage(self.project_db_path)
+            if not success:
+                raise Exception("Анализ Excel-файла завершился с ошибкой")
 
-            # Сохраняем результаты анализа в БД (с подключением внутри)
-            self._save_analysis_to_db(analysis_results)
-            
             # Обновляем состояние
             self.current_excel_file = file_path
             
             # Обновляем UI
-            # --- ИЗМЕНЕНИЕ: Проверка на None для file_explorer и current_excel_file ---
+            self._load_sheet_names_from_controller()  # Перезагружаем список листов
+
             if self.file_explorer and self.current_excel_file:
                 self.file_explorer.load_excel_file(self.current_excel_file, self.sheet_names)
-            # -----------------------------------------------
-            # self.action_export_excel.setEnabled(True) # Уже включена при открытии/создании проекта
-            # self.action_close_file.setEnabled(True) # Уже включена при открытии/создании проекта
-            
-            # Загружаем первый лист
-            self._load_first_sheet()
 
-            logger.info(f"Файл успешно проанализирован: {file_path}, БД: {self.project_db_path}")
             QMessageBox.information(self, "Успех", "Файл успешно проанализирован!")
 
         except Exception as e:
             logger.error(f"Ошибка при импорте/анализе файла: {e}", exc_info=True)
             QMessageBox.critical(self, "Ошибка", f"Не удалось проанализировать файл:\n{e}")
-            # _cleanup_resources не вызываем, т.к. проект может остаться валидным
 
-    def _save_analysis_to_db(self, analysis_results: Dict[str, Any]):
-        """Сохраняет результаты анализа в БД проекта."""
-        if not self.db_storage:
-            raise Exception("БД не инициализирована")
-        
-        # Подключаемся к БД перед сохранением
-        if not self.db_storage.connect():
-            raise Exception("Не удалось подключиться к БД для сохранения анализа")
-        
-        try:
-            # Сохраняем данные для каждого листа
-            for sheet_data in analysis_results.get("sheets", []):
-                sheet_name = sheet_data["name"]
-                logger.info(f"Сохранение данных для листа: {sheet_name}")
-                
-                # Получаем или создаем ID листа (теперь connection гарантированно есть)
-                sheet_id = self._get_or_create_sheet_id(sheet_name)
-                if sheet_id is None:
-                    logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                    continue
-                
-                # Сохраняем метаданные листа
-                metadata_to_save = {
-                    "max_row": sheet_data.get("max_row"),
-                    "max_column": sheet_data.get("max_column"),
-                    "merged_cells": sheet_data.get("merged_cells", [])
-                }
-                if not self.db_storage.save_sheet_metadata(sheet_name, metadata_to_save):
-                    logger.warning(f"Не удалось сохранить метаданные для листа '{sheet_name}'.")
-                
-                # Сохраняем объединенные ячейки
-                merged_cells_list = sheet_data.get("merged_cells", [])
-                if merged_cells_list:
-                    if not self.db_storage.save_sheet_merged_cells(sheet_id, merged_cells_list):
-                        logger.error(f"Не удалось сохранить объединенные ячейки для листа '{sheet_name}' (ID: {sheet_id}).")
-                
-                # Сохраняем "сырые данные"
-                if not self.db_storage.save_sheet_raw_data(sheet_name, sheet_data.get("raw_data", [])):
-                    logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}'.")
-                
-                # Сохраняем формулы
-                if not self.db_storage.save_sheet_formulas(sheet_id, sheet_data.get("formulas", [])):
-                    logger.error(f"Не удалось сохранить формулы для листа '{sheet_name}' (ID: {sheet_id}).")
-                
-                # Сохраняем стили
-                if not self.db_storage.save_sheet_styles(sheet_id, sheet_data.get("styles", [])):
-                    logger.error(f"Не удалось сохранить стили для листа '{sheet_name}' (ID: {sheet_id}).")
-                
-                # Сохраняем диаграммы
-                if not self.db_storage.save_sheet_charts(sheet_id, sheet_data.get("charts", [])):
-                    logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
-        finally:
-            # Отключаемся от БД после сохранения
-            self.db_storage.disconnect()
-    
-    def _get_or_create_sheet_id(self, sheet_name: str) -> Optional[int]:
-        """Получает ID листа из БД или создает новую запись."""
-        if not self.db_storage or not self.db_storage.connection:
-            logger.error("Нет подключения к БД для получения/создания sheet_id.")
-            return None
-        
-        try:
-            cursor = self.db_storage.connection.cursor()
-            project_id = 1  # Для MVP используем ID 1
-            
-            # Используем правильное имя столбца 'sheet_id'
-            cursor.execute("SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
-            result = cursor.fetchone()
-            if result:
-                return result[0]
-            else:
-                cursor.execute("INSERT INTO sheets (project_id, name) VALUES (?, ?)", (project_id, sheet_name))
-                self.db_storage.connection.commit()
-                return cursor.lastrowid
-        except Exception as e:
-            logger.error(f"Ошибка при получении/создании sheet_id для '{sheet_name}': {e}", exc_info=True)
-            return None
-    
-    def _load_first_sheet(self):
-        """Загружает первый лист проекта, если он существует."""
-        if self.sheet_names:
-            first_sheet_name = self.sheet_names[0]
-            logger.info(f"Автоматическая загрузка первого листа: {first_sheet_name}")
-            self._on_sheet_selected(first_sheet_name)
-        else:
-            logger.warning("Нет доступных листов для автоматической загрузки.")
+    # _save_analysis_to_db удален, логика в AppController
+    # _get_or_create_sheet_id удален, логика в AppController
 
+    # _load_first_sheet удален, логика в _on_sheet_selected
+    
     @Slot(str)
     def _on_sheet_selected(self, sheet_name: str):
         """Обработчик выбора листа."""
         logger.debug(f"Выбран лист: {sheet_name}")
-        print(f"[DEBUG MainWin] _on_sheet_selected вызван для листа '{sheet_name}'") # <-- Добавим print
-        if not self.project_db_path:
-            logger.warning("Нет активной БД")
-            print(f"[DEBUG MainWin] _on_sheet_selected: self.project_db_path = {self.project_db_path}") # <-- Добавим print
+        if not self.project_path or not self.app_controller:
+            logger.warning("Нет активного AppController")
             return
 
-        print(f"[DEBUG MainWin] _on_sheet_selected: self.sheet_editor = {self.sheet_editor is not None}, self.stacked_widget = {self.stacked_widget is not None}") # <-- Добавим print
         if self.sheet_editor and self.stacked_widget:
-            print(f"[DEBUG MainWin] _on_sheet_selected: Переключаюсь на sheet_editor и вызываю load_sheet для '{sheet_name}' с БД {self.project_db_path}") # <-- Добавим print
             self.stacked_widget.setCurrentWidget(self.sheet_editor)
-            self.sheet_editor.load_sheet(self.project_db_path, sheet_name)
+            # Загружаем данные через контроллер
+            try:
+                # get_sheet_data возвращает Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]
+                raw_data_list, styles_list = self.app_controller.get_sheet_data(sheet_name)
+                # Передаем в редактор (предполагается, что SimpleSheetEditor будет обновлен)
+                self.sheet_editor.load_sheet(sheet_name, raw_data_list, styles_list)
+            except Exception as e:
+                logger.error(f"Ошибка при загрузке данных листа '{sheet_name}': {e}", exc_info=True)
+                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить данные листа:\n{e}")
         else:
             logger.warning("sheet_editor или stacked_widget не инициализированы")
     
     def _on_export_excel(self):
         """Обработчик экспорта в Excel."""
-        if not self.project_db_path or not self.current_excel_file:
+        if not self.project_path or not self.app_controller:
             QMessageBox.warning(self, "Предупреждение", "Нет активного файла для экспорта")
             return
         
         # Предлагаем сохранить с именем оригинального файла + "_recreated"
-        original_path = Path(self.current_excel_file)
+        original_path = Path(self.current_excel_file) if self.current_excel_file else Path(self.project_path)
         default_output = original_path.parent / f"{original_path.stem}_recreated{original_path.suffix}"
         
         output_path, _ = QFileDialog.getSaveFileName(
@@ -513,7 +366,8 @@ class SimpleMainWindow(QMainWindow):
 
         try:
             logger.info(f"Экспорт в файл: {output_path}")
-            success = export_project_xlsxwriter(self.project_db_path, output_path)
+            # Вызываем экспорт через контроллер
+            success = self.app_controller.export_results(export_type="excel", output_path=output_path)
             
             if success:
                 logger.info("Экспорт завершен успешно")
@@ -545,15 +399,15 @@ class SimpleMainWindow(QMainWindow):
     
     def _cleanup_resources(self):
         """Очищает ресурсы."""
-        # Закрываем соединение с БД
-        if self.db_storage:
-            self.db_storage.disconnect()
-            self.db_storage = None
+        # Закрываем проект через контроллер
+        if self.app_controller:
+            self.app_controller.close_project()
+            self.app_controller = None
         
         # Сбрасываем состояние
         self.current_excel_file = None
         self.project_path = None
-        self.project_db_path = None
+        # self.project_db_path = None # УДАЛЯЕМ
         self.sheet_names = []
         # Сбрасываем состояние UI
         if self.file_explorer:

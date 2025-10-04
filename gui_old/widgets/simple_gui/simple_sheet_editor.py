@@ -19,12 +19,13 @@ class SimpleSheetEditor(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.db_path = None
-        self.sheet_name = None
+        # УДАЛЯЕМ: self.db_path = None
+        # УДАЛЯЕМ: self.sheet_name = None
         self._model: Optional[SimpleSheetModel] = None
 
         # Настройка логгера для SimpleSheetEditor
-        self.editor_logger = self._setup_logger()
+        # Логирование теперь зависит от внешнего контекста
+        self.editor_logger = get_logger(__name__ + ".SimpleSheetEditor") # Используем основной логгер
 
         self._setup_ui()
 
@@ -84,22 +85,15 @@ class SimpleSheetEditor(QWidget):
 
         layout.addWidget(self.table_view)
 
-    def load_sheet(self, db_path: str, sheet_name: str):
-        """Загружает данные листа из БД и отображает их."""
-        self.editor_logger.info(f"Загрузка листа '{sheet_name}' из БД: {db_path}")
-        logger.info(f"Загрузка листа '{sheet_name}' из БД: {db_path}") # Лог в основном логе тоже оставим
-        self.db_path = db_path
-        self.sheet_name = sheet_name
+    def load_sheet(self, sheet_name: str, raw_data_list, styles_list):
+        """Загружает данные листа из AppController и отображает их."""
+        logger.info(f"Загрузка листа '{sheet_name}' из AppController")
         self.label_sheet_name.setText(f"Лист: {sheet_name}")
 
-        # Обновляем логгер, чтобы он писал в правильную папку проекта
-        # (теперь, когда db_path известен)
-        self.editor_logger = self._setup_logger()
-
-        # Создаём новую модель
-        self.editor_logger.debug(f"Создание новой SimpleSheetModel для '{sheet_name}'")
+        # Создаём новую модель, передавая данные напрямую
+        self.editor_logger.debug(f"Создание новой SimpleSheetModel для '{sheet_name}' с переданными данными")
         try:
-            self._model = SimpleSheetModel(db_path, sheet_name)
+            self._model = SimpleSheetModel(raw_data_list, styles_list)
             self.editor_logger.debug(f"SimpleSheetModel создана, rowCount: {self._model.rowCount()}, columnCount: {self._model.columnCount()}")
         except Exception as e:
             self.editor_logger.error(f"Ошибка при создании SimpleSheetModel: {e}", exc_info=True)

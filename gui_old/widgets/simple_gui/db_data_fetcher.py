@@ -9,6 +9,8 @@ from typing import Dict, Any, List, Tuple, Optional
 import logging
 
 from backend.utils.logger import get_logger
+# Импортируем функцию для генерации имени таблицы сырых данных
+from backend.storage.raw_data import _get_raw_data_table_name
 
 logger = get_logger(__name__)
 
@@ -104,11 +106,19 @@ def fetch_sheet_data(sheet_name: str, db_path: str) -> Tuple[List[List[Any]], Di
         sheet_id = sheet_row[0]
 
         # 2. Загружаем "сырые" данные
-        cursor.execute(
-            "SELECT cell_address, value FROM raw_data WHERE sheet_name = ? ORDER BY cell_address",
-            (sheet_name,)
-        )
-        raw_data_rows = cursor.fetchall()
+        # Получаем имя таблицы для сырых данных этого листа
+        raw_data_table_name = _get_raw_data_table_name(sheet_name)
+        
+        # Проверяем, существует ли таблица
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (raw_data_table_name,))
+        if not cursor.fetchone():
+            logger.info(f"Таблица сырых данных '{raw_data_table_name}' для листа '{sheet_name}' не найдена. Данные будут пустыми.")
+            raw_data_rows = []
+        else:
+            cursor.execute(
+                f"SELECT cell_address, value FROM {raw_data_table_name} ORDER BY cell_address"
+            )
+            raw_data_rows = cursor.fetchall()
 
         # 3. Загружаем стили
         cursor.execute(

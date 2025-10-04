@@ -160,6 +160,32 @@ class AppController:
         """Получает историю редактирования."""
         return self.data_manager.get_edit_history(sheet_name, limit)
 
+    def get_sheet_names(self) -> List[str]:
+        """
+        Получает список имен листов из текущего проекта.
+
+        Returns:
+            List[str]: Список имен листов. Возвращает пустой список в случае ошибки или отсутствия подключения.
+        """
+        if not self.storage or not self.storage.connection:
+            logger.error("Нет подключения к БД для получения списка листов.")
+            return []
+
+        try:
+            cursor = self.storage.connection.cursor()
+            # Используем правильное имя столбца 'name' из таблицы 'sheets'
+            cursor.execute("SELECT name FROM sheets ORDER BY name;")
+            rows = cursor.fetchall()
+            sheet_names = [row[0] for row in rows]
+            logger.info(f"Получено {len(sheet_names)} имен листов из БД.")
+            return sheet_names
+        except sqlite3.Error as e:
+            logger.error(f"Ошибка SQLite при получении списка листов: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при получении списка листов: {e}", exc_info=True)
+            return []
+
     # --- Анализ Excel-файлов (делегировано AnalysisManager - заглушка) ---
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
         """Анализирует Excel-файл и сохраняет результаты в БД проекта."""
@@ -251,7 +277,7 @@ class AppController:
             project_id = 1
 
             # Проверяем, существует ли лист
-            cursor.execute("SELECT id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
+            cursor.execute("SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
             result = cursor.fetchone()
             if result:
                 logger.debug(f"Лист '{sheet_name}' найден с ID {result[0]}.")
