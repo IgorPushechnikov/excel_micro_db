@@ -53,6 +53,13 @@ class SheetExplorerWidget(QWidget):
         layout.addWidget(self.project_name_label)
         # --- КОНЕЦ НОВОГО ---
 
+        # --- НОВОЕ: QLabel для отображения имени последнего импортированного файла ---
+        self.imported_file_label = QLabel("Импортирован: <не указан>")
+        self.imported_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.imported_file_label.setStyleSheet("padding: 2px;") # Простой стиль
+        layout.addWidget(self.imported_file_label)
+        # --- КОНЕЦ НОВОГО ---
+
         self.list_widget = QListWidget(self)
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         # Подключаем сигнал itemChanged здесь, он будет работать для пользовательских изменений
@@ -69,7 +76,7 @@ class SheetExplorerWidget(QWidget):
 
     def update_sheet_list(self):
         """
-        Обновляет список листов из AppController и имя файла проекта.
+        Обновляет список листов из AppController, имя файла проекта и имя импортированного файла.
         Важно: временно отключает сигнал itemChanged, чтобы избежать ложных срабатываний
         при программном заполнении списка.
         """
@@ -79,6 +86,8 @@ class SheetExplorerWidget(QWidget):
             self.list_widget.itemChanged.connect(self._on_item_changed)
             # --- ОБНОВЛЕНИЕ ИМЕНИ ФАЙЛА ПРИ ОТСУТСТВИИ ПРОЕКТА ---
             self.project_name_label.setText("Проект: <не загружен>")
+            # --- ОБНОВЛЕНИЕ ИМЕНИ ИМПОРТИРОВАННОГО ФАЙЛА ПРИ ОТСУТСТВИИ ПРОЕКТА ---
+            self.imported_file_label.setText("Импортирован: <не указан>")
             # ---------------------------------------------
             return
 
@@ -108,6 +117,20 @@ class SheetExplorerWidget(QWidget):
         except Exception as e:
             logger.error(f"Ошибка при обновлении имени файла проекта в обозревателе: {e}", exc_info=True)
             self.project_name_label.setText("Проект: <ошибка загрузки>")
+        # --- КОНЕЦ НОВОГО ---
+
+        # --- НОВОЕ: Обновление имени импортированного файла ---
+        try:
+            imported_file_path_str = self.app_controller.last_imported_file_path
+            if imported_file_path_str:
+                imported_file_path = Path(imported_file_path_str)
+                imported_file_name = imported_file_path.name # Имя файла
+                self.imported_file_label.setText(f"Импортирован: {imported_file_name}")
+            else:
+                self.imported_file_label.setText("Импортирован: <не указан>")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении имени импортированного файла в обозревателе: {e}", exc_info=True)
+            self.imported_file_label.setText("Импортирован: <ошибка>")
         # --- КОНЕЦ НОВОГО ---
 
 
