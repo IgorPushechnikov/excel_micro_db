@@ -7,8 +7,9 @@
 import logging
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QMainWindow, QMenuBar, QStatusBar, QToolBar, QComboBox, QFileDialog, # <-- Добавлен QComboBox
-    QMessageBox, QProgressDialog, QWidget, QStackedWidget, QHBoxLayout, QSplitter
+    QMainWindow, QMenuBar, QStatusBar, QToolBar, QFileDialog,
+    QMessageBox, QProgressDialog, QWidget, QStackedWidget, QHBoxLayout, QSplitter,
+    QCheckBox, QPushButton, QMenu, QAction, QActionGroup # <-- Новые импорты
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QAction, QIcon
@@ -20,42 +21,50 @@ from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# --- Вспомогательный класс для выполнения анализа в отдельном потоке ---
-class AnalysisWorker(QThread):
+# --- НОВОЕ: Вспомогательный класс для выполнения импорта в отдельном потоке ---
+class ImportWorker(QThread):
     """
-    Рабочий поток для выполнения анализа Excel-файла.
-    Выполняет анализ в отдельном потоке, не взаимодействуя напрямую с AppController.
+    Рабочий поток для выполнения импорта данных через AppController.
     """
-    # finished = Signal(bool)  # Старый сигнал
-    finished = Signal(object, bool)  # Новый сигнал: (результат_анализа, успех/ошибка)
+    finished = Signal(bool, str)  # (успех/ошибка, сообщение)
+    progress = Signal(int, str)   # (значение, сообщение) - если AppController будет передавать прогресс
 
-    def __init__(self, excel_file_path, options=None):
+    def __init__(self, app_controller, file_path, import_type, import_mode):
         super().__init__()
-        self.excel_file_path = excel_file_path
-        self.options = options or {} # options пока не используются в анализе, но могут пригодиться
+        self.app_controller = app_controller
+        self.file_path = file_path
+        self.import_type = import_type
+        self.import_mode = import_mode
 
     def run(self):
         """
-        Запускает анализ в отдельном потоке.
+        Запускает импорт в отдельном потоке.
         """
         try:
-            logger.info(f"Начало анализа файла {self.excel_file_path} в потоке {id(QThread.currentThread())}")
-            # Импортируем анализатор
-            from backend.analyzer.logic_documentation import analyze_excel_file
+            logger.info(f"Начало импорта (тип: {self.import_type}, режим: {self.import_mode}) для файла {self.file_path} в потоке {id(QThread.currentThread())}")
 
-            # Вызываем анализатор напрямую
-            # NOTE: analyze_excel_file принимает только file_path, опции обрабатываются внутри или не поддерживаются напрямую.
-            # Для выборочной загрузки нужно будет модифицировать сам analyze_excel_file или AppController.
-            # Пока передаём только путь.
-            analysis_results = analyze_excel_file(self.excel_file_path) # <-- Убран self.options
-            logger.info(f"Анализ файла {self.excel_file_path} завершён в потоке {id(QThread.currentThread())}.")
+            # Определяем метод AppController на основе типа и режима
+            method_name = f"import_{self.import_type}_from_excel"
+            if self.import_mode != 'all' and self.import_mode != 'fast':
+                 method_name += f"_{self.import_mode}"
 
-            # Отправляем результат анализа и флаг успеха
-            self.finished.emit(analysis_results, True)
+            method = getattr(self.app_controller, method_name, None)
+            if method is None:
+                raise AttributeError(f"AppController не имеет метода {method_name}")
+
+            # Вызываем метод
+            success = method(self.file_path)
+
+            logger.info(f"Импорт (тип: {self.import_type}, режим: {self.import_mode}) для файла {self.file_path} завершён в потоке {id(QThread.currentThread())}.")
+
+            # Отправляем результат
+            self.finished.emit(success, f"Импорт ({self.import_type}, {self.import_mode}) {'успешен' if success else 'неудачен'}.")
+
         except Exception as e:
-            logger.error(f"Ошибка в потоке анализа для файла {self.excel_file_path}: {e}", exc_info=True)
-            # Отправляем None и флаг ошибки
-            self.finished.emit(None, False)
+            logger.error(f"Ошибка в потоке импорта для файла {self.file_path} (тип: {self.import_type}, режим: {self.import_mode}): {e}", exc_info=True)
+            # Отправляем ошибку
+            self.finished.emit(False, f"Ошибка импорта: {e}")
+# --- КОНЕЦ НОВОГО ---
 
 # --- Основное окно ---
 class MainWindow(QMainWindow):
@@ -69,12 +78,19 @@ class MainWindow(QMainWindow):
         self.current_project_path = None
         self.current_sheet_name = None
         self.sheet_editor_widget = None
-        self.analysis_worker = None
+        # --- УДАЛЕНО: analysis_worker, excel_file_path_to_import, import_options ---
+        # Старый AnalysisWorker и связанные атрибуты больше не нужны
+        # self.analysis_worker = None
+        # self.excel_file_path_to_import = None
+        # self.import_options = None
+        # --- КОНЕЦ УДАЛЕНИЯ ---
+        self.import_worker = None # <-- Новый атрибут для нового потока импорта
         self.progress_dialog = None
-        # NOTE: Добавим атрибут для хранения пути к файлу, который нужно импортировать
-        # Он будет установлен в _on_import_triggered и использован в _on_analysis_finished
-        self.excel_file_path_to_import = None
-        self.import_options = None
+
+        # --- НОВОЕ: Атрибуты для хранения выбранного типа и режима импорта ---
+        self.selected_import_type = 'all_data'  # 'all_data', 'styles', 'charts', 'formulas', 'raw_data_pandas'
+        self.selected_import_mode = 'all'       # 'all', 'selective', 'chunks', 'fast'
+        # --- КОНЕЦ НОВОГО ---
 
         self.setWindowTitle("Excel Micro DB GUI")
         self.setGeometry(100, 100, 1200, 800)
@@ -112,18 +128,102 @@ class MainWindow(QMainWindow):
         tool_bar = QToolBar("Основная", self)
         self.addToolBar(tool_bar)
 
-        # --- УДАЛЕНО: Комбобокс для выбора листа ---
-        # self.sheet_combo_box = QComboBox(self)
-        # self.sheet_combo_box.addItem("Выберите лист...")
-        # tool_bar.addWidget(self.sheet_combo_box)
+        # --- НОВОЕ: Чекбокс для управления логированием ---
+        self.logging_checkbox = QCheckBox("Логирование", self)
+        self.logging_checkbox.setChecked(True)  # По умолчанию включено
+        tool_bar.addWidget(self.logging_checkbox)
+        # --- КОНЕЦ НОВОГО ---
+
+        # --- УДАЛЕНО: Старый import_combo_box ---
+        # self.import_combo_box = QComboBox(self)
+        # self.import_combo_box.addItems(["Все данные", "Последовательный", "Выборочный"])
+        # import_button = tool_bar.addWidget(self.import_combo_box)
+        # import_button.setText("Импорт")
         # --- КОНЕЦ УДАЛЕНИЯ ---
 
-        # Выпадающий список для импорта
-        self.import_combo_box = QComboBox(self) # <-- QComboBox используется для выбора типа импорта
-        self.import_combo_box.addItems(["Все данные", "Последовательный", "Выборочный"])
-        # Добавляем его как кнопку с выпадающим списком
-        import_button = tool_bar.addWidget(self.import_combo_box)
-        import_button.setText("Импорт")
+        # --- НОВОЕ: Кнопка с меню для выбора типа и режима импорта ---
+        self.import_type_button = QPushButton("Тип импорта", self)
+        self.import_type_menu = QMenu(self.import_type_button)
+
+        # Подменю для типа данных
+        self.import_data_type_menu = self.import_type_menu.addMenu("Тип данных")
+        self.import_data_type_action_group = QActionGroup(self)
+        self.import_data_type_action_group.setExclusive(True)
+
+        self.all_data_action = QAction("Все данные", self)
+        self.all_data_action.setCheckable(True)
+        self.all_data_action.setChecked(True) # По умолчанию
+        self.all_data_action.triggered.connect(lambda: self._on_import_type_selected('all_data'))
+        self.import_data_type_action_group.addAction(self.all_data_action)
+        self.import_data_type_menu.addAction(self.all_data_action)
+
+        self.raw_data_action = QAction("Сырые данные", self)
+        self.raw_data_action.setCheckable(True)
+        self.raw_data_action.triggered.connect(lambda: self._on_import_type_selected('raw_data'))
+        self.import_data_type_action_group.addAction(self.raw_data_action)
+        self.import_data_type_menu.addAction(self.raw_data_action)
+
+        self.styles_action = QAction("Стили", self)
+        self.styles_action.setCheckable(True)
+        self.styles_action.triggered.connect(lambda: self._on_import_type_selected('styles'))
+        self.import_data_type_action_group.addAction(self.styles_action)
+        self.import_data_type_menu.addAction(self.styles_action)
+
+        self.charts_action = QAction("Диаграммы", self)
+        self.charts_action.setCheckable(True)
+        self.charts_action.triggered.connect(lambda: self._on_import_type_selected('charts'))
+        self.import_data_type_action_group.addAction(self.charts_action)
+        self.import_data_type_menu.addAction(self.charts_action)
+
+        self.formulas_action = QAction("Формулы", self)
+        self.formulas_action.setCheckable(True)
+        self.formulas_action.triggered.connect(lambda: self._on_import_type_selected('formulas'))
+        self.import_data_type_action_group.addAction(self.formulas_action)
+        self.import_data_type_menu.addAction(self.formulas_action)
+
+        self.raw_data_pandas_action = QAction("Сырые данные (pandas)", self)
+        self.raw_data_pandas_action.setCheckable(True)
+        self.raw_data_pandas_action.triggered.connect(lambda: self._on_import_type_selected('raw_data_pandas'))
+        self.import_data_type_action_group.addAction(self.raw_data_pandas_action)
+        self.import_data_type_menu.addAction(self.raw_data_pandas_action)
+
+        # Подменю для режима импорта
+        self.import_mode_menu = self.import_type_menu.addMenu("Режим импорта")
+        self.import_mode_action_group = QActionGroup(self)
+        self.import_mode_action_group.setExclusive(True)
+
+        self.import_mode_all_action = QAction("Всё", self)
+        self.import_mode_all_action.setCheckable(True)
+        self.import_mode_all_action.setChecked(True) # По умолчанию
+        self.import_mode_all_action.triggered.connect(lambda: self._on_import_mode_selected('all'))
+        self.import_mode_action_group.addAction(self.import_mode_all_action)
+        self.import_mode_menu.addAction(self.import_mode_all_action)
+
+        self.import_mode_selective_action = QAction("Выборочно", self)
+        self.import_mode_selective_action.setCheckable(True)
+        self.import_mode_selective_action.triggered.connect(lambda: self._on_import_mode_selected('selective'))
+        self.import_mode_action_group.addAction(self.import_mode_selective_action)
+        self.import_mode_menu.addAction(self.import_mode_selective_action)
+
+        self.import_mode_chunks_action = QAction("Частями", self)
+        self.import_mode_chunks_action.setCheckable(True)
+        self.import_mode_chunks_action.triggered.connect(lambda: self._on_import_mode_selected('chunks'))
+        self.import_mode_action_group.addAction(self.import_mode_chunks_action)
+        self.import_mode_menu.addAction(self.import_mode_chunks_action)
+
+        self.import_mode_fast_action = QAction("Быстрый (pandas)", self)
+        self.import_mode_fast_action.setCheckable(True)
+        self.import_mode_fast_action.setEnabled(False) # Доступен только для 'raw_data_pandas'
+        self.import_mode_fast_action.triggered.connect(lambda: self._on_import_mode_selected('fast'))
+        self.import_mode_action_group.addAction(self.import_mode_fast_action)
+        self.import_mode_menu.addAction(self.import_mode_fast_action)
+
+        # Привязываем меню к кнопке
+        self.import_type_button.setMenu(self.import_type_menu)
+
+        # Добавляем кнопку на панель инструментов
+        tool_bar.addWidget(self.import_type_button)
+        # --- КОНЕЦ НОВОГО ---
 
         # Статусная строка
         self.status_bar = QStatusBar(self)
@@ -162,13 +262,18 @@ class MainWindow(QMainWindow):
         self.save_project_action.triggered.connect(self._on_save_project_triggered)
         self.import_action.triggered.connect(self._on_import_triggered)
         self.export_action.triggered.connect(self._on_export_triggered)
-        # --- УДАЛЕНО: Подключение комбобокса ---
-        # self.sheet_combo_box.currentTextChanged.connect(self._on_sheet_changed)
-        # --- КОНЕЦ УДАЛЕНИЯ ---
+
+        # --- НОВОЕ: Подключение чекбокса логирования ---
+        self.logging_checkbox.stateChanged.connect(self._on_logging_toggled)
+        # --- КОНЕЦ НОВОГО ---
 
         # --- НОВОЕ: Подключение сигналов обозревателя ---
         self.sheet_explorer.sheet_selected.connect(self._on_sheet_selected)
         self.sheet_explorer.sheet_renamed.connect(self._on_sheet_renamed)
+        # --- КОНЕЦ НОВОГО ---
+
+        # --- НОВОЕ: Подключение сигналов выбора типа и режима импорта ---
+        # Обработчики уже подключены в _setup_ui при создании QAction
         # --- КОНЕЦ НОВОГО ---
 
     def _on_new_project_triggered(self):
@@ -243,7 +348,8 @@ class MainWindow(QMainWindow):
 
     def _on_import_triggered(self):
         """
-        Обработчик импорта.
+        Обработчик импорта. Вызывает соответствующий метод AppController
+        на основе выбранных типа и режима.
         """
         # Открываем диалог выбора файла Excel
         file_path_str, ok = QFileDialog.getOpenFileName(
@@ -255,100 +361,63 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Файл не найден: {excel_file_path}")
                 return
 
-            # Получаем выбранный тип импорта из выпадающего списка
-            import_type = self.import_combo_box.currentText()
-            logger.info(f"Выбран тип импорта: {import_type} для файла {excel_file_path}")
+            # Используем выбранные тип и режим
+            import_type = self.selected_import_type
+            import_mode = self.selected_import_mode
+            logger.info(f"Выбран тип импорта: {import_type}, режим: {import_mode} для файла {excel_file_path}")
 
             # Показываем диалог прогресса
-            self.progress_dialog = QProgressDialog("Анализ файла...", "Отмена", 0, 100, self)
+            self.progress_dialog = QProgressDialog("Импорт...", "Отмена", 0, 100, self)
             self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             self.progress_dialog.setMinimumDuration(0) # Показываем сразу
             self.progress_dialog.setValue(0)
 
-            # --- ИСПРАВЛЕНО: Передаём excel_file_path и options в AnalysisWorker ---
-            # Запоминаем путь и опции для использования в _on_analysis_finished
-            self.excel_file_path_to_import = str(excel_file_path)
-            self.import_options = {'import_type': import_type}
-            self.analysis_worker = AnalysisWorker(
-                str(excel_file_path), # Передаём путь к файлу
-                options={'import_type': import_type} # Передаём тип импорта как опцию (пока не используется в анализе)
-            )
-            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-            self.analysis_worker.finished.connect(self._on_analysis_finished)
-            self.analysis_worker.start()
+            # Создаем рабочий поток для вызова AppController метода
+            self.import_worker = ImportWorker(self.app_controller, str(excel_file_path), import_type, import_mode)
+            self.import_worker.finished.connect(self._on_import_finished)
+            # self.import_worker.progress.connect(self._on_import_progress) # Если нужно отображать прогресс изнутри AppController
 
-    def _on_analysis_progress(self, value, message):
+            self.import_worker.start()
+
+    def _on_import_progress(self, value, message):
         """
-        Обработчик прогресса анализа.
+        Обработчик прогресса импорта (если поддерживается).
         """
         if self.progress_dialog:
             self.progress_dialog.setValue(value)
             self.progress_dialog.setLabelText(message)
-            # Проверяем, не нажата ли кнопка отмены
             if self.progress_dialog.wasCanceled():
-                # AppController должен поддерживать отмену, если возможно
-                # Пока просто останавливаем поток (не идеально)
-                # --- ИСПРАВЛЕНО: Проверка на None перед terminate и wait ---
-                if self.analysis_worker:
-                    self.analysis_worker.terminate()
-                    self.analysis_worker.wait()
-                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+                # TODO: Реализовать отмену в AppController методах, если возможно
+                if self.import_worker:
+                    self.import_worker.terminate()
+                    self.import_worker.wait()
                 self.progress_dialog = None
-                self.analysis_worker = None
-                logger.info("Анализ отменён пользователем.")
-                self.status_bar.showMessage("Анализ отменён.")
+                self.import_worker = None
+                logger.info("Импорт отменён пользователем.")
+                self.status_bar.showMessage("Импорт отменён.")
                 return
 
-    def _on_analysis_finished(self, analysis_results, success):
+    def _on_import_finished(self, success, message):
         """
-        Обработчик завершения анализа.
+        Обработчик завершения импорта.
         """
         if self.progress_dialog:
             self.progress_dialog.close()
             self.progress_dialog = None
 
-        if self.analysis_worker:
-            self.analysis_worker.wait() # Убедиться, что поток завершён
-            self.analysis_worker = None
+        if self.import_worker:
+            self.import_worker.wait() # Убедиться, что поток завершён
+            self.import_worker = None
 
-        if success and analysis_results is not None:
-            logger.info("Анализ файла успешно завершён в отдельном потоке. Начинаю сохранение в БД через AppController в основном потоке.")
-            # --- НОВОЕ: Вызываем AppController в основном потоке ---
-            # NOTE: Здесь мы снова вызываем analyze_excel_file, который сам анализирует файл.
-            # Это неэффективно. Лучше было бы модифицировать AppController,
-            # чтобы он мог принимать уже проанализированные данные (analysis_results).
-            # Но для простоты и соответствия текущей структуре AppController,
-            # мы вызываем его снова. Главное, что теперь это происходит в основном потоке.
-            # TODO: Рассмотреть передачу analysis_results в AppController.
-            try:
-                # Вызов AppController.analyze_excel_file в основном потоке
-                # Используем путь и опции, сохранённые в _on_import_triggered
-                # --- ИСПРАВЛЕНО: Добавлена проверка на None для excel_file_path_to_import ---
-                if self.excel_file_path_to_import is not None:
-                    app_controller_success = self.app_controller.analyze_excel_file(self.excel_file_path_to_import, self.import_options)
-                    if app_controller_success:
-                        logger.info("Сохранение результатов анализа в БД через AppController успешно завершено.")
-                        self.status_bar.showMessage("Импорт завершён успешно.")
-                        # Обновляем список листов, так как могли появиться новые
-                        self._update_sheet_list()
-                    else:
-                        logger.error("AppController не смог сохранить результаты анализа в БД.")
-                        self.status_bar.showMessage("Ошибка сохранения в БД после анализа.")
-                        QMessageBox.critical(self, "Ошибка", "AppController не смог сохранить результаты анализа в БД.")
-                else:
-                    logger.error("Путь к файлу для импорта не установлен (excel_file_path_to_import is None).")
-                    self.status_bar.showMessage("Критическая ошибка: путь к файлу не найден.")
-                    QMessageBox.critical(self, "Ошибка", "Критическая ошибка: путь к файлу не найден.")
-                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-            except Exception as e_app:
-                logger.error(f"Ошибка при вызове AppController.analyze_excel_file: {e_app}", exc_info=True)
-                self.status_bar.showMessage("Ошибка вызова AppController.")
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при вызове AppController: {e_app}")
-            # --- КОНЕЦ НОВОГО ---
+        if success:
+            logger.info(f"Импорт успешно завершён: {message}")
+            self.status_bar.showMessage(f"Импорт завершён: {message}")
+            # Обновляем список листов, так как могли появиться новые
+            self._update_sheet_list()
         else:
-            logger.error("Анализ файла завершился с ошибкой в отдельном потоке или результат пуст.")
-            self.status_bar.showMessage("Ошибка импорта.")
-            QMessageBox.critical(self, "Ошибка", "Ошибка при импорте файла.")
+            logger.error(f"Импорт завершился с ошибкой: {message}")
+            self.status_bar.showMessage(f"Ошибка импорта: {message}")
+            QMessageBox.critical(self, "Ошибка", message)
 
     def _on_export_triggered(self):
         """
@@ -418,4 +487,52 @@ class MainWindow(QMainWindow):
         # Если активный лист был переименован, обновим current_sheet_name
         if self.current_sheet_name == old_name:
             self.current_sheet_name = new_name
+    # --- КОНЕЦ НОВЫХ МЕТОДОВ ---
+
+    # --- НОВЫЕ МЕТОДЫ: Обработчики выбора типа и режима, логирования ---
+    def _on_logging_toggled(self, state):
+        """
+        Обработчик переключения состояния чекбокса логирования.
+        """
+        is_enabled = state == Qt.CheckState.Checked.value
+        self.app_controller.set_logging_enabled(is_enabled)
+        logger.info(f"Логирование {'включено' if is_enabled else 'отключено'} через GUI.")
+
+    def _on_import_type_selected(self, import_type: str):
+        """
+        Обработчик выбора типа данных для импорта.
+        """
+        self.selected_import_type = import_type
+        logger.info(f"Выбран тип импорта: {import_type}")
+        # Включаем/отключаем режим "Быстрый" в зависимости от типа
+        self.import_mode_fast_action.setEnabled(import_type == 'raw_data_pandas')
+        # Если выбран 'raw_data_pandas', автоматически выбираем режим 'fast'
+        if import_type == 'raw_data_pandas':
+            self.import_mode_fast_action.setChecked(True)
+            self.selected_import_mode = 'fast'
+        # Если был выбран 'fast', но тип изменили не на 'raw_data_pandas', сбрасываем на 'all'
+        elif self.selected_import_mode == 'fast' and import_type != 'raw_data_pandas':
+            self.import_mode_all_action.setChecked(True)
+            self.selected_import_mode = 'all'
+
+    def _on_import_mode_selected(self, import_mode: str):
+        """
+        Обработчик выбора режима импорта.
+        """
+        # Проверяем, можно ли выбрать этот режим для текущего типа
+        if self.selected_import_type == 'raw_data_pandas' and import_mode != 'fast':
+            # Если тип 'raw_data_pandas', но режим не 'fast', сбрасываем на 'fast'
+            logger.warning(f"Для типа 'raw_data_pandas' доступен только режим 'fast'. Сброс на 'fast'.")
+            self.import_mode_fast_action.setChecked(True)
+            self.selected_import_mode = 'fast'
+            return
+        elif self.selected_import_type != 'raw_data_pandas' and import_mode == 'fast':
+            # Если режим 'fast', но тип не 'raw_data_pandas', сбрасываем на 'all'
+            logger.warning(f"Режим 'fast' доступен только для типа 'raw_data_pandas'. Сброс на 'all'.")
+            self.import_mode_all_action.setChecked(True)
+            self.selected_import_mode = 'all'
+            return
+
+        self.selected_import_mode = import_mode
+        logger.info(f"Выбран режим импорта: {import_mode}")
     # --- КОНЕЦ НОВЫХ МЕТОДОВ ---
