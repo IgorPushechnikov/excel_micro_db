@@ -36,27 +36,28 @@ logger = get_logger(__name__)
 
 # --- Вспомогательные функции ---
 
-def _get_sheet_id_by_name(storage, sheet_name: str) -> Optional[int]:
-    """
-    Вспомогательная функция для получения sheet_id по имени листа.
-    """
-    if not storage or not storage.connection:
-        return None
-
-    try:
-        cursor = storage.connection.cursor()
-        # Предполагаем project_id = 1
-        cursor.execute("SELECT sheet_id FROM sheets WHERE name = ? AND project_id = 1", (sheet_name,))
-        result = cursor.fetchone()
-        return result[0] if result else None
-    except Exception as e:
-        logger.error(f"Ошибка при получении sheet_id для листа '{sheet_name}': {e}")
-        return None
+# УДАЛЯЕМ _get_sheet_id_by_name, так как storage.save_sheet делает то же самое лучше.
+# def _get_sheet_id_by_name(storage, sheet_name: str) -> Optional[int]:
+#     """
+#     Вспомогательная функция для получения sheet_id по имени листа.
+#     """
+#     if not storage or not storage.connection:
+#         return None
+#
+#     try:
+#         cursor = storage.connection.cursor()
+#         # Предполагаем project_id = 1
+#         cursor.execute("SELECT sheet_id FROM sheets WHERE name = ? AND project_id = 1", (sheet_name,))
+#         result = cursor.fetchone()
+#         return result[0] if result else None
+#     except Exception as e:
+#         logger.error(f"Ошибка при получении sheet_id для листа '{sheet_name}': {e}")
+#         return None
 
 
 # --- Функции для импорта "всё" по типам ---
 
-def import_raw_data_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_raw_data_from_excel(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только "сырые" данные (значения ячеек) из Excel-файла в БД проекта.
 
@@ -82,16 +83,30 @@ def import_raw_data_from_excel(storage, file_path: str, options: Optional[Dict[s
         workbook = openpyxl.load_workbook(file_path, data_only=False)
         logger.debug(f"Книга '{file_path}' успешно открыта.")
 
-        sheets_to_import = options.get('sheets', []) if options else []
-        if not sheets_to_import:
-            sheets_to_import = workbook.sheetnames
+        sheets_to_import_orig = options.get('sheets', []) if options else []
+        if not sheets_to_import_orig:
+            sheets_to_import_orig = workbook.sheetnames
 
-        for sheet_name in sheets_to_import:
+        # Явно приводим элементы к str для устранения ошибки Pylance
+        sheets_to_import: List[str] = [str(name) for name in sheets_to_import_orig]
+
+        for sheet_name_orig in sheets_to_import:
+            # Убедимся, что имя листа - строка
+            sheet_name: str = str(sheet_name_orig)
             if sheet_name not in workbook.sheetnames:
                 logger.warning(f"Лист '{sheet_name}' не найден в файле '{file_path}'. Пропущен.")
                 continue
 
             logger.info(f"Импорт 'сырых' данных с листа: {sheet_name}")
+            
+            # --- НОВОЕ: Гарантируем, что запись о листе существует ---
+            # Предполагаем project_id = 1 для MVP
+            sheet_id = storage.save_sheet(project_id=1, sheet_name=sheet_name)
+            if sheet_id is None:
+                logger.error(f"Не удалось создать/получить ID для листа '{sheet_name}'. Пропущен.")
+                return False # Возвращаем False при ошибке создания записи о листе
+            # --- КОНЕЦ НОВОГО ---
+
             sheet: Worksheet = workbook[sheet_name]
 
             raw_data_list = []
@@ -116,7 +131,7 @@ def import_raw_data_from_excel(storage, file_path: str, options: Optional[Dict[s
         return False
 
 
-def import_styles_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_styles_from_excel(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только стили из Excel-файла в БД проекта.
 
@@ -140,20 +155,34 @@ def import_styles_from_excel(storage, file_path: str, options: Optional[Dict[str
 
     try:
         workbook = openpyxl.load_workbook(file_path, data_only=False)
-        logger.debug(f"Книга '{file_path}' успешно открыта.")
+        logger.debug(f"Книга '{file_path}' успешно открыта.
 
-        sheets_to_import = options.get('sheets', []) if options else []
-        if not sheets_to_import:
-            sheets_to_import = workbook.sheetnames
+        sheets_to_import_orig = options.get('sheets', []) if options else []
+        if not sheets_to_import_orig:
+            sheets_to_import_orig = workbook.sheetnames
+
+        # Явно приводим элементы к str для устранения ошибки Pylance
+        sheets_to_import: List[str] = [str(name) for name in sheets_to_import_orig]
 
         import json
 
-        for sheet_name in sheets_to_import:
+        for sheet_name_orig in sheets_to_import:
+            # Убедимся, что имя листа - строка
+            sheet_name: str = str(sheet_name_orig)
             if sheet_name not in workbook.sheetnames:
                 logger.warning(f"Лист '{sheet_name}' не найден в файле '{file_path}'. Пропущен.")
                 continue
 
             logger.info(f"Импорт стилей с листа: {sheet_name}")
+            
+            # --- НОВОЕ: Гарантируем, что запись о листе существует ---
+            # Предполагаем project_id = 1 для MVP
+            sheet_id = storage.save_sheet(project_id=1, sheet_name=sheet_name)
+            if sheet_id is None:
+                logger.error(f"Не удалось создать/получить ID для листа '{sheet_name}'. Пропущен.")
+                return False # Возвращаем False при ошибке создания записи о листе
+            # --- КОНЕЦ НОВОГО ---
+
             sheet: Worksheet = workbook[sheet_name]
 
             style_ranges_map: Dict[str, List[str]] = {}
@@ -178,10 +207,11 @@ def import_styles_from_excel(storage, file_path: str, options: Optional[Dict[str
                         "style_attributes": style_json
                     })
 
-            sheet_id = _get_sheet_id_by_name(storage, sheet_name)
-            if sheet_id is None:
-                logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                return False # Возвращаем False при ошибке
+            # УДАЛЯЕМ вызов _get_sheet_id_by_name, так как sheet_id уже получен выше
+            # sheet_id = _get_sheet_id_by_name(storage, sheet_name)
+            # if sheet_id is None:
+            #     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
+            #     return False # Возвращаем False при ошибке
 
             if not storage.save_sheet_styles(sheet_id, styles_to_save):
                 logger.error(f"Не удалось сохранить стили для листа '{sheet_name}' (ID: {sheet_id}).")
@@ -195,7 +225,7 @@ def import_styles_from_excel(storage, file_path: str, options: Optional[Dict[str
         return False
 
 
-def import_charts_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_charts_from_excel(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только диаграммы из Excel-файла в БД проекта.
 
@@ -221,16 +251,30 @@ def import_charts_from_excel(storage, file_path: str, options: Optional[Dict[str
         workbook = openpyxl.load_workbook(file_path, data_only=False)
         logger.debug(f"Книга '{file_path}' успешно открыта.")
 
-        sheets_to_import = options.get('sheets', []) if options else []
-        if not sheets_to_import:
-            sheets_to_import = workbook.sheetnames
+        sheets_to_import_orig = options.get('sheets', []) if options else []
+        if not sheets_to_import_orig:
+            sheets_to_import_orig = workbook.sheetnames
 
-        for sheet_name in sheets_to_import:
+        # Явно приводим элементы к str для устранения ошибки Pylance
+        sheets_to_import: List[str] = [str(name) for name in sheets_to_import_orig]
+
+        for sheet_name_orig in sheets_to_import:
+            # Убедимся, что имя листа - строка
+            sheet_name: str = str(sheet_name_orig)
             if sheet_name not in workbook.sheetnames:
                 logger.warning(f"Лист '{sheet_name}' не найден в файле '{file_path}'. Пропущен.")
                 continue
 
             logger.info(f"Импорт диаграмм с листа: {sheet_name}")
+            
+            # --- НОВОЕ: Гарантируем, что запись о листе существует ---
+            # Предполагаем project_id = 1 для MVP
+            sheet_id = storage.save_sheet(project_id=1, sheet_name=sheet_name)
+            if sheet_id is None:
+                logger.error(f"Не удалось создать/получить ID для листа '{sheet_name}'. Пропущен.")
+                return False # Возвращаем False при ошибке создания записи о листе
+            # --- КОНЕЦ НОВОГО ---
+
             sheet: Worksheet = workbook[sheet_name]
 
             charts_list = []
@@ -248,10 +292,11 @@ def import_charts_from_excel(storage, file_path: str, options: Optional[Dict[str
             except Exception as e:
                 logger.error(f"Ошибка при извлечении диаграмм с листа '{sheet_name}': {e}", exc_info=True)
 
-            sheet_id = _get_sheet_id_by_name(storage, sheet_name)
-            if sheet_id is None:
-                logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                return False # Возвращаем False при ошибке
+            # УДАЛЯЕМ вызов _get_sheet_id_by_name, так как sheet_id уже получен выше
+            # sheet_id = _get_sheet_id_by_name(storage, sheet_name)
+            # if sheet_id is None:
+            #     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
+            #     return False # Возвращаем False при ошибке
 
             if not storage.save_sheet_charts(sheet_id, charts_list):
                 logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
@@ -265,7 +310,7 @@ def import_charts_from_excel(storage, file_path: str, options: Optional[Dict[str
         return False
 
 
-def import_formulas_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_formulas_from_excel(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только формулы из Excel-файла в БД проекта.
 
@@ -291,16 +336,30 @@ def import_formulas_from_excel(storage, file_path: str, options: Optional[Dict[s
         workbook = openpyxl.load_workbook(file_path, data_only=False)
         logger.debug(f"Книга '{file_path}' успешно открыта.")
 
-        sheets_to_import = options.get('sheets', []) if options else []
-        if not sheets_to_import:
-            sheets_to_import = workbook.sheetnames
+        sheets_to_import_orig = options.get('sheets', []) if options else []
+        if not sheets_to_import_orig:
+            sheets_to_import_orig = workbook.sheetnames
 
-        for sheet_name in sheets_to_import:
+        # Явно приводим элементы к str для устранения ошибки Pylance
+        sheets_to_import: List[str] = [str(name) for name in sheets_to_import_orig]
+
+        for sheet_name_orig in sheets_to_import:
+            # Убедимся, что имя листа - строка
+            sheet_name: str = str(sheet_name_orig)
             if sheet_name not in workbook.sheetnames:
                 logger.warning(f"Лист '{sheet_name}' не найден в файле '{file_path}'. Пропущен.")
                 continue
 
             logger.info(f"Импорт формул с листа: {sheet_name}")
+            
+            # --- НОВОЕ: Гарантируем, что запись о листе существует ---
+            # Предполагаем project_id = 1 для MVP
+            sheet_id = storage.save_sheet(project_id=1, sheet_name=sheet_name)
+            if sheet_id is None:
+                logger.error(f"Не удалось создать/получить ID для листа '{sheet_name}'. Пропущен.")
+                return False # Возвращаем False при ошибке создания записи о листе
+            # --- КОНЕЦ НОВОГО ---
+
             sheet: Worksheet = workbook[sheet_name]
 
             formulas_list = []
@@ -313,10 +372,11 @@ def import_formulas_from_excel(storage, file_path: str, options: Optional[Dict[s
                              "formula": cell.value # Сохраняем формулу как есть, включая '='
                          })
 
-            sheet_id = _get_sheet_id_by_name(storage, sheet_name)
-            if sheet_id is None:
-                logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                return False # Возвращаем False при ошибке
+            # УДАЛЯЕМ вызов _get_sheet_id_by_name, так как sheet_id уже получен выше
+            # sheet_id = _get_sheet_id_by_name(storage, sheet_name)
+            # if sheet_id is None:
+            #     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
+            #     return False # Возвращаем False при ошибке
 
             if not storage.save_sheet_formulas(sheet_id, formulas_list):
                 logger.error(f"Не удалось сохранить формулы для листа '{sheet_name}' (ID: {sheet_id}).")
@@ -336,7 +396,7 @@ def import_formulas_from_excel(storage, file_path: str, options: Optional[Dict[s
 # но с фильтрацией по листам/диапазонам, переданным в options.
 # Например, options = {'sheets': ['Sheet1'], 'start_row': 1, 'end_row': 100}
 
-def import_raw_data_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_raw_data_from_excel_selective(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует "сырые" данные выборочно из Excel-файла в БД проекта.
     """
@@ -346,21 +406,21 @@ def import_raw_data_from_excel_selective(storage, file_path: str, options: Optio
     # Пока возвращаем True как успешное выполнение заглушки
     return True
 
-def import_styles_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_styles_from_excel_selective(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует стили выборочно из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт стилей выборочно из '{file_path}' с опциями {options}. (Заглушка)")
     return True
 
-def import_charts_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_charts_from_excel_selective(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует диаграммы выборочно из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт диаграмм выборочно из '{file_path}' с опциями {options}. (Заглушка)")
     return True
 
-def import_formulas_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_formulas_from_excel_selective(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует формулы выборочно из Excel-файла в БД проекта.
     """
@@ -374,7 +434,7 @@ def import_formulas_from_excel_selective(storage, file_path: str, options: Optio
 # на части и вызывать соответствующую функцию импорта для каждой части.
 # Например, импортировать по 1000 строк за раз.
 
-def import_raw_data_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_raw_data_from_excel_in_chunks(storage: ProjectDBStorage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует "сырые" данные частями из Excel-файла в БД проекта.
     """
@@ -383,21 +443,21 @@ def import_raw_data_from_excel_in_chunks(storage, file_path: str, chunk_options:
     # import_raw_data_from_excel_selective для каждой части
     return True
 
-def import_styles_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_styles_from_excel_in_chunks(storage: ProjectDBStorage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует стили частями из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт стилей частями из '{file_path}' с опциями {chunk_options}. (Заглушка)")
     return True
 
-def import_charts_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_charts_from_excel_in_chunks(storage: ProjectDBStorage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует диаграммы частями из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт диаграмм частями из '{file_path}' с опциями {chunk_options}. (Заглушка)")
     return True
 
-def import_formulas_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_formulas_from_excel_in_chunks(storage: ProjectDBStorage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует формулы частями из Excel-файла в БД проекта.
     """
@@ -407,7 +467,7 @@ def import_formulas_from_excel_in_chunks(storage, file_path: str, chunk_options:
 
 # --- Функция для БЫСТРОГО импорта "сырых" данных с помощью pandas ---
 
-def import_raw_data_fast_with_pandas(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_raw_data_fast_with_pandas(storage: ProjectDBStorage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Быстро импортирует "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
 
@@ -443,7 +503,7 @@ def import_raw_data_fast_with_pandas(storage, file_path: str, options: Optional[
         # Установим значения по умолчанию для опций
         if options is None:
             options = {}
-        sheets_to_import = options.get('sheets', None) # None означает все листы
+        sheets_to_import_orig = options.get('sheets', None) # None означает все листы
         start_row_pandas = options.get('start_row', None) # 0-based для pandas
         end_row_pandas = options.get('end_row', None) # 0-based, не включительно
         start_col_pandas = options.get('start_col', None) # 0-based для pandas
@@ -455,14 +515,30 @@ def import_raw_data_fast_with_pandas(storage, file_path: str, options: Optional[
         # Используем pd.ExcelFile для возможности чтения нескольких листов
         with pd.ExcelFile(file_path, engine=engine_pandas) as xls_file:
             # Определяем список листов для импорта
-            sheets_to_process = sheets_to_import if sheets_to_import else xls_file.sheet_names
+            if sheets_to_import_orig is None:
+                 sheets_to_process_orig = xls_file.sheet_names
+            else:
+                 sheets_to_process_orig = sheets_to_import_orig
+            
+            # Явно приводим элементы к str для устранения ошибки Pylance
+            sheets_to_process: List[str] = [str(name) for name in sheets_to_process_orig]
 
-            for sheet_name in sheets_to_process:
+            for sheet_name_orig in sheets_to_process:
+                # Убедимся, что имя листа - строка
+                sheet_name: str = str(sheet_name_orig)
                 if sheet_name not in xls_file.sheet_names:
                     logger.warning(f"Лист '{sheet_name}' не найден в файле '{file_path}'. Пропущен.")
                     continue
 
                 logger.info(f"Быстрый импорт данных с листа: {sheet_name}")
+                
+                # --- НОВОЕ: Гарантируем, что запись о листе существует ---
+                # Предполагаем project_id = 1 для MVP
+                sheet_id = storage.save_sheet(project_id=1, sheet_name=sheet_name)
+                if sheet_id is None:
+                    logger.error(f"Не удалось создать/получить ID для листа '{sheet_name}'. Пропущен.")
+                    return False # Возвращаем False при ошибке создания записи о листе
+                # --- КОНЕЦ НОВОГО ---
 
                 # --- Чтение данных с помощью pandas ---
                 df = pd.read_excel(
