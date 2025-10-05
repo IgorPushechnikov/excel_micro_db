@@ -14,7 +14,7 @@ from backend.constructor.widgets.new_gui.main_window import MainWindow
 
 # Импортируем логгер
 # from backend.utils.logger import setup_logging, get_logger # <-- Убран setup_logging из импорта
-from backend.utils.logger import get_logger # <-- Только get_logger
+from backend.utils.logger import get_logger, setup_logger # <-- Добавлен setup_logger
 
 
 def main():
@@ -24,11 +24,9 @@ def main():
     # Настройка логирования
     # Путь к лог-файлу GUI можно сделать отдельным, например, в папке проекта
     # или использовать существующую систему из backend.utils.logger
-    # Для простоты пока настроим базовое логирование в консоль
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    # Вызываем setup_logger для инициализации системы логирования
+    # Пока что вызываем без аргументов, но можно добавить путь к логу GUI
+    setup_logger()
     logger = get_logger(__name__)
 
     logger.info("Запуск GUI приложения Excel Micro DB...")
