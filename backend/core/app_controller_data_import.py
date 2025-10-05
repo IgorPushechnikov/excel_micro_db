@@ -155,7 +155,7 @@ def import_styles_from_excel(storage: ProjectDBStorage, file_path: str, options:
 
     try:
         workbook = openpyxl.load_workbook(file_path, data_only=False)
-        logger.debug(f"Книга '{file_path}' успешно открыта.
+        logger.debug(f"Книга '{file_path}' успешно открыта.")
 
         sheets_to_import_orig = options.get('sheets', []) if options else []
         if not sheets_to_import_orig:
@@ -206,12 +206,6 @@ def import_styles_from_excel(storage: ProjectDBStorage, file_path: str, options:
                         "range_address": address,
                         "style_attributes": style_json
                     })
-
-            # УДАЛЯЕМ вызов _get_sheet_id_by_name, так как sheet_id уже получен выше
-            # sheet_id = _get_sheet_id_by_name(storage, sheet_name)
-            # if sheet_id is None:
-            #     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-            #     return False # Возвращаем False при ошибке
 
             if not storage.save_sheet_styles(sheet_id, styles_to_save):
                 logger.error(f"Не удалось сохранить стили для листа '{sheet_name}' (ID: {sheet_id}).")
@@ -292,12 +286,6 @@ def import_charts_from_excel(storage: ProjectDBStorage, file_path: str, options:
             except Exception as e:
                 logger.error(f"Ошибка при извлечении диаграмм с листа '{sheet_name}': {e}", exc_info=True)
 
-            # УДАЛЯЕМ вызов _get_sheet_id_by_name, так как sheet_id уже получен выше
-            # sheet_id = _get_sheet_id_by_name(storage, sheet_name)
-            # if sheet_id is None:
-            #     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-            #     return False # Возвращаем False при ошибке
-
             if not storage.save_sheet_charts(sheet_id, charts_list):
                 logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
                 return False  # Возвращаем False при ошибке
@@ -371,12 +359,6 @@ def import_formulas_from_excel(storage: ProjectDBStorage, file_path: str, option
                              "cell_address": cell.coordinate,
                              "formula": cell.value # Сохраняем формулу как есть, включая '='
                          })
-
-            # УДАЛЯЕМ вызов _get_sheet_id_by_name, так как sheet_id уже получен выше
-            # sheet_id = _get_sheet_id_by_name(storage, sheet_name)
-            # if sheet_id is None:
-            #     logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-            #     return False # Возвращаем False при ошибке
 
             if not storage.save_sheet_formulas(sheet_id, formulas_list):
                 logger.error(f"Не удалось сохранить формулы для листа '{sheet_name}' (ID: {sheet_id}).")
