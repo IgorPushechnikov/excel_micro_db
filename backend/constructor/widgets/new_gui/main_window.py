@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QStatusBar, QToolBar, QFileDialog,
-    QMessageBox, QProgressDialog, QWidget, QStackedWidget, QHBoxLayout, QSplitter,
+    QMessageBox, QWidget, QStackedWidget, QHBoxLayout, QSplitter, # <-- Удалён QProgressDialog
     QCheckBox, QPushButton, QMenu # <-- QAction, QActionGroup убраны отсюда
 )
 from PySide6.QtCore import Qt, QThread, Signal
@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction, QIcon, QActionGroup # <-- QActionGroup доб
 from backend.core.app_controller import create_app_controller
 from .sheet_editor_widget import SheetEditorWidget
 from .sheet_explorer_widget import SheetExplorerWidget # <-- Новый импорт
+from .export_worker import ExportWorker # <-- НОВЫЙ ИМПОРТ
 from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -90,11 +91,15 @@ class MainWindow(QMainWindow):
         # self.import_options = None
         # --- КОНЕЦ УДАЛЕНИЯ ---
         self.import_worker = None # <-- Новый атрибут для нового потока импорта
-        self.progress_dialog = None
+        # self.progress_dialog = None # <-- УДАЛЕНО: больше не используется
 
         # --- НОВОЕ: Атрибуты для хранения выбранного типа и режима импорта ---
         self.selected_import_type = 'all_data'  # 'all_data', 'styles', 'charts', 'formulas', 'raw_data_pandas'
         self.selected_import_mode = 'all'       # 'all', 'selective', 'chunks', 'fast'
+        # --- КОНЕЦ НОВОГО ---
+
+        # --- НОВОЕ: Атрибут для хранения потока экспорта ---
+        self.export_worker = None # <-- НОВЫЙ АТРИБУТ
         # --- КОНЕЦ НОВОГО ---
 
         self.setWindowTitle("Excel Micro DB GUI")
@@ -371,45 +376,27 @@ class MainWindow(QMainWindow):
             import_mode = self.selected_import_mode
             logger.info(f"Выбран тип импорта: {import_type}, режим: {import_mode} для файла {excel_file_path}")
 
-            # Показываем диалог прогресса
-            self.progress_dialog = QProgressDialog("Импорт...", "Отмена", 0, 100, self)
-            self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-            self.progress_dialog.setMinimumDuration(0) # Показываем сразу
-            self.progress_dialog.setValue(0)
-
             # Создаем рабочий поток для вызова AppController метода
             self.import_worker = ImportWorker(self.app_controller, str(excel_file_path), import_type, import_mode)
             self.import_worker.finished.connect(self._on_import_finished)
-            # self.import_worker.progress.connect(self._on_import_progress) # Если нужно отображать прогресс изнутри AppController
+            self.import_worker.progress.connect(self._on_import_progress) # <-- НОВОЕ: Подключаем progress
 
             self.import_worker.start()
+            # Обновляем статус
+            self.status_bar.showMessage(f"Начат импорт {excel_file_path.name}...")
 
     def _on_import_progress(self, value, message):
         """
         Обработчик прогресса импорта (если поддерживается).
         """
-        if self.progress_dialog:
-            self.progress_dialog.setValue(value)
-            self.progress_dialog.setLabelText(message)
-            if self.progress_dialog.wasCanceled():
-                # TODO: Реализовать отмену в AppController методах, если возможно
-                if self.import_worker:
-                    self.import_worker.terminate()
-                    self.import_worker.wait()
-                self.progress_dialog = None
-                self.import_worker = None
-                logger.info("Импорт отменён пользователем.")
-                self.status_bar.showMessage("Импорт отменён.")
-                return
+        # Обновляем сообщение в строке состояния
+        self.status_bar.showMessage(message)
 
     def _on_import_finished(self, success, message):
         """
         Обработчик завершения импорта.
         """
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
-
+        # Убираем ссылку на worker, чтобы он мог быть уничтожен
         if self.import_worker:
             self.import_worker.wait() # Убедиться, что поток завершён
             self.import_worker = None
@@ -422,7 +409,7 @@ class MainWindow(QMainWindow):
         else:
             logger.error(f"Импорт завершился с ошибкой: {message}")
             self.status_bar.showMessage(f"Ошибка импорта: {message}")
-            QMessageBox.critical(self, "Ошибка", message)
+            # QMessageBox.critical(self, "Ошибка", message) # <-- Опционально, можно оставить
 
     def _on_export_triggered(self):
         """
@@ -438,17 +425,42 @@ class MainWindow(QMainWindow):
         if ok and output_path_str:
             output_path = Path(output_path_str)
             try:
-                # Вызываем экспорт через AppController
-                success = self.app_controller.export_results(export_type='excel', output_path=str(output_path))
-                if success:
-                    logger.info(f"Проект экспортирован в: {output_path}")
-                    self.status_bar.showMessage(f"Проект экспортирован: {output_path}")
-                else:
-                    logger.error(f"Не удалось экспортировать проект в: {output_path}")
-                    QMessageBox.critical(self, "Ошибка", f"Не удалось экспортировать проект: {output_path}")
+                # Создаем рабочий поток для вызова AppController метода
+                self.export_worker = ExportWorker(self.app_controller, str(output_path))
+                self.export_worker.finished.connect(self._on_export_finished)
+                self.export_worker.progress.connect(self._on_export_progress) # <-- НОВОЕ: Подключаем progress
+
+                self.export_worker.start()
+                # Обновляем статус
+                self.status_bar.showMessage(f"Начат экспорт в {output_path.name}...")
+
             except Exception as e:
-                logger.error(f"Ошибка при экспорте проекта: {e}", exc_info=True)
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при экспорте проекта: {e}")
+                logger.error(f"Ошибка при подготовке экспорта: {e}", exc_info=True)
+                QMessageBox.critical(self, "Ошибка", f"Ошибка при подготовке экспорта: {e}")
+
+    def _on_export_progress(self, value, message): # <-- НОВЫЙ МЕТОД
+        """
+        Обработчик прогресса экспорта.
+        """
+        # Обновляем сообщение в строке состояния
+        self.status_bar.showMessage(message)
+
+    def _on_export_finished(self, success, message):
+        """
+        Обработчик завершения экспорта.
+        """
+        # Убираем ссылку на worker, чтобы он мог быть уничтожен
+        if self.export_worker:
+            self.export_worker.wait() # Убедиться, что поток завершён
+            self.export_worker = None
+
+        if success:
+            logger.info(f"Экспорт успешно завершён: {message}")
+            self.status_bar.showMessage(f"Экспорт завершён: {message}")
+        else:
+            logger.error(f"Экспорт завершился с ошибкой: {message}")
+            self.status_bar.showMessage(f"Ошибка экспорта: {message}")
+            # QMessageBox.critical(self, "Ошибка", message) # <-- Опционально, можно оставить
 
     def _update_sheet_list(self):
         """
