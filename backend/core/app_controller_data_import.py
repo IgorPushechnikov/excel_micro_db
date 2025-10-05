@@ -6,6 +6,9 @@
 Функции предназначены для вызова из AppController для реализации
 импорта "по типам" (данные, стили, диаграммы, формулы) и "по режимам"
 (всё, выборочно, частями).
+
+ПРИМЕЧАНИЕ: Функции теперь принимают экземпляр ProjectDBStorage напрямую,
+чтобы обеспечить потокобезопасность.
 """
 
 import logging
@@ -25,20 +28,23 @@ from backend.utils.logger import get_logger
 # Исправлено: Импорт из правильного модуля и с правильными именами
 from backend.analyzer.logic_documentation import _serialize_style, _serialize_chart
 
+# Импортируем ProjectDBStorage
+from backend.storage.base import ProjectDBStorage
+
 logger = get_logger(__name__)
 
 
 # --- Вспомогательные функции ---
 
-def _get_sheet_id_by_name(app_controller, sheet_name: str) -> Optional[int]:
+def _get_sheet_id_by_name(storage, sheet_name: str) -> Optional[int]:
     """
     Вспомогательная функция для получения sheet_id по имени листа.
     """
-    if not app_controller.storage or not app_controller.storage.connection:
+    if not storage or not storage.connection:
         return None
 
     try:
-        cursor = app_controller.storage.connection.cursor()
+        cursor = storage.connection.cursor()
         # Предполагаем project_id = 1
         cursor.execute("SELECT sheet_id FROM sheets WHERE name = ? AND project_id = 1", (sheet_name,))
         result = cursor.fetchone()
@@ -50,20 +56,20 @@ def _get_sheet_id_by_name(app_controller, sheet_name: str) -> Optional[int]:
 
 # --- Функции для импорта "всё" по типам ---
 
-def import_raw_data_from_excel(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_raw_data_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только "сырые" данные (значения ячеек) из Excel-файла в БД проекта.
 
     Args:
-        app_controller: Экземпляр AppController.
+        storage: Экземпляр ProjectDBStorage для сохранения данных.
         file_path (str): Путь к Excel-файлу для импорта.
         options (Optional[Dict[str, Any]]): Опции импорта.
 
     Returns:
         bool: True, если импорт прошёл успешно, иначе False.
     """
-    if not app_controller.storage:
-        logger.error("Проект не загружен. Невозможно выполнить импорт.")
+    if not storage:
+        logger.error("Экземпляр ProjectDBStorage не предоставлен. Невозможно выполнить импорт.")
         return False
 
     if not os.path.exists(file_path):
@@ -98,10 +104,9 @@ def import_raw_data_from_excel(app_controller, file_path: str, options: Optional
                         }
                         raw_data_list.append(data_item)
 
-            if not app_controller.storage.save_sheet_raw_data(sheet_name, raw_data_list):
+            if not storage.save_sheet_raw_data(sheet_name, raw_data_list):
                 logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}'.")
-            else:
-                logger.info(f"'Сырые данные' для листа '{sheet_name}' успешно импортированы.")
+                return False  # Возвращаем False при ошибке
 
         logger.info(f"Импорт 'сырых' данных из '{file_path}' завершён.")
         return True
@@ -111,20 +116,20 @@ def import_raw_data_from_excel(app_controller, file_path: str, options: Optional
         return False
 
 
-def import_styles_from_excel(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_styles_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только стили из Excel-файла в БД проекта.
 
     Args:
-        app_controller: Экземпляр AppController.
+        storage: Экземпляр ProjectDBStorage для сохранения данных.
         file_path (str): Путь к Excel-файлу для импорта.
         options (Optional[Dict[str, Any]]): Опции импорта.
 
     Returns:
         bool: True, если импорт прошёл успешно, иначе False.
     """
-    if not app_controller.storage:
-        logger.error("Проект не загружен. Невозможно выполнить импорт.")
+    if not storage:
+        logger.error("Экземпляр ProjectDBStorage не предоставлен. Невозможно выполнить импорт.")
         return False
 
     if not os.path.exists(file_path):
@@ -173,16 +178,14 @@ def import_styles_from_excel(app_controller, file_path: str, options: Optional[D
                         "style_attributes": style_json
                     })
 
-            project_name = app_controller.current_project.get('name', 'Unknown') if app_controller.current_project else 'Unknown'
-            sheet_id = _get_sheet_id_by_name(app_controller, sheet_name)
+            sheet_id = _get_sheet_id_by_name(storage, sheet_name)
             if sheet_id is None:
                 logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                continue
+                return False # Возвращаем False при ошибке
 
-            if not app_controller.storage.save_sheet_styles(sheet_id, styles_to_save):
+            if not storage.save_sheet_styles(sheet_id, styles_to_save):
                 logger.error(f"Не удалось сохранить стили для листа '{sheet_name}' (ID: {sheet_id}).")
-            else:
-                logger.info(f"Стили для листа '{sheet_name}' успешно импортированы.")
+                return False  # Возвращаем False при ошибке
 
         logger.info(f"Импорт стилей из '{file_path}' завершён.")
         return True
@@ -192,20 +195,20 @@ def import_styles_from_excel(app_controller, file_path: str, options: Optional[D
         return False
 
 
-def import_charts_from_excel(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_charts_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только диаграммы из Excel-файла в БД проекта.
 
     Args:
-        app_controller: Экземпляр AppController.
+        storage: Экземпляр ProjectDBStorage для сохранения данных.
         file_path (str): Путь к Excel-файлу для импорта.
         options (Optional[Dict[str, Any]]): Опции импорта.
 
     Returns:
         bool: True, если импорт прошёл успешно, иначе False.
     """
-    if not app_controller.storage:
-        logger.error("Проект не загружен. Невозможно выполнить импорт.")
+    if not storage:
+        logger.error("Экземпляр ProjectDBStorage не предоставлен. Невозможно выполнить импорт.")
         return False
 
     if not os.path.exists(file_path):
@@ -245,15 +248,14 @@ def import_charts_from_excel(app_controller, file_path: str, options: Optional[D
             except Exception as e:
                 logger.error(f"Ошибка при извлечении диаграмм с листа '{sheet_name}': {e}", exc_info=True)
 
-            sheet_id = _get_sheet_id_by_name(app_controller, sheet_name)
+            sheet_id = _get_sheet_id_by_name(storage, sheet_name)
             if sheet_id is None:
                 logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                continue
+                return False # Возвращаем False при ошибке
 
-            if not app_controller.storage.save_sheet_charts(sheet_id, charts_list):
+            if not storage.save_sheet_charts(sheet_id, charts_list):
                 logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
-            else:
-                logger.info(f"Диаграммы для листа '{sheet_name}' успешно импортированы.")
+                return False  # Возвращаем False при ошибке
 
         logger.info(f"Импорт диаграмм из '{file_path}' завершён.")
         return True
@@ -263,20 +265,20 @@ def import_charts_from_excel(app_controller, file_path: str, options: Optional[D
         return False
 
 
-def import_formulas_from_excel(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_formulas_from_excel(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует только формулы из Excel-файла в БД проекта.
 
     Args:
-        app_controller: Экземпляр AppController.
+        storage: Экземпляр ProjectDBStorage для сохранения данных.
         file_path (str): Путь к Excel-файлу для импорта.
         options (Optional[Dict[str, Any]]): Опции импорта.
 
     Returns:
         bool: True, если импорт прошёл успешно, иначе False.
     """
-    if not app_controller.storage:
-        logger.error("Проект не загружен. Невозможно выполнить импорт.")
+    if not storage:
+        logger.error("Экземпляр ProjectDBStorage не предоставлен. Невозможно выполнить импорт.")
         return False
 
     if not os.path.exists(file_path):
@@ -311,15 +313,14 @@ def import_formulas_from_excel(app_controller, file_path: str, options: Optional
                              "formula": cell.value # Сохраняем формулу как есть, включая '='
                          })
 
-            sheet_id = _get_sheet_id_by_name(app_controller, sheet_name)
+            sheet_id = _get_sheet_id_by_name(storage, sheet_name)
             if sheet_id is None:
                 logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                continue
+                return False # Возвращаем False при ошибке
 
-            if not app_controller.storage.save_sheet_formulas(sheet_id, formulas_list):
+            if not storage.save_sheet_formulas(sheet_id, formulas_list):
                 logger.error(f"Не удалось сохранить формулы для листа '{sheet_name}' (ID: {sheet_id}).")
-            else:
-                logger.info(f"Формулы для листа '{sheet_name}' успешно импортированы.")
+                return False  # Возвращаем False при ошибке
 
         logger.info(f"Импорт формул из '{file_path}' завершён.")
         return True
@@ -335,7 +336,7 @@ def import_formulas_from_excel(app_controller, file_path: str, options: Optional
 # но с фильтрацией по листам/диапазонам, переданным в options.
 # Например, options = {'sheets': ['Sheet1'], 'start_row': 1, 'end_row': 100}
 
-def import_raw_data_from_excel_selective(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_raw_data_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует "сырые" данные выборочно из Excel-файла в БД проекта.
     """
@@ -345,21 +346,21 @@ def import_raw_data_from_excel_selective(app_controller, file_path: str, options
     # Пока возвращаем True как успешное выполнение заглушки
     return True
 
-def import_styles_from_excel_selective(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_styles_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует стили выборочно из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт стилей выборочно из '{file_path}' с опциями {options}. (Заглушка)")
     return True
 
-def import_charts_from_excel_selective(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_charts_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует диаграммы выборочно из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт диаграмм выборочно из '{file_path}' с опциями {options}. (Заглушка)")
     return True
 
-def import_formulas_from_excel_selective(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_formulas_from_excel_selective(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Импортирует формулы выборочно из Excel-файла в БД проекта.
     """
@@ -373,7 +374,7 @@ def import_formulas_from_excel_selective(app_controller, file_path: str, options
 # на части и вызывать соответствующую функцию импорта для каждой части.
 # Например, импортировать по 1000 строк за раз.
 
-def import_raw_data_from_excel_in_chunks(app_controller, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_raw_data_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует "сырые" данные частями из Excel-файла в БД проекта.
     """
@@ -382,21 +383,21 @@ def import_raw_data_from_excel_in_chunks(app_controller, file_path: str, chunk_o
     # import_raw_data_from_excel_selective для каждой части
     return True
 
-def import_styles_from_excel_in_chunks(app_controller, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_styles_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует стили частями из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт стилей частями из '{file_path}' с опциями {chunk_options}. (Заглушка)")
     return True
 
-def import_charts_from_excel_in_chunks(app_controller, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_charts_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует диаграммы частями из Excel-файла в БД проекта.
     """
     logger.info(f"Импорт диаграмм частями из '{file_path}' с опциями {chunk_options}. (Заглушка)")
     return True
 
-def import_formulas_from_excel_in_chunks(app_controller, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+def import_formulas_from_excel_in_chunks(storage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
     Импортирует формулы частями из Excel-файла в БД проекта.
     """
@@ -406,12 +407,12 @@ def import_formulas_from_excel_in_chunks(app_controller, file_path: str, chunk_o
 
 # --- Функция для БЫСТРОГО импорта "сырых" данных с помощью pandas ---
 
-def import_raw_data_fast_with_pandas(app_controller, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+def import_raw_data_fast_with_pandas(storage, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
     """
     Быстро импортирует "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
 
     Args:
-        app_controller: Экземпляр AppController.
+        storage: Экземпляр ProjectDBStorage для сохранения данных.
         file_path (str): Путь к Excel-файлу для импорта.
         options (Optional[Dict[str, Any]]): Опции импорта.
             {
@@ -428,8 +429,8 @@ def import_raw_data_fast_with_pandas(app_controller, file_path: str, options: Op
     Returns:
         bool: True, если импорт успешен, иначе False.
     """
-    if not app_controller.storage:
-        logger.error("Проект не загружен. Невозможно выполнить импорт.")
+    if not storage:
+        logger.error("Экземпляр ProjectDBStorage не предоставлен. Невозможно выполнить импорт.")
         return False
 
     if not os.path.exists(file_path):
@@ -527,12 +528,9 @@ def import_raw_data_fast_with_pandas(app_controller, file_path: str, options: Op
                         })
 
                 # --- Сохранение "сырых данных" ---
-                if not app_controller.storage.save_sheet_raw_data(sheet_name, raw_data_list):
+                if not storage.save_sheet_raw_data(sheet_name, raw_data_list):
                     logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}'.")
-                    # В зависимости от требований, можно вернуть False или продолжить с другими листами
-                    # Пока продолжим
-                else:
-                    logger.info(f"Быстрые 'сырые данные' для листа '{sheet_name}' успешно импортированы.")
+                    return False # Возвращаем False при ошибке
 
         logger.info(f"БЫСТРЫЙ импорт 'сырых' данных из '{file_path}' завершён.")
         return True
