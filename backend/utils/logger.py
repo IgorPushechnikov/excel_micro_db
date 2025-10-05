@@ -178,14 +178,27 @@ def set_logging_enabled(enabled: bool):
     global _LOGGING_ENABLED
     _LOGGING_ENABLED = enabled
     logger_instance = logging.getLogger("excel_micro_db")
+    # --- НОВОЕ: Также получаем корневой логгер ---
+    root_logger = logging.getLogger() # <-- Получаем корневой логгер
+    # --- КОНЕЦ НОВОГО ---
+
+    # Устанавливаем уровень для хендлеров и самого логгера excel_micro_db
     if logger_instance and logger_instance.hasHandlers():
-        # Устанавливаем уровень для всех хендлеров
         level_to_set = BASE_LOG_LEVEL if enabled else logging.CRITICAL + 1
         for handler in logger_instance.handlers:
             handler.setLevel(level_to_set)
-        # Также устанавливаем уровень для самого логгера
         logger_instance.setLevel(level_to_set)
-    # Если логгер еще не настроен, изменения вступят в силу при вызове setup_logger
+
+    # --- НОВОЕ: Устанавливаем уровень для корневого логгера ---
+    # Это влияет на всё логирование, которое не переопределяет уровень и использует корневой логгер
+    root_level_to_set = BASE_LOG_LEVEL if enabled else logging.CRITICAL + 1
+    root_logger.setLevel(root_level_to_set)
+    # Также устанавливаем уровень для хендлеров корневого логгера, если они есть
+    # Это может быть важно, если basicConfig был вызван где-то ещё
+    for handler in root_logger.handlers:
+        handler.setLevel(root_level_to_set)
+    # --- КОНЕЦ НОВОГО ---
+
     # Проверим, что _logger_instance существует, прежде чем логировать
     if _logger_instance:
         _logger_instance.info(f"Логирование {'включено' if enabled else 'отключено'}.")
