@@ -131,7 +131,7 @@ class ImportDialog(QDialog):
 
     # --- Обработчики событий UI ---
     def _on_browse_clicked(self):
-        """Обработчик нажатия кнопки 'Обзор...'.'""
+        """Обработчик нажатия кнопки 'Обзор...'."""
         # Добавим assert
         assert self.file_path_line_edit is not None
 
@@ -144,7 +144,7 @@ class ImportDialog(QDialog):
             self.file_path_line_edit.setText(file_path_str)
 
     def _on_accept(self):
-        """Обработчик нажатия кнопки 'Импортировать'.'""
+        """Обработчик нажатия кнопки 'Импортировать'."""
         # Добавим assert для всех виджетов, к которым обращаемся
         assert self.file_path_line_edit is not None # <-- НОВОЕ
         file_path_str = self.file_path_line_edit.text().strip()
@@ -201,46 +201,46 @@ class ImportDialog(QDialog):
         self.accept() # Закрываем диалог как успешно завершённый
 
     def _on_import_type_selected(self, import_type: str):
-        """Обработчик выбора типа импорта.'""
+        """Обработчик выбора типа импорта."""
         logger.debug(f"Выбран тип импорта: {import_type}")
         # Логика обновления UI в зависимости от типа может быть здесь
         # Например, включение/отключения определённых опций
 
     def _on_import_mode_selected(self, import_mode: str):
-        """Обработчик выбора режима импорта.'""
+        """Обработчик выбора режима импорта."""
         logger.debug(f"Выбран режим импорта: {import_mode}")
         # Логика обновления UI в зависимости от режима может быть здесь
     # -----------------------------
 
     # --- Методы для получения данных из диалога ---
     def get_file_path(self) -> Optional[Path]:
-        """Возвращает путь к выбранному файлу.'""
+        """Возвращает путь к выбранному файлу."""
         # Добавим assert
         assert self.file_path_line_edit is not None # <-- НОВОЕ
         path_str = self.file_path_line_edit.text().strip()
         return Path(path_str) if path_str else None
 
     def is_logging_enabled(self) -> bool:
-        """Проверяет, включено ли логирование.'""
+        """Проверяет, включено ли логирование."""
         # Добавим assert
         assert self.logging_checkbox is not None # <-- НОВОЕ
-        return self.logging_checkbox.isChecked() # if self.logging_checkbox else True
+        return self.logging_checkbox.isChecked()
 
     def get_import_type(self) -> str:
-        """Возвращает выбранный тип импорта.'""
+        """Возвращает выбранный тип импорта."""
         # Добавим assert
         assert self.mode_selector is not None # <-- НОВОЕ
-        return self.mode_selector.get_selected_type() # if self.mode_selector else "all_data"
+        return self.mode_selector.get_selected_type()
 
     def get_import_mode(self) -> str:
-        """Возвращает выбранный режим импорта.'""
+        """Возвращает выбранный режим импорта."""
         # Добавим assert
         assert self.mode_selector is not None # <-- НОВОЕ
-        return self.mode_selector.get_selected_mode() # if self.mode_selector else "all"
+        return self.mode_selector.get_selected_mode()
 
     def get_project_name(self) -> str:
-        """Возвращает имя проекта.'""
+        """Возвращает имя проекта."""
         # Добавим assert
         assert self.project_name_line_edit is not None # <-- НОВОЕ
-        return self.project_name_line_edit.text().strip() # if self.project_name_line_edit else ""
+        return self.project_name_line_edit.text().strip()
     # ------------------------------------------------
