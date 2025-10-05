@@ -433,10 +433,9 @@ class AppController:
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             self._project_log_handler.setFormatter(formatter)
 
-            # Добавляем обработчик к корневому логгеру или к логгеру приложения
-            # Выберем корневой, чтобы захватить все сообщения
-            root_logger = logging.getLogger()
-            root_logger.addHandler(self._project_log_handler)
+            # Добавляем обработчик к логгеру приложения 'excel_micro_db', а не к корневому
+            app_logger = logging.getLogger("excel_micro_db")
+            app_logger.addHandler(self._project_log_handler)
 
             logger.info(f"Логирование в файл проекта '{log_file}' настроено.")
         except Exception as e:
@@ -448,8 +447,8 @@ class AppController:
         """
         if self._project_log_handler:
             try:
-                root_logger = logging.getLogger()
-                root_logger.removeHandler(self._project_log_handler)
+                app_logger = logging.getLogger("excel_micro_db")  # Обращаемся к правильному логгеру
+                app_logger.removeHandler(self._project_log_handler)
                 self._project_log_handler.close()  # Закрываем файловый дескриптор
                 logger.info(f"Логирование в файл проекта '{self._project_log_handler.baseFilename}' удалено.")
             except Exception as e:
