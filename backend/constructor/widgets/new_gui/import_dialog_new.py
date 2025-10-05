@@ -1,7 +1,7 @@
 # backend/constructor/widgets/new_gui/import_dialog_new.py
 """
 Диалог импорта данных Excel в проект.
-Позволяет выбрать файл, тип и режим импорта.
+Позволяет выбрать файл и режим импорта.
 """
 
 import logging
@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
-    QPushButton, QLineEdit, QFileDialog, QMessageBox, QCheckBox,
-    QDialogButtonBox, QGroupBox, QLabel
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QDialogButtonBox,
+    QPushButton, QLineEdit, QFileDialog, QMessageBox, QCheckBox, QGroupBox
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -85,7 +84,7 @@ class ImportDialog(QDialog):
         self.logging_checkbox.setChecked(True)
         options_layout.addWidget(self.logging_checkbox)
 
-        # Селектор типа и режима импорта
+        # Селектор режима импорта (обновлённый)
         self.mode_selector = ImportModeSelector(self)
         options_layout.addWidget(self.mode_selector)
 
@@ -105,9 +104,9 @@ class ImportDialog(QDialog):
             self
         )
         # Установим текст кнопок на русский
-        assert self.button_box is not None # <-- НОВОЕ
+        assert self.button_box is not None
         self.button_box.button(QDialogButtonBox.StandardButton.Ok).setText("Импортировать")
-        assert self.button_box is not None # <-- НОВОЕ
+        assert self.button_box is not None
         self.button_box.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
         
         main_layout.addWidget(self.button_box)
@@ -116,22 +115,20 @@ class ImportDialog(QDialog):
     def _setup_connections(self):
         """Подключает сигналы к слотам."""
         # Добавим assert, чтобы Pylance знал, что виджеты инициализированы
-        assert self.browse_button is not None # <-- НОВОЕ
+        assert self.browse_button is not None
         self.browse_button.clicked.connect(self._on_browse_clicked)
-        assert self.button_box is not None # <-- НОВОЕ
+        assert self.button_box is not None
         self.button_box.accepted.connect(self._on_accept)
-        assert self.button_box is not None # <-- НОВОЕ
+        assert self.button_box is not None
         self.button_box.rejected.connect(self.reject)
         
-        # Подключение сигналов селектора режима
-        assert self.mode_selector is not None # <-- НОВОЕ
-        self.mode_selector.type_selected.connect(self._on_import_type_selected)
-        assert self.mode_selector is not None # <-- НОВОЕ
-        self.mode_selector.mode_selected.connect(self._on_import_mode_selected)
+        # Подключение сигнала СЕЛЕКТОРА режима (type_selected больше нет)
+        assert self.mode_selector is not None
+        self.mode_selector.mode_selected.connect(self._on_import_mode_selected) # <-- Изменено: только mode_selected
 
     # --- Обработчики событий UI ---
     def _on_browse_clicked(self):
-        """Обработчик нажатия кнопки 'Обзор...'."""
+        """Обработчик нажатия кнопки 'Обзор...'.'"""
         # Добавим assert
         assert self.file_path_line_edit is not None
 
@@ -144,9 +141,9 @@ class ImportDialog(QDialog):
             self.file_path_line_edit.setText(file_path_str)
 
     def _on_accept(self):
-        """Обработчик нажатия кнопки 'Импортировать'."""
+        """Обработчик нажатия кнопки 'Импортировать'.'"""
         # Добавим assert для всех виджетов, к которым обращаемся
-        assert self.file_path_line_edit is not None # <-- НОВОЕ
+        assert self.file_path_line_edit is not None
         file_path_str = self.file_path_line_edit.text().strip()
         if not file_path_str:
             QMessageBox.warning(self, "Ошибка", "Пожалуйста, выберите файл Excel для импорта.")
@@ -157,30 +154,29 @@ class ImportDialog(QDialog):
             QMessageBox.critical(self, "Ошибка", f"Файл не найден: {file_path}")
             return
 
-        # Получаем выбранный тип и режим
-        assert self.mode_selector is not None # <-- НОВОЕ
-        import_type = self.mode_selector.get_selected_type()
-        assert self.mode_selector is not None # <-- НОВОЕ
-        import_mode = self.mode_selector.get_selected_mode()
+        # Получаем выбранный РЕЖИМ (объединённый)
+        assert self.mode_selector is not None
+        import_mode_key = self.mode_selector.get_selected_mode() # <-- Изменено: один метод
         
         # Получаем состояние логирования
-        assert self.logging_checkbox is not None # <-- НОВОЕ
+        assert self.logging_checkbox is not None
         is_logging_enabled = self.logging_checkbox.isChecked()
         
         # Получаем имя проекта
-        assert self.project_name_line_edit is not None # <-- НОВОЕ
+        assert self.project_name_line_edit is not None
         project_name = self.project_name_line_edit.text().strip()
 
         logger.info(
-            f"Начало импорта: файл={file_path}, тип={import_type}, "
-            f"режим={import_mode}, логирование={is_logging_enabled}, проект={project_name}"
+            f"Начало импорта: файл={file_path}, "
+            f"режим={import_mode_key}, " # <-- Изменено: теперь один ключ
+            f"логирование={is_logging_enabled}, проект={project_name}"
         )
 
-        # TODO: Вызвать AppController для выполнения импорта
+        # TODO: Вызвать AppController для выполнения импорта, используя import_mode_key
         # Это может быть синхронный вызов или асинхронный через QThread/worker
         # Например:
-        # success = self.app_controller.import_data(
-        #     file_path, import_type, import_mode, 
+        # success = self.app_controller.import_data_by_key(
+        #     file_path, import_mode_key, 
         #     enable_logging=is_logging_enabled, project_name=project_name
         # )
         # if success:
@@ -193,54 +189,53 @@ class ImportDialog(QDialog):
             self, "Импорт", 
             f"Импорт запущен (заглушка).\n"
             f"Файл: {file_path.name}\n"
-            f"Тип: {import_type}\n"
-            f"Режим: {import_mode}\n"
+            f"Режим: {import_mode_key}\n"
             f"Логирование: {'Вкл' if is_logging_enabled else 'Выкл'}\n"
             f"Проект: {project_name or 'Текущий'}"
         )
         self.accept() # Закрываем диалог как успешно завершённый
 
-    def _on_import_type_selected(self, import_type: str):
-        """Обработчик выбора типа импорта."""
-        logger.debug(f"Выбран тип импорта: {import_type}")
-        # Логика обновления UI в зависимости от типа может быть здесь
-        # Например, включение/отключения определённых опций
-
-    def _on_import_mode_selected(self, import_mode: str):
-        """Обработчик выбора режима импорта."""
-        logger.debug(f"Выбран режим импорта: {import_mode}")
+    def _on_import_mode_selected(self, import_mode_key: str): # <-- Изменено: принимает ключ режима
+        """Обработчик выбора режима импорта.'"""
+        logger.debug(f"Выбран режим импорта: {import_mode_key}")
         # Логика обновления UI в зависимости от режима может быть здесь
+        # (например, включение/отключения определённых опций, если они снова появятся)
     # -----------------------------
 
     # --- Методы для получения данных из диалога ---
-    def get_file_path(self) -> Optional[Path]:
-        """Возвращает путь к выбранному файлу."""
+    # def get_import_type(self) -> str: # <-- Удалено: больше неактуально
+    #     """Возвращает выбранный тип импорта.'"""
+    #     # Добавим assert
+    #     assert self.mode_selector is not None
+    #     return self.mode_selector.get_selected_type()
+
+    def get_import_mode_key(self) -> str: # <-- Новое: возвращает ключ объединённого режима
+        """Возвращает ключ выбранного режима импорта.'"""
         # Добавим assert
-        assert self.file_path_line_edit is not None # <-- НОВОЕ
+        assert self.mode_selector is not None
+        return self.mode_selector.get_selected_mode()
+
+    # def get_import_mode(self) -> str: # <-- Изменено: теперь возвращает тот же ключ
+    #     """Возвращает выбранный режим импорта.'"""
+    #     # Логично возвращать тот же ключ, что и get_import_mode_key
+    #     return self.get_import_mode_key()
+
+    def get_file_path(self) -> Optional[Path]:
+        """Возвращает путь к выбранному файлу.'"""
+        # Добавим assert
+        assert self.file_path_line_edit is not None
         path_str = self.file_path_line_edit.text().strip()
         return Path(path_str) if path_str else None
 
     def is_logging_enabled(self) -> bool:
-        """Проверяет, включено ли логирование."""
+        """Проверяет, включено ли логирование.'"""
         # Добавим assert
-        assert self.logging_checkbox is not None # <-- НОВОЕ
+        assert self.logging_checkbox is not None
         return self.logging_checkbox.isChecked()
 
-    def get_import_type(self) -> str:
-        """Возвращает выбранный тип импорта."""
-        # Добавим assert
-        assert self.mode_selector is not None # <-- НОВОЕ
-        return self.mode_selector.get_selected_type()
-
-    def get_import_mode(self) -> str:
-        """Возвращает выбранный режим импорта."""
-        # Добавим assert
-        assert self.mode_selector is not None # <-- НОВОЕ
-        return self.mode_selector.get_selected_mode()
-
     def get_project_name(self) -> str:
-        """Возвращает имя проекта."""
+        """Возвращает имя проекта.'"""
         # Добавим assert
-        assert self.project_name_line_edit is not None # <-- НОВОЕ
+        assert self.project_name_line_edit is not None
         return self.project_name_line_edit.text().strip()
     # ------------------------------------------------
