@@ -242,8 +242,10 @@ class MainWindow(QMainWindow):
             
             # Получаем данные из диалога
             file_path = import_dialog.get_file_path()
-            import_type = import_dialog.get_import_type()
-            import_mode = import_dialog.get_import_mode()
+            # --- ИЗМЕНЕНО: Получаем ОДИН объединённый ключ режима ---
+            import_mode_key = import_dialog.get_import_mode_key()
+            # import_type и import_mode больше не существуют как отдельные сущности
+            # -------------------------------------------------------
             is_logging_enabled = import_dialog.is_logging_enabled()
             project_name = import_dialog.get_project_name() # Можно использовать позже
             
@@ -252,23 +254,24 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Ошибка", f"Неверный путь к файлу импорта: {file_path}")
                 return
 
-            # Сохраняем выбранные тип и режим для будущего использования
+            # Сохраняем выбранный ключ режима для будущего использования
             # (если нужно сохранять между сессиями или для других целей)
-            # self.selected_import_type = import_type
-            # self.selected_import_mode = import_mode
+            # self.selected_import_mode_key = import_mode_key
 
             # Устанавливаем состояние логирования через AppController
             self.app_controller.set_logging_enabled(is_logging_enabled)
             logger.info(f"[НОВЫЙ ДИЗАЙН] Логирование {'включено' if is_logging_enabled else 'отключено'} для импорта.")
 
-            # Создаем рабочий поток для импорта
-            self.import_worker = ImportWorker(self.app_controller, str(file_path), import_type, import_mode)
+            # --- ИЗМЕНЕНО: Передаём ОДИН ключ режима в ImportWorker ---
+            # Создаем рабочий поток для импорта, передав ему ключ режима
+            self.import_worker = ImportWorker(self.app_controller, str(file_path), import_mode_key)
+            # -------------------------------------------------------
             self.import_worker.finished.connect(self._on_import_finished)
             self.import_worker.progress.connect(self._on_import_progress)
 
             self.import_worker.start()
             self.status_bar.showMessage(f"Начат импорт {file_path.name}...")
-            logger.info(f"[НОВЫЙ ДИЗАЙН] Начат импорт: файл={file_path}, тип={import_type}, режим={import_mode}")
+            logger.info(f"[НОВЫЙ ДИЗАЙН] Начат импорт: файл={file_path}, режим={import_mode_key}")
 
         else:
             logger.info("[НОВЫЙ ДИЗАЙН] Импорт отменён пользователем.")
