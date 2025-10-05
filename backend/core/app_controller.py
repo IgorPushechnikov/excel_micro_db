@@ -3,7 +3,7 @@
 import os
 import logging
 import sqlite3
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional, Tuple, Union, Callable # <-- ДОБАВЛЕНО: Callable
 from pathlib import Path # <-- ДОБАВЛЕНО: Импорт Path из pathlib
 
 # Импортируем анализатор
@@ -364,19 +364,22 @@ class AppController:
             return None
 
     # --- Экспорт (делегировано ExportManager - заглушка) ---
-    def export_results(self, export_type: str, output_path: str) -> bool:
+    def export_results(self, export_type: str, output_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлены db_path и progress_callback
         """Универсальный метод для экспорта результатов проекта."""
         # Пока вызываем напрямую, но в будущем будет через ExportManager
         if export_type.lower() == 'excel':
             # Новый питоновский экспорт через xlsxwriter
-            return self.export_project_with_xlsxwriter(output_path)
+            # Используем db_path, если он предоставлен, иначе self.project_db_path
+            actual_db_path = db_path or self.project_db_path
+            # Передаём progress_callback
+            return self.export_project_with_xlsxwriter(actual_db_path, progress_callback=progress_callback)
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
             return False
 
     def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
         """Экспортирует проект в Excel-файл (старый метод)."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'}.")
+        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'} .")
         try:
             from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
             success = export_with_xlsxwriter(self.project_db_path, output_path)
@@ -389,7 +392,7 @@ class AppController:
             logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
             return False
 
-    def export_project_with_xlsxwriter(self, output_path: str) -> bool:
+    def export_project_with_xlsxwriter(self, output_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлены db_path и progress_callback
         """Экспортирует проект в Excel-файл с использованием Python-экспортера (xlsxwriter)."""
         # --- НОВОЕ: Проверка и добавление расширения .xlsx ---
         output_path_obj = Path(output_path)
@@ -399,13 +402,15 @@ class AppController:
             logger.info(f"К пути экспорта добавлено расширение '.xlsx'. Новый путь: {output_path}")
         # ----------------------------------------------------
 
-        logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter).")
+        # Используем db_path, если он предоставлен, иначе self.project_db_path
+        actual_db_path = db_path or self.project_db_path
+        logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter). Используется БД: {actual_db_path}")
         try:
             # Импортируем xlsxwriter_exporter
             from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
             
-            # Выполняем экспорт
-            success = export_project_xlsxwriter(self.project_db_path, output_path)
+            # Выполняем экспорт, передаём actual_db_path и progress_callback
+            success = export_project_xlsxwriter(actual_db_path, output_path, progress_callback=progress_callback)
 
             if success:
                 logger.info(f"Проект успешно экспортирован в '{output_path}' с помощью Python-экспортера (xlsxwriter).")
@@ -823,7 +828,6 @@ class AppController:
         return self.import_raw_data_fast_with_pandas(file_path, options, db_path)
 
     # --- КОНЕЦ НОВОГО ---
-
 
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
