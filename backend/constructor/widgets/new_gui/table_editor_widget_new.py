@@ -89,14 +89,18 @@ class TableEditorWidget(QWidget):
     def _setup_connections(self):
         """Подключает сигналы к слотам."""
         # --- Подключение сигналов таблицы ---
-        self.table_view.clicked.connect(self._on_cell_clicked)
-        self.table_view.doubleClicked.connect(self._on_cell_double_clicked)
-        self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        if self.table_view:
+            self.table_view.clicked.connect(self._on_cell_clicked)
+            self.table_view.doubleClicked.connect(self._on_cell_double_clicked)
+            selection_model = self.table_view.selectionModel()
+            if selection_model:
+                selection_model.selectionChanged.connect(self._on_selection_changed)
         # ----------------------------------
 
         # --- Подключение сигналов строки формул ---
-        self.formula_line_edit.returnPressed.connect(self._on_formula_return_pressed)
-        self.formula_line_edit.editingFinished.connect(self._on_formula_editing_finished)
+        if self.formula_line_edit:
+            self.formula_line_edit.returnPressed.connect(self._on_formula_return_pressed)
+            self.formula_line_edit.editingFinished.connect(self._on_formula_editing_finished)
         # -----------------------------------------
 
     def load_sheet(self, sheet_name: str):
@@ -114,7 +118,7 @@ class TableEditorWidget(QWidget):
                 return
 
             # Создаем или получаем модель
-            if self.model is None:
+            if self.model is None and self.table_view:
                 self.model = TableModel(self.app_controller, self)
                 self.table_view.setModel(self.model)
                 logger.debug("TableModel создана и установлена для QTableView.")
@@ -125,7 +129,8 @@ class TableEditorWidget(QWidget):
             
             # Сбрасываем текущий индекс
             self._current_index = None
-            self.formula_line_edit.clear()
+            if self.formula_line_edit:
+                self.formula_line_edit.clear()
             
         except Exception as e:
             logger.error(f"Ошибка при загрузке листа '{sheet_name}' в TableEditorWidget: {e}", exc_info=True)
@@ -139,9 +144,11 @@ class TableEditorWidget(QWidget):
         """
         if index.isValid():
             self._current_index = index
-            # Получаем "сырое" значение (EditRole) для отображения в строке формул
-            value = self.model.data(index, Qt.ItemDataRole.EditRole) if self.model else None
-            self.formula_line_edit.setText(str(value) if value is not None else "")
+            value = None
+            if self.model:
+                value = self.model.data(index, Qt.ItemDataRole.EditRole)
+            if self.formula_line_edit:
+                self.formula_line_edit.setText(str(value) if value is not None else "")
             logger.debug(f"Ячейка ({index.row()}, {index.column()}) выбрана. Значение: {value}")
 
     def _on_cell_double_clicked(self, index: QModelIndex):
@@ -152,9 +159,10 @@ class TableEditorWidget(QWidget):
         if index.isValid():
             self._current_index = index
             # Фокус на строку формул
-            self.formula_line_edit.setFocus()
-            # Выделяем текст для удобства
-            self.formula_line_edit.selectAll()
+            if self.formula_line_edit:
+                self.formula_line_edit.setFocus()
+                # Выделяем текст для удобства
+                self.formula_line_edit.selectAll()
             logger.debug(f"Двойной клик по ячейке ({index.row()}, {index.column()}). Фокус на формуле.")
 
     def _on_selection_changed(self, selected: QItemSelection, deselected: QItemSelection):
@@ -196,7 +204,7 @@ class TableEditorWidget(QWidget):
         """
         Сохраняет значение из строки формул в текущую ячейку.
         """
-        if self._current_index and self._current_index.isValid() and self.model:
+        if self._current_index and self._current_index.isValid() and self.model and self.formula_line_edit:
             new_value = self.formula_line_edit.text()
             logger.debug(f"Сохранение значения '{new_value}' в ячейку ({self._current_index.row()}, {self._current_index.column()})")
             
@@ -205,10 +213,11 @@ class TableEditorWidget(QWidget):
             if success:
                 logger.info(f"Значение ячейки ({self._current_index.row()}, {self._current_index.column()}) успешно обновлено через строку формул.")
                 # Фокус возвращаем в таблицу
-                self.table_view.setFocus()
+                if self.table_view:
+                    self.table_view.setFocus()
             else:
                 logger.error(f"Не удалось обновить значение ячейки ({self._current_index.row()}, {self._current_index.column()}) через строку формул.")
-                QMessageBox.critical(self, "Ошибка", f"Не удалось обновить значение ячейки ({self._current_index.row()+1}, {_index_to_column_name(self._current_index.column())}).")
+                # QMessageBox.critical(self, "Ошибка", f"Не удалось обновить значение ячейки ({self._current_index.row()+1}, {_index_to_column_name(self._current_index.column())}).")
         else:
             logger.warning("Нет активной ячейки для сохранения значения из строки формул.")
             
