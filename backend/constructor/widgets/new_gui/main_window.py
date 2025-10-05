@@ -262,16 +262,27 @@ class MainWindow(QMainWindow):
             self.app_controller.set_logging_enabled(is_logging_enabled)
             logger.info(f"[НОВЫЙ ДИЗАЙН] Логирование {'включено' if is_logging_enabled else 'отключено'} для импорта.")
 
-            # --- ИЗМЕНЕНО: Передаём ОДИН ключ режима в ImportWorker ---
+            # --- ИЗМЕНЕНО: Разбор import_mode_key на import_type и import_mode ---
+            parts = import_mode_key.split('_', 1) # Разделить только по первому '_'
+            if len(parts) == 2:
+                import_type, import_mode = parts
+            else:
+                # Обработка ошибки или установка значений по умолчанию, если формат неверен
+                logger.error(f"[НОВЫЙ ДИЗАЙН] Неверный формат import_mode_key: {import_mode_key}")
+                QMessageBox.critical(self, "Ошибка", f"Неверный формат ключа режима импорта: {import_mode_key}")
+                return
+            # -------------------------------------------------------
+
+            # --- ИЗМЕНЕНО: Передаём import_type и import_mode в ImportWorker ---
             # Создаем рабочий поток для импорта, передав ему ключ режима
-            self.import_worker = ImportWorker(self.app_controller, str(file_path), import_mode_key)
+            self.import_worker = ImportWorker(self.app_controller, str(file_path), import_type, import_mode)
             # -------------------------------------------------------
             self.import_worker.finished.connect(self._on_import_finished)
             self.import_worker.progress.connect(self._on_import_progress)
 
             self.import_worker.start()
             self.status_bar.showMessage(f"Начат импорт {file_path.name}...")
-            logger.info(f"[НОВЫЙ ДИЗАЙН] Начат импорт: файл={file_path}, режим={import_mode_key}")
+            logger.info(f"[НОВЫЙ ДИЗАЙН] Начат импорт: файл={file_path}, тип={import_type}, режим={import_mode}")
 
         else:
             logger.info("[НОВЫЙ ДИЗАЙН] Импорт отменён пользователем.")
