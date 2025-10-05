@@ -123,9 +123,13 @@ class TableEditorWidget(QWidget):
                 self.table_view.setModel(self.model)
                 logger.debug("TableModel создана и установлена для QTableView.")
             
-            # Загружаем данные в модель
-            self.model.load_sheet(sheet_name)
-            logger.info(f"TableEditorWidget: Лист '{sheet_name}' успешно загружен в модель.")
+            # Загружаем данные в модель ТОЛЬКО ЕСЛИ МОДЕЛЬ СОЗДАНА
+            if self.model: # <-- НОВАЯ ПРОВЕРКА
+                self.model.load_sheet(sheet_name)
+                logger.info(f"TableEditorWidget: Лист '{sheet_name}' успешно загружен в модель.")
+            else:
+                logger.error("TableModel не была создана или QTableView не инициализирован. Невозможно загрузить данные.")
+                QMessageBox.critical(self, "Ошибка", "Внутренняя ошибка: модель таблицы не инициализирована.")
             
             # Сбрасываем текущий индекс
             self._current_index = None
