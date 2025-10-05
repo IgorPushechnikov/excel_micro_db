@@ -10,9 +10,9 @@ from typing import Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView, QLineEdit, 
-    QMessageBox, QHeaderView, QAbstractItemView, QItemSelection, QItemSelectionModel
+    QMessageBox, QHeaderView, QAbstractItemView
 )
-from PySide6.QtCore import Qt, QModelIndex
+from PySide6.QtCore import Qt, QModelIndex, QItemSelection, QItemSelectionModel
 from PySide6.QtGui import QKeySequence
 
 # Импортируем модель
@@ -174,10 +174,10 @@ class TableEditorWidget(QWidget):
         if len(selected_indexes) == 1:
             self._on_cell_clicked(selected_indexes[0])
         elif len(selected_indexes) > 1:
-            # Если выделено несколько ячеек, можно очистить строку формул или показать что-то другое
+            # Если выдело несколько ячеек, можно очистить строку формул или показать что-то другое
             self._current_index = None
             self.formula_line_edit.clear()
-            logger.debug(f"Выделено {len(selected_indexes)} ячеек. Строка формул очищена.")
+            logger.debug(f"Выдело {len(selected_indexes)} ячеек. Строка формул очищена.")
         # Если ничего не выделено, оставляем как есть или очищаем
 
     # --- Обработчики событий строки формул ---
