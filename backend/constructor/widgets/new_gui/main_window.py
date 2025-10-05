@@ -6,7 +6,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable # <-- Добавлен Callable
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QStatusBar, QToolBar, QFileDialog,
     QMessageBox, QWidget, QStackedWidget, QHBoxLayout, QSplitter,
@@ -36,7 +36,17 @@ class ImportWorker(QThread):
     finished = Signal(bool, str)  # (успех/ошибка, сообщение)
     progress = Signal(int, str)   # (значение, сообщение) - если AppController будет передавать прогресс
 
-    def __init__(self, app_controller, file_path, import_type, import_mode):
+    def __init__(self, app_controller, file_path, import_type, import_mode, progress_callback: Optional[Callable[[int, str], None]] = None): # <-- ИЗМЕНЕНО
+        """
+        Инициализирует рабочий поток импорта.
+
+        Args:
+            app_controller: Экземпляр AppController.
+            file_path (str): Путь к импортируемому файлу.
+            import_type (str): Тип импорта.
+            import_mode (str): Режим импорта.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса. # <-- ДОБАВЛЕНО
+        """
         super().__init__()
         self.app_controller = app_controller
         self.file_path = file_path
@@ -45,6 +55,7 @@ class ImportWorker(QThread):
         # --- НОВОЕ: Получаем путь к БД из app_controller ---
         self.db_path = app_controller.project_db_path
         # --- КОНЕЦ НОВОГО ---
+        self.progress_callback = progress_callback # <-- НОВОЕ
 
     def run(self):
         """
@@ -52,6 +63,15 @@ class ImportWorker(QThread):
         """
         try:
             logger.info(f"Начало импорта (тип: {self.import_type}, режим: {self.import_mode}) для файла {self.file_path} в потоке {id(QThread.currentThread())}")
+
+            # --- НОВОЕ: Создаём функцию-обёртку для прогресса ---
+            def internal_progress_callback(value, message):
+                # Эмитим сигнал для внутреннего использования (например, в MainWindow)
+                self.progress.emit(value, message)
+                # Если передан внешний callback, вызываем его
+                if self.progress_callback:
+                    self.progress_callback(value, message)
+            # --- КОНЕЦ НОВОГО ---
 
             # Определяем метод AppController на основе типа и режима
             method_name = f"import_{self.import_type}_from_excel"
@@ -62,9 +82,9 @@ class ImportWorker(QThread):
             if method is None:
                 raise AttributeError(f"AppController не имеет метода {method_name}")
 
-            # --- ИЗМЕНЕНО: Передаем db_path вместо app_controller ---
-            # success = method(self.file_path)
-            success = method(self.file_path, db_path=self.db_path)
+            # --- ИЗМЕНЕНО: Передаем db_path и progress_callback ---
+            # success = method(self.file_path, db_path=self.db_path)
+            success = method(self.file_path, db_path=self.db_path, progress_callback=internal_progress_callback) # <-- ИЗМЕНЕНО
             # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
             logger.info(f"Импорт (тип: {self.import_type}, режим: {self.import_mode}) для файла {self.file_path} завершён в потоке {id(QThread.currentThread())}.")
@@ -285,7 +305,7 @@ class MainWindow(QMainWindow):
         # Показываем модально
         result = import_dialog.exec()
         
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             logger.info("[НОВЫЙ ДИЗАЙН] Импорт подтверждён в диалоге.")
             
             # Получаем данные из диалога
