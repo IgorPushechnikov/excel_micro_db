@@ -60,7 +60,7 @@ class ImportDialog(QDialog):
         main_layout = QVBoxLayout(self)
 
         # --- Форма выбора файла ---
-        file_group_box = QGroupBox(self, "Файл Excel для импорта")
+        file_group_box = QGroupBox(title="Файл Excel для импорта", parent=self)
         file_layout = QFormLayout(file_group_box)
 
         self.file_path_line_edit = QLineEdit(self)
@@ -77,7 +77,7 @@ class ImportDialog(QDialog):
         # --------------------------
 
         # --- Опции импорта ---
-        options_group_box = QGroupBox(self, "Опции импорта")
+        options_group_box = QGroupBox(title="Опции импорта", parent=self)
         options_layout = QVBoxLayout(options_group_box)
 
         # Чекбокс логирования
