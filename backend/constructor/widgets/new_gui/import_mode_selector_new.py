@@ -23,7 +23,7 @@ class ImportModeSelector(QGroupBox):
     Виджет для выбора типа данных и режима импорта.
     Режимы - сверху, горизонтально.
     Типы - снизу, вертикально.
-    Опции - под типами, скрываются/показываются в зависимости от режима.
+    Опции - под типами, динамически добавляются/удаляются в макет в зависимости от режима.
     Комментарий - под опциями, скрывается/показывается и обновляется в зависимости от режима.
     """
 
@@ -89,6 +89,8 @@ class ImportModeSelector(QGroupBox):
         # Виджеты для опций и комментария
         self.options_group_widget: Optional[QWidget] = None
         self.comment_label: Optional[QLabel] = None
+        # Ссылка на основной макет для динамического добавления/удаления
+        self.main_layout: Optional[QVBoxLayout] = None
         # -----------------------
 
         self._setup_ui()
@@ -98,8 +100,8 @@ class ImportModeSelector(QGroupBox):
 
     def _setup_ui(self):
         """Создаёт элементы интерфейса."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout = QVBoxLayout(self) # Сохраняем ссылку
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         # --- Группа для выбора РЕЖИМА (горизонтально) ---
         mode_group_box = QGroupBox("Режим импорта")
@@ -115,7 +117,7 @@ class ImportModeSelector(QGroupBox):
             self.mode_button_group.addButton(radio_button)
             mode_layout.addWidget(radio_button)
 
-        main_layout.addWidget(mode_group_box)
+        self.main_layout.addWidget(mode_group_box)
         # ---------------------------------------------
 
         # --- Группа для выбора ТИПА (вертикально) ---
@@ -132,13 +134,14 @@ class ImportModeSelector(QGroupBox):
             self.type_button_group.addButton(radio_button)
             type_layout.addWidget(radio_button)
 
-        main_layout.addWidget(type_group_box)
+        self.main_layout.addWidget(type_group_box)
         # ------------------------------------------
 
         # --- Виджет для ОПЦИЙ (например, для "Выборочно") ---
-        # Изначально скрыт
+        # Создаем, но НЕ добавляем в main_layout сразу.
+        # Он будет добавляться/удаляться динамически.
         self.options_group_widget = QWidget(self)
-        self.options_group_widget.setVisible(False) # Скрыт по умолчанию
+        # self.options_group_widget.setVisible(False) # Не нужно, так как он не в макете
         options_layout = QVBoxLayout(self.options_group_widget)
 
         # Добавляем только те опции, которые нужны для "Выборочно"
@@ -146,7 +149,6 @@ class ImportModeSelector(QGroupBox):
         self.option_button_group.setExclusive(False) # Можно выбрать несколько опций
 
         for opt_key, opt_label in self.SELECTIVE_OPTIONS.items():
-            # Проверяем, что тип существует в IMPORT_TYPES, чтобы использовать его кнопку
             # Создадим отдельные QRadioButton для опций.
             option_radio_button = QRadioButton(opt_label, self)
             option_radio_button.setProperty("option_key", opt_key)
@@ -155,14 +157,14 @@ class ImportModeSelector(QGroupBox):
             options_layout.addWidget(option_radio_button)
             logger.debug(f"Добавлена опция выбора '{opt_key}' как отдельный элемент.")
 
-        main_layout.addWidget(self.options_group_widget)
+        # main_layout.addWidget(self.options_group_widget) # <-- УДАЛЕНО
         # ---------------------------------------------
 
         # --- Метка для комментария ---
         self.comment_label = QLabel("", self)
         self.comment_label.setWordWrap(True) # Перенос строк
         self.comment_label.setVisible(False) # Скрыта по умолчанию
-        main_layout.addWidget(self.comment_label)
+        self.main_layout.addWidget(self.comment_label)
         # -----------------------------
 
     def _setup_connections(self):
@@ -212,29 +214,50 @@ class ImportModeSelector(QGroupBox):
     # --- Логика обновления UI ---
     def _update_ui_for_mode(self, selected_mode: str):
         """
-        Обновляет видимость опций и комментария в зависимости от выбранного режима.
+        Обновляет макет (добавляет/удаляет опции) и видимость комментария
+        в зависимости от выбранного режима.
 
         Args:
             selected_mode (str): Ключ выбранного режима импорта.
         """
         logger.debug(f"Обновление UI для режима: {selected_mode}")
 
-        # Сначала скрываем всё, что может быть показано
-        if self.options_group_widget:
-            self.options_group_widget.setVisible(False)
+        # --- НОВАЯ ЛОГИКА: Динамическое управление макетом ---
+        # 1. Управление виджетом опций
+        if self.options_group_widget and self.main_layout:
+            if selected_mode == 'selective':
+                # Найти индекс comment_label для вставки перед ним
+                comment_index = self.main_layout.indexOf(self.comment_label)
+                current_options_index = self.main_layout.indexOf(self.options_group_widget)
+
+                # Если опции еще не добавлены или добавлены не перед comment_label
+                if current_options_index == -1 or current_options_index >= comment_index:
+                    # Убедимся, что опции удалены, если были добавлены в другое место
+                    if current_options_index != -1:
+                        self.main_layout.removeWidget(self.options_group_widget)
+
+                    # Вставляем перед comment_label
+                    if comment_index != -1:
+                        self.main_layout.insertWidget(comment_index, self.options_group_widget)
+                    else:
+                        # Если comment_label не найден (неожиданно), добавим в конец
+                        self.main_layout.addWidget(self.options_group_widget)
+                    logger.debug("Виджет опций добавлен в макет.")
+            else:
+                # Удалить опции из макета, если они там есть
+                current_options_index = self.main_layout.indexOf(self.options_group_widget)
+                if current_options_index != -1:
+                    self.main_layout.removeWidget(self.options_group_widget)
+                    logger.debug("Виджет опций удален из макета.")
+        # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
+        # 2. Управление комментарием
         if self.comment_label:
             self.comment_label.setVisible(False)
-
-        # Затем показываем нужное в зависимости от режима
-        if selected_mode == 'selective':
-            # Показываем опции
-            if self.options_group_widget:
-                self.options_group_widget.setVisible(True)
-        elif selected_mode in self.MODE_COMMENTS:
-            # Показываем комментарий
-            if self.comment_label:
+            if selected_mode in self.MODE_COMMENTS:
                 self.comment_label.setText(self.MODE_COMMENTS[selected_mode])
                 self.comment_label.setVisible(True)
+                logger.debug(f"Показан комментарий для режима '{selected_mode}'.")
 
     # ------------------------------------
 
