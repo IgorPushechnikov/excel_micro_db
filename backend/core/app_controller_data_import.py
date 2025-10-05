@@ -418,12 +418,95 @@ def import_formulas_from_excel_selective(storage: ProjectDBStorage, file_path: s
 
 def import_raw_data_from_excel_in_chunks(storage: ProjectDBStorage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
-    Импортирует "сырые" данные частями из Excel-файла в БД проекта.
+    Импортирует "сырые" данные (значения ячеек) частями из Excel-файла в БД проекта.
+    Использует openpyxl и параметр 'chunk_size_rows' из chunk_options.
+
+    Args:
+        storage: Экземпляр ProjectDBStorage для сохранения данных.
+        file_path (str): Путь к Excel-файлу для импорта.
+        chunk_options (Dict[str, Any]): Опции для разбиения на части.
+            {
+                'chunk_size_rows': int, # Количество строк в одной части (по умолчанию 1000)
+                'sheets': List[str]     # Список имён листов для импорта. Если пуст, все.
+            }
+
+    Returns:
+        bool: True, если импорт прошёл успешно, иначе False.
     """
-    logger.info(f"Импорт сырых данных частями из '{file_path}' с опциями {chunk_options}. (Заглушка)")
-    # Реализация будет разбивать файл на части и вызывать
-    # import_raw_data_from_excel_selective для каждой части
-    return True
+    if not storage:
+        logger.error("Экземпляр ProjectDBStorage не предоставлен. Невозможно выполнить импорт.")
+        return False
+
+    if not os.path.exists(file_path):
+        logger.error(f"Excel-файл для импорта не найден: {file_path}")
+        return False
+
+    logger.info(f"Начало импорта 'сырых' данных частями из Excel-файла: {file_path} с опциями {chunk_options}")
+
+    # Установим значения по умолчанию
+    chunk_size = chunk_options.get('chunk_size_rows', 1000)
+    sheets_to_import_orig = chunk_options.get('sheets', [])
+
+    try:
+        workbook = openpyxl.load_workbook(file_path, data_only=False, read_only=True) # read_only=True может помочь с памятью
+        logger.debug(f"Книга '{file_path}' успешно открыта в режиме 'read_only'.")
+
+        if not sheets_to_import_orig:
+            sheets_to_import_orig = workbook.sheetnames
+
+        # Явно приводим элементы к str
+        sheets_to_import: List[str] = [str(name) for name in sheets_to_import_orig]
+
+        for sheet_name_orig in sheets_to_import:
+            sheet_name: str = str(sheet_name_orig)
+            if sheet_name not in workbook.sheetnames:
+                logger.warning(f"Лист '{sheet_name}' не найден в файле '{file_path}'. Пропущен.")
+                continue
+
+            logger.info(f"Импорт 'сырых' данных с листа: {sheet_name} частями по {chunk_size} строк")
+
+            # --- НОВОЕ: Гарантируем, что запись о листе существует ---
+            sheet_id = storage.save_sheet(project_id=1, sheet_name=sheet_name)
+            if sheet_id is None:
+                logger.error(f"Не удалось создать/получить ID для листа '{sheet_name}'. Пропущен.")
+                return False
+            # --- КОНЕЦ НОВОГО ---
+
+            sheet: Worksheet = workbook[sheet_name]
+            total_rows = sheet.max_row
+            logger.debug(f"Обнаружено {total_rows} строк на листе '{sheet_name}'.")
+
+            start_row = 1 # openpyxl использует 1-based индексацию
+            while start_row <= total_rows:
+                end_row = min(start_row + chunk_size - 1, total_rows)
+                logger.debug(f"Обработка строки {start_row} - {end_row}.")
+
+                raw_data_list = []
+                # Используем iter_rows с указанием min_row и max_row для "части"
+                for row in sheet.iter_rows(min_row=start_row, max_row=end_row, values_only=False):
+                    for cell in row:
+                        if cell.value is not None or cell.data_type == 'f': # Сохраняем значения и формулы
+                            data_item = {
+                                "cell_address": cell.coordinate,
+                                "value": cell.value,
+                            }
+                            raw_data_list.append(data_item)
+
+                # Сохраняем "часть" данных в БД
+                if not storage.save_sheet_raw_data(sheet_name, raw_data_list):
+                    logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}' (часть строки {start_row}-{end_row}).")
+                    return False
+
+                logger.debug(f"Сохранена часть данных с {start_row} по {end_row} для листа '{sheet_name}'.")
+
+                start_row = end_row + 1 # Переходим к следующей части
+
+        logger.info(f"Импорт 'сырых' данных частями из '{file_path}' завершён.")
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка при импорте 'сырых' данных частями из файла '{file_path}': {e}", exc_info=True)
+        return False
 
 def import_styles_from_excel_in_chunks(storage: ProjectDBStorage, file_path: str, chunk_options: Dict[str, Any]) -> bool:
     """
