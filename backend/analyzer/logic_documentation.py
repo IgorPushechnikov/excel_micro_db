@@ -213,7 +213,7 @@ def _serialize_chart(chart_obj) -> Dict[str, Any]:
                         else:
                             # Грубое приближение, если ext недоступен
                             width_emu = (to_cell.col - from_cell.col) * 640000 + (to_cell.colOff - from_cell.colOff)
-                            height_emu = (to_row - from_row) * 640000 + (to_row.rowOff - from_row.rowOff)
+                            height_emu = (to_cell.row - from_cell.row) * 640000 + (to_cell.rowOff - from_cell.rowOff)
                     except Exception as calc_e:
                         logger.warning(f"[ДИАГРАММА] Не удалось вычислить размеры для TwoCellAnchor: {calc_e}")
                         # Если вычисление не удалось, оставляем width_emu/height_emu как None
