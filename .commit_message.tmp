@@ -1,0 +1,6 @@
+Исправление передачи output_path в AppController.export_results
+
+В методе export_results, при вызове export_project_with_xlsxwriter, аргумент output_path
+не передавался, в результате чего файл сохранялся с неверным именем или в неверное место.
+
+Исправлен вызов, чтобы output_path корректно передавался первым аргументом.
