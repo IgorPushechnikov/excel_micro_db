@@ -116,7 +116,11 @@ class ImportModeSelector(QWidget):
     def _setup_connections(self):
         """Подключает сигналы к слотам."""
         # Подключение сигналов групп кнопок
+        # Добавим assert перед обращением к buttonClicked
+        assert self.type_button_group is not None
         self.type_button_group.buttonClicked.connect(self._on_type_button_clicked)
+        # Добавим assert перед обращением к buttonClicked
+        assert self.mode_button_group is not None
         self.mode_button_group.buttonClicked.connect(self._on_mode_button_clicked)
 
     def _set_default_selection(self):
@@ -182,6 +186,8 @@ class ImportModeSelector(QWidget):
         Returns:
             str: Ключ выбранного типа (например, 'all_data').
         """
+        # Добавим assert перед обращением к checkedButton
+        assert self.type_button_group is not None
         checked_button = self.type_button_group.checkedButton()
         if checked_button:
             type_key = checked_button.property("type_key")
@@ -197,6 +203,8 @@ class ImportModeSelector(QWidget):
         Returns:
             str: Ключ выбранного режима (например, 'all').
         """
+        # Добавим assert перед обращением к checkedButton
+        assert self.mode_button_group is not None
         checked_button = self.mode_button_group.checkedButton()
         if checked_button:
             mode_key = checked_button.property("mode_key")
