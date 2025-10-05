@@ -134,6 +134,7 @@ class TableEditorWidget(QWidget):
             # Сбрасываем текущий индекс
             self._current_index = None
             if self.formula_line_edit:
+                assert self.formula_line_edit is not None  # <-- Удовлетворяет Pylance
                 self.formula_line_edit.clear()
             
         except Exception as e:
@@ -180,7 +181,9 @@ class TableEditorWidget(QWidget):
         elif len(selected_indexes) > 1:
             # Если выдело несколько ячеек, можно очистить строку формул или показать что-то другое
             self._current_index = None
-            self.formula_line_edit.clear()
+            if self.formula_line_edit: # <-- Добавляем assert и здесь тоже для единообразия, если Pylance ругается
+                assert self.formula_line_edit is not None
+                self.formula_line_edit.clear()
             logger.debug(f"Выдело {len(selected_indexes)} ячеек. Строка формул очищена.")
         # Если ничего не выделено, оставляем как есть или очищаем
 
