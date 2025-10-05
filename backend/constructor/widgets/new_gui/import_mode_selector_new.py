@@ -104,7 +104,7 @@ class ImportModeSelector(QGroupBox):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         # --- Группа для выбора РЕЖИМА (горизонтально) ---
-        mode_group_box = QGroupBox("Режим импорта")
+        mode_group_box = QGroupBox(self, "Режим импорта")
         mode_layout = QHBoxLayout(mode_group_box) # Горизонтальный Layout
 
         self.mode_button_group = QButtonGroup(self)
@@ -121,7 +121,7 @@ class ImportModeSelector(QGroupBox):
         # ---------------------------------------------
 
         # --- Группа для выбора ТИПА (вертикально) ---
-        type_group_box = QGroupBox("Тип данных для импорта")
+        type_group_box = QGroupBox(self, "Тип данных для импорта")
         type_layout = QVBoxLayout(type_group_box)
 
         self.type_button_group = QButtonGroup(self)
