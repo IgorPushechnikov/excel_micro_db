@@ -55,15 +55,15 @@ class ExportWorker(QThread):
             # --- КОНЕЦ НОВОГО ---
 
             # --- ИЗМЕНЕНО: Логика вызова метода AppController для экспорта ---
-            # Предположим, AppController имеет метод export_to_excel
-            method_name = "export_to_excel" # <-- Пример имени метода
+            # Используем правильный метод export_results
+            method_name = "export_results" # <-- ИСПРАВЛЕНО: Правильное имя метода
             method = getattr(self.app_controller, method_name, None)
             if method is None:
                 raise AttributeError(f"AppController не имеет метода {method_name}")
 
             # Вызываем метод экспорта
-            # --- ИЗМЕНЕНО: Передаем output_path и db_path, а также progress_callback ---
-            success = method(self.output_path, db_path=self.db_path, progress_callback=internal_progress_callback)
+            # --- ИЗМЕНЕНО: Передаем export_type, output_path и db_path, а также progress_callback ---
+            success = method(export_type="excel", output_path=self.output_path, db_path=self.db_path, progress_callback=internal_progress_callback)
             # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
             logger.info(f"Экспорт в файл {self.output_path} завершён в потоке {id(QThread.currentThread())}.")
