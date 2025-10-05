@@ -746,6 +746,76 @@ class AppController:
         from .app_controller_data_import import import_raw_data_fast_with_pandas as import_func
         return import_func(storage_to_use, file_path, options)
 
+    # --- НОВОЕ: Метод для импорта по режиму 'Авто' ---
+    def import_auto_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+        """
+        Импортирует данные, стили, диаграммы и формулы из Excel-файла
+        с использованием оптимальных методов для каждого типа (Авто-режим).
+        1. Данные - Pandas
+        2. Стили - Openpyxl
+        3. Диаграммы - Openpyxl
+        4. Формулы - Openpyxl
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта (передаются в каждый под-метод).
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+
+        Returns:
+            bool: True, если все этапы импорта прошли успешно, иначе False.
+        """
+        logger.info(f"Начало авто-импорта из Excel-файла: {file_path}")
+
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить авто-импорт.")
+            return False
+
+        success = True
+        # 1. Импорт "сырых" данных с помощью pandas (быстро)
+        if success:
+            logger.info("Авто-импорт: Начало импорта 'сырых' данных (pandas)...")
+            success = self.import_raw_data_fast_with_pandas(file_path, options, db_path)
+            if success:
+                logger.info("Авто-импорт: 'Сырые' данные (pandas) успешно импортированы.")
+            else:
+                logger.error("Авто-импорт: Ошибка при импорте 'сырых' данных (pandas).")
+
+        # 2. Импорт стилей с помощью openpyxl
+        if success:
+            logger.info("Авто-импорт: Начало импорта стилей (openpyxl)...")
+            success = self.import_styles_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Авто-импорт: Стили (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Авто-импорт: Ошибка при импорте стилей (openpyxl).")
+
+        # 3. Импорт диаграмм с помощью openpyxl
+        if success:
+            logger.info("Авто-импорт: Начало импорта диаграмм (openpyxl)...")
+            success = self.import_charts_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Авто-импорт: Диаграммы (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Авто-импорт: Ошибка при импорте диаграмм (openpyxl).")
+
+        # 4. Импорт формул с помощью openpyxl
+        if success:
+            logger.info("Авто-импорт: Начало импорта формул (openpyxl)...")
+            success = self.import_formulas_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Авто-импорт: Формулы (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Авто-импорт: Ошибка при импорте формул (openpyxl).")
+
+        if success:
+            logger.info(f"Авто-импорт из '{file_path}' завершён успешно.")
+        else:
+            logger.error(f"Авто-импорт из '{file_path}' завершён с ошибками.")
+
+        return success
+    # --- КОНЕЦ НОВОГО ---
+
     # --- НОВОЕ: Заглушки для недостающих методов ---
     def import_all_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
