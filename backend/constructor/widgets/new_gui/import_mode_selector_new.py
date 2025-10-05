@@ -141,7 +141,7 @@ class ImportModeSelector(QGroupBox):
         # Создаем, но НЕ добавляем в main_layout сразу.
         # Он будет добавляться/удаляться динамически.
         self.options_group_widget = QWidget(self)
-        # self.options_group_widget.setVisible(False) # Не нужно, так как он не в макете
+        self.options_group_widget.setVisible(False)  # Явно скрываем при создании
         options_layout = QVBoxLayout(self.options_group_widget)
 
         # Добавляем только те опции, которые нужны для "Выборочно"
@@ -150,7 +150,8 @@ class ImportModeSelector(QGroupBox):
 
         for opt_key, opt_label in self.SELECTIVE_OPTIONS.items():
             # Создадим отдельные QRadioButton для опций.
-            option_radio_button = QRadioButton(opt_label, self)
+            # ИСПРАВЛЕНО: родитель теперь self.options_group_widget
+            option_radio_button = QRadioButton(opt_label, self.options_group_widget)
             option_radio_button.setProperty("option_key", opt_key)
             self.option_radio_buttons[opt_key] = option_radio_button
             self.option_button_group.addButton(option_radio_button)
@@ -246,16 +247,18 @@ class ImportModeSelector(QGroupBox):
 
                 # Вставляем перед comment_label
                 if comment_index != -1:
-                    self.main_layout.insertWidget(comment_index, self.options_group_widget)
+                self.main_layout.insertWidget(comment_index, self.options_group_widget)
                 else:
-                    # Если comment_label не найден (неожиданно), добавим в конец
-                    self.main_layout.addWidget(self.options_group_widget)
-                logger.debug("Виджет опций добавлен в макет.")
+                # Если comment_label не найден (неожиданно), добавим в конец
+                self.main_layout.addWidget(self.options_group_widget)
+                self.options_group_widget.setVisible(True)  # Показываем виджет
+            logger.debug("Виджет опций добавлен в макет.")
         else:
             # Удалить опции из макета, если они там есть
             current_options_index = self.main_layout.indexOf(self.options_group_widget)
             if current_options_index != -1:
                 self.main_layout.removeWidget(self.options_group_widget)
+                self.options_group_widget.setVisible(False)  # Скрываем виджет
                 logger.debug("Виджет опций удален из макета.")
         # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
@@ -305,10 +308,15 @@ class ImportModeSelector(QGroupBox):
     def get_selected_options(self) -> list[str]:
         """
         Возвращает список ключей выбранных опций (для режима "Выборочно").
+        Возвращает пустой список, если текущий режим не 'selective'.
 
         Returns:
             list[str]: Список ключей выбранных опций (например, ['raw_data', 'styles']).
         """
+        # Логическая защита: опции актуальны ТОЛЬКО в режиме 'selective'
+        if self.get_selected_mode() != 'selective':
+            return []
+        
         selected_options = []
         if self.option_button_group:
             for button in self.option_button_group.buttons():
