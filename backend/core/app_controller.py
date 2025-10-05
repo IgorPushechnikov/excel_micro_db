@@ -807,6 +807,22 @@ class AppController:
         logger.warning("Метод 'import_all_data_from_excel_chunks' не реализован.")
         return False
 
+    def import_raw_data_pandas_from_excel_fast(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+        """
+        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
+        Это дублирует 'import_raw_data_fast_with_pandas'.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+
+        Returns:
+            bool: Результат вызова 'import_raw_data_fast_with_pandas'.
+        """
+        logger.info("Вызов 'import_raw_data_pandas_from_excel_fast' перенаправлен на 'import_raw_data_fast_with_pandas'.")
+        return self.import_raw_data_fast_with_pandas(file_path, options, db_path)
+
     # --- КОНЕЦ НОВОГО ---
 
 
