@@ -1,6 +1,8 @@
 # backend/constructor/widgets/new_gui/import_mode_selector_new.py
 """
 Виджет для выбора типа и режима импорта данных Excel.
+Режимы отображаются горизонтально над типами.
+При выборе режима показываются/скрываются опции и комментарии.
 """
 
 import logging
@@ -16,9 +18,13 @@ from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-class ImportModeSelector(QWidget):
+class ImportModeSelector(QGroupBox):
     """
     Виджет для выбора типа данных и режима импорта.
+    Режимы - сверху, горизонтально.
+    Типы - снизу, вертикально.
+    Опции - под типами, скрываются/показываются в зависимости от режима.
+    Комментарий - под опциями, скрывается/показывается и обновляется в зависимости от режима.
     """
 
     # Сигналы для уведомления о выборе
@@ -26,20 +32,38 @@ class ImportModeSelector(QWidget):
     mode_selected = Signal(str)   # (selected_mode)
 
     # --- Константы для типов и режимов ---
+    # Типы данных для импорта
     IMPORT_TYPES = {
         'all_data': "Все данные",
         'raw_data': "Сырые данные",
         'styles': "Стили",
         'charts': "Диаграммы",
         'formulas': "Формулы",
-        'raw_data_pandas': "Сырые данные (pandas)"
+        'raw_data_pandas': "Сырые данные (pandas)" # Пока остается, но может быть скрыт в "Выборочно"
     }
 
+    # Режимы импорта
     IMPORT_MODES = {
         'all': "Всё",
         'selective': "Выборочно",
         'chunks': "Частями",
         'fast': "Быстрый (pandas)"
+    }
+
+    # Опции, которые могут отображаться внутри режима "Выборочно"
+    SELECTIVE_OPTIONS = {
+        'raw_data': "Сырые данные",
+        'styles': "Стили",
+        'charts': "Диаграммы",
+        'formulas': "Формулы"
+    }
+
+    # Комментарии для режимов
+    MODE_COMMENTS = {
+        'all': "Для лёгких файлов. Применяется openpyxl.",
+        'fast': "Для работы с тяжёлыми файлами, только данные.",
+        'chunks': "Экспериментальный режим."
+        # 'selective' не имеет комментария по умолчанию
     }
     # ------------------------------------
 
@@ -50,22 +74,25 @@ class ImportModeSelector(QWidget):
         Args:
             parent: Родительский объект Qt.
         """
-        super().__init__(parent)
+        super().__init__("Тип и режим импорта", parent) # Группа теперь охватывает всё
         self.setObjectName("ImportModeSelector")
 
         # --- Атрибуты виджета ---
-        # Группы кнопок для типов и режимов
-        self.type_button_group: Optional[QButtonGroup] = None
+        # Группы кнопок для режимов, типов и опций
         self.mode_button_group: Optional[QButtonGroup] = None
-        
+        self.type_button_group: Optional[QButtonGroup] = None
+        self.option_button_group: Optional[QButtonGroup] = None # Для опций "Выборочно"
         # Словари для хранения ссылок на радио-кнопки
-        self.type_radio_buttons: dict[str, QRadioButton] = {}
         self.mode_radio_buttons: dict[str, QRadioButton] = {}
+        self.type_radio_buttons: dict[str, QRadioButton] = {}
+        self.option_radio_buttons: dict[str, QRadioButton] = {} # Для опций "Выборочно"
+        # Виджеты для опций и комментария
+        self.options_group_widget: Optional[QWidget] = None
+        self.comment_label: Optional[QLabel] = None
         # -----------------------
 
         self._setup_ui()
         self._setup_connections()
-        
         # Установим начальные значения по умолчанию
         self._set_default_selection()
 
@@ -74,7 +101,24 @@ class ImportModeSelector(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # --- Группа для выбора типа данных ---
+        # --- Группа для выбора РЕЖИМА (горизонтально) ---
+        mode_group_box = QGroupBox("Режим импорта")
+        mode_layout = QHBoxLayout(mode_group_box) # Горизонтальный Layout
+
+        self.mode_button_group = QButtonGroup(self)
+        self.mode_button_group.setExclusive(True)
+
+        for mode_key, mode_label in self.IMPORT_MODES.items():
+            radio_button = QRadioButton(mode_label, self)
+            radio_button.setProperty("mode_key", mode_key)
+            self.mode_radio_buttons[mode_key] = radio_button
+            self.mode_button_group.addButton(radio_button)
+            mode_layout.addWidget(radio_button)
+
+        main_layout.addWidget(mode_group_box)
+        # ---------------------------------------------
+
+        # --- Группа для выбора ТИПА (вертикально) ---
         type_group_box = QGroupBox("Тип данных для импорта")
         type_layout = QVBoxLayout(type_group_box)
 
@@ -83,110 +127,125 @@ class ImportModeSelector(QWidget):
 
         for type_key, type_label in self.IMPORT_TYPES.items():
             radio_button = QRadioButton(type_label, self)
-            radio_button.setProperty("type_key", type_key) # Сохраняем ключ типа
+            radio_button.setProperty("type_key", type_key)
             self.type_radio_buttons[type_key] = radio_button
             self.type_button_group.addButton(radio_button)
             type_layout.addWidget(radio_button)
 
         main_layout.addWidget(type_group_box)
-        # ------------------------------------
+        # ------------------------------------------
 
-        # --- Группа для выбора режима импорта ---
-        mode_group_box = QGroupBox("Режим импорта")
-        mode_layout = QVBoxLayout(mode_group_box)
+        # --- Виджет для ОПЦИЙ (например, для "Выборочно") ---
+        # Изначально скрыт
+        self.options_group_widget = QWidget(self)
+        self.options_group_widget.setVisible(False) # Скрыт по умолчанию
+        options_layout = QVBoxLayout(self.options_group_widget)
 
-        self.mode_button_group = QButtonGroup(self)
-        self.mode_button_group.setExclusive(True)
+        # Добавляем только те опции, которые нужны для "Выборочно"
+        self.option_button_group = QButtonGroup(self)
+        self.option_button_group.setExclusive(False) # Можно выбрать несколько опций
 
-        for mode_key, mode_label in self.IMPORT_MODES.items():
-            radio_button = QRadioButton(mode_label, self)
-            radio_button.setProperty("mode_key", mode_key) # Сохраняем ключ режима
-            self.mode_radio_buttons[mode_key] = radio_button
-            self.mode_button_group.addButton(radio_button)
-            mode_layout.addWidget(radio_button)
-            
-        # --- НОВОЕ: Управление доступностью режимов ---
-        # По умолчанию режим "Быстрый" доступен только для типа "Сырые данные (pandas)"
-        self.mode_radio_buttons['fast'].setEnabled(False)
+        for opt_key, opt_label in self.SELECTIVE_OPTIONS.items():
+            # Проверяем, что тип существует в IMPORT_TYPES, чтобы использовать его кнопку
+            # Создадим отдельные QRadioButton для опций.
+            option_radio_button = QRadioButton(opt_label, self)
+            option_radio_button.setProperty("option_key", opt_key)
+            self.option_radio_buttons[opt_key] = option_radio_button
+            self.option_button_group.addButton(option_radio_button)
+            options_layout.addWidget(option_radio_button)
+            logger.debug(f"Добавлена опция выбора '{opt_key}' как отдельный элемент.")
+
+        main_layout.addWidget(self.options_group_widget)
         # ---------------------------------------------
 
-        main_layout.addWidget(mode_group_box)
-        # ------------------------------------------
+        # --- Метка для комментария ---
+        self.comment_label = QLabel("", self)
+        self.comment_label.setWordWrap(True) # Перенос строк
+        self.comment_label.setVisible(False) # Скрыта по умолчанию
+        main_layout.addWidget(self.comment_label)
+        # -----------------------------
 
     def _setup_connections(self):
         """Подключает сигналы к слотам."""
-        # Подключение сигналов групп кнопок
-        # Добавим assert перед обращением к buttonClicked
-        assert self.type_button_group is not None
-        self.type_button_group.buttonClicked.connect(self._on_type_button_clicked)
-        # Добавим assert перед обращением к buttonClicked
+        # Подключение сигналов группы кнопок РЕЖИМОВ
         assert self.mode_button_group is not None
         self.mode_button_group.buttonClicked.connect(self._on_mode_button_clicked)
 
+        # Подключение сигналов группы кнопок ТИПОВ
+        assert self.type_button_group is not None
+        self.type_button_group.buttonClicked.connect(self._on_type_button_clicked)
+
+        # Подключение сигналов группы кнопок ОПЦИЙ (если понадобится)
+        # self.option_button_group.buttonClicked.connect(self._on_option_button_clicked) # Пример
+
+
     def _set_default_selection(self):
         """Устанавливает начальные выбранные значения по умолчанию."""
-        # По умолчанию выбираем "Все данные" и "Всё"
-        if 'all_data' in self.type_radio_buttons:
-            self.type_radio_buttons['all_data'].setChecked(True)
+        # По умолчанию выбираем "Всё" и "Все данные"
         if 'all' in self.mode_radio_buttons:
             self.mode_radio_buttons['all'].setChecked(True)
-            
-        # Обновляем доступность режимов для начального типа
-        self._update_mode_availability('all_data')
+        if 'all_data' in self.type_radio_buttons:
+            self.type_radio_buttons['all_data'].setChecked(True)
+
+        # Обновляем интерфейс для начального режима
+        self._update_ui_for_mode('all')
 
     # --- Обработчики событий UI ---
-    def _on_type_button_clicked(self, button: QRadioButton):
-        """Обработчик клика по радио-кнопке типа."""
-        type_key = button.property("type_key")
-        if type_key:
-            logger.debug(f"Выбран тип импорта: {type_key}")
-            self.type_selected.emit(type_key)
-            # Обновляем доступность режимов в зависимости от выбранного типа
-            self._update_mode_availability(type_key)
-
     def _on_mode_button_clicked(self, button: QRadioButton):
         """Обработчик клика по радио-кнопке режима."""
         mode_key = button.property("mode_key")
         if mode_key:
             logger.debug(f"Выбран режим импорта: {mode_key}")
             self.mode_selected.emit(mode_key)
+            # Обновляем UI в зависимости от выбранного режима
+            self._update_ui_for_mode(mode_key)
+
+    def _on_type_button_clicked(self, button: QRadioButton):
+        """Обработчик клика по радио-кнопке типа."""
+        type_key = button.property("type_key")
+        if type_key:
+            logger.debug(f"Выбран тип импорта: {type_key}")
+            self.type_selected.emit(type_key)
+            # В текущей логике тип не влияет на UI, но можно добавить
     # -----------------------------
 
-    # --- Логика обновления доступности ---
-    def _update_mode_availability(self, selected_type: str):
+    # --- Логика обновления UI ---
+    def _update_ui_for_mode(self, selected_mode: str):
         """
-        Обновляет доступность режимов импорта в зависимости от выбранного типа.
-        
+        Обновляет видимость опций и комментария в зависимости от выбранного режима.
+
         Args:
-            selected_type (str): Ключ выбранного типа импорта.
+            selected_mode (str): Ключ выбранного режима импорта.
         """
-        logger.debug(f"Обновление доступности режимов для типа: {selected_type}")
-        
-        # Режим "Быстрый" доступен только для типа "Сырые данные (pandas)"
-        fast_mode_rb = self.mode_radio_buttons.get('fast')
-        if fast_mode_rb:
-            is_fast_available = (selected_type == 'raw_data_pandas')
-            fast_mode_rb.setEnabled(is_fast_available)
-            logger.debug(f"Режим 'Быстрый' {'доступен' if is_fast_available else 'недоступен'} для типа {selected_type}")
-            
-            # Если режим "Быстрый" был выбран, но стал недоступным, сбрасываем на "Всё"
-            if not is_fast_available and fast_mode_rb.isChecked():
-                all_mode_rb = self.mode_radio_buttons.get('all')
-                if all_mode_rb:
-                    all_mode_rb.setChecked(True)
-                    self.mode_selected.emit('all')
-                    logger.debug("Режим 'Быстрый' сброшен на 'Всё' из-за недоступности.")
+        logger.debug(f"Обновление UI для режима: {selected_mode}")
+
+        # Сначала скрываем всё, что может быть показано
+        if self.options_group_widget:
+            self.options_group_widget.setVisible(False)
+        if self.comment_label:
+            self.comment_label.setVisible(False)
+
+        # Затем показываем нужное в зависимости от режима
+        if selected_mode == 'selective':
+            # Показываем опции
+            if self.options_group_widget:
+                self.options_group_widget.setVisible(True)
+        elif selected_mode in self.MODE_COMMENTS:
+            # Показываем комментарий
+            if self.comment_label:
+                self.comment_label.setText(self.MODE_COMMENTS[selected_mode])
+                self.comment_label.setVisible(True)
+
     # ------------------------------------
 
     # --- Методы для получения выбранных значений ---
     def get_selected_type(self) -> str:
         """
         Возвращает ключ выбранного типа импорта.
-        
+
         Returns:
             str: Ключ выбранного типа (например, 'all_data').
         """
-        # Добавим assert перед обращением к checkedButton
         assert self.type_button_group is not None
         checked_button = self.type_button_group.checkedButton()
         if checked_button:
@@ -199,11 +258,10 @@ class ImportModeSelector(QWidget):
     def get_selected_mode(self) -> str:
         """
         Возвращает ключ выбранного режима импорта.
-        
+
         Returns:
             str: Ключ выбранного режима (например, 'all').
         """
-        # Добавим assert перед обращением к checkedButton
         assert self.mode_button_group is not None
         checked_button = self.mode_button_group.checkedButton()
         if checked_button:
@@ -212,13 +270,44 @@ class ImportModeSelector(QWidget):
                 return mode_key
         # Если ничего не выбрано, возвращаем значение по умолчанию
         return 'all'
+
+    # --- Методы для получения выбранных опций (для режима "Выборочно") ---
+    def get_selected_options(self) -> list[str]:
+        """
+        Возвращает список ключей выбранных опций (для режима "Выборочно").
+
+        Returns:
+            list[str]: Список ключей выбранных опций (например, ['raw_data', 'styles']).
+        """
+        selected_options = []
+        if self.option_button_group:
+            for button in self.option_button_group.buttons():
+                if button.isChecked():
+                    opt_key = button.property("option_key")
+                    if opt_key:
+                        selected_options.append(opt_key)
+        return selected_options
     # ------------------------------------------------
 
     # --- Методы для программного выбора (опционально) ---
+    def set_selected_mode(self, mode_key: str):
+        """
+        Программно выбирает режим импорта.
+        Обновляет UI.
+
+        Args:
+            mode_key (str): Ключ режима для выбора.
+        """
+        radio_button = self.mode_radio_buttons.get(mode_key)
+        if radio_button:
+            radio_button.setChecked(True)
+            # Вручную вызываем обработчик, так как setChecked не генерирует сигнал
+            self._on_mode_button_clicked(radio_button)
+
     def set_selected_type(self, type_key: str):
         """
         Программно выбирает тип импорта.
-        
+
         Args:
             type_key (str): Ключ типа для выбора.
         """
@@ -228,16 +317,17 @@ class ImportModeSelector(QWidget):
             # Вручную вызываем обработчик, так как setChecked не генерирует сигнал
             self._on_type_button_clicked(radio_button)
 
-    def set_selected_mode(self, mode_key: str):
+    # Метод для программного выбора опций (для "Выборочно")
+    def set_selected_options(self, option_keys: list[str]):
         """
-        Программно выбирает режим импорта.
-        
+        Программно выбирает опции импорта (для режима "Выборочно").
+
         Args:
-            mode_key (str): Ключ режима для выбора.
+            option_keys (list[str]): Список ключей опций для выбора.
         """
-        radio_button = self.mode_radio_buttons.get(mode_key)
-        if radio_button:
-            radio_button.setChecked(True)
-            # Вручную вызываем обработчик, так как setChecked не генерирует сигнал
-            self._on_mode_button_clicked(radio_button)
+        if self.option_button_group:
+            for button in self.option_button_group.buttons():
+                opt_key = button.property("option_key")
+                if opt_key:
+                    button.setChecked(opt_key in option_keys)
     # ----------------------------------------------------
