@@ -212,6 +212,7 @@ class ImportModeSelector(QGroupBox):
     # -----------------------------
 
     # --- Логика обновления UI ---
+     # --- Логика обновления UI ---
     def _update_ui_for_mode(self, selected_mode: str):
         """
         Обновляет макет (добавляет/удаляет опции) и видимость комментария
@@ -222,42 +223,48 @@ class ImportModeSelector(QGroupBox):
         """
         logger.debug(f"Обновление UI для режима: {selected_mode}")
 
+        # Добавим assert для проверки, что необходимые атрибуты инициализированы
+        assert self.options_group_widget is not None
+        assert self.main_layout is not None
+        assert self.comment_label is not None
+        # Также убедимся, что они являются экземплярами QWidget (они такими и являются, но Pylance может не знать)
+        assert isinstance(self.options_group_widget, QWidget)
+        assert isinstance(self.comment_label, QWidget)
+
         # --- НОВАЯ ЛОГИКА: Динамическое управление макетом ---
         # 1. Управление виджетом опций
-        if self.options_group_widget and self.main_layout:
-            if selected_mode == 'selective':
-                # Найти индекс comment_label для вставки перед ним
-                comment_index = self.main_layout.indexOf(self.comment_label)
-                current_options_index = self.main_layout.indexOf(self.options_group_widget)
+        if selected_mode == 'selective':
+            # Найти индекс comment_label для вставки перед ним
+            comment_index = self.main_layout.indexOf(self.comment_label) # <-- Pylance теперь знает, что self.comment_label - QWidget
+            current_options_index = self.main_layout.indexOf(self.options_group_widget) # <-- Pylance теперь знает, что self.options_group_widget - QWidget
 
-                # Если опции еще не добавлены или добавлены не перед comment_label
-                if current_options_index == -1 or current_options_index >= comment_index:
-                    # Убедимся, что опции удалены, если были добавлены в другое место
-                    if current_options_index != -1:
-                        self.main_layout.removeWidget(self.options_group_widget)
-
-                    # Вставляем перед comment_label
-                    if comment_index != -1:
-                        self.main_layout.insertWidget(comment_index, self.options_group_widget)
-                    else:
-                        # Если comment_label не найден (неожиданно), добавим в конец
-                        self.main_layout.addWidget(self.options_group_widget)
-                    logger.debug("Виджет опций добавлен в макет.")
-            else:
-                # Удалить опции из макета, если они там есть
-                current_options_index = self.main_layout.indexOf(self.options_group_widget)
+            # Если опции еще не добавлены или добавлены не перед comment_label
+            if current_options_index == -1 or current_options_index >= comment_index:
+                # Убедимся, что опции удалены, если были добавлены в другое место
                 if current_options_index != -1:
                     self.main_layout.removeWidget(self.options_group_widget)
-                    logger.debug("Виджет опций удален из макета.")
+
+                # Вставляем перед comment_label
+                if comment_index != -1:
+                    self.main_layout.insertWidget(comment_index, self.options_group_widget)
+                else:
+                    # Если comment_label не найден (неожиданно), добавим в конец
+                    self.main_layout.addWidget(self.options_group_widget)
+                logger.debug("Виджет опций добавлен в макет.")
+        else:
+            # Удалить опции из макета, если они там есть
+            current_options_index = self.main_layout.indexOf(self.options_group_widget)
+            if current_options_index != -1:
+                self.main_layout.removeWidget(self.options_group_widget)
+                logger.debug("Виджет опций удален из макета.")
         # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
         # 2. Управление комментарием
-        if self.comment_label:
-            self.comment_label.setVisible(False)
-            if selected_mode in self.MODE_COMMENTS:
-                self.comment_label.setText(self.MODE_COMMENTS[selected_mode])
-                self.comment_label.setVisible(True)
-                logger.debug(f"Показан комментарий для режима '{selected_mode}'.")
+        self.comment_label.setVisible(False) # <-- Уже проверили, что не None
+        if selected_mode in self.MODE_COMMENTS:
+            self.comment_label.setText(self.MODE_COMMENTS[selected_mode]) # <-- Уже проверили, что не None
+            self.comment_label.setVisible(True) # <-- Уже проверили, что не None
+            logger.debug(f"Показан комментарий для режима '{selected_mode}'.")
 
     # ------------------------------------
 
