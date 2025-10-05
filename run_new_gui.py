@@ -19,7 +19,7 @@ if str(project_root) not in sys.path:
 # Импортируем QApplication
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QCoreApplication, Qt
-from PySide6.QtGui import QStyleFactory
+from PySide6.QtWidgets import QStyleFactory
 
 # Импортируем новое главное окно
 # Убедимся, что импортируем из правильного модуля
