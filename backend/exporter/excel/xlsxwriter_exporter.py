@@ -6,7 +6,7 @@
 import logging
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Callable # <-- Добавлен Callable
 
 import xlsxwriter # Импортируем xlsxwriter
 import datetime # Импортируем datetime для проверки типов и парсинга
@@ -54,13 +54,14 @@ def _parse_datetime_string(dt_str: str) -> Union[datetime.datetime, datetime.dat
     return dt_str
 
 
-def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Union[str, Path]) -> bool:
+def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Union[str, Path], progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНА СИГНАТУРА
     """
     Основная функция экспорта проекта в Excel файл с помощью xlsxwriter.
 
     Args:
         project_db_path (Union[str, Path]): Путь к файлу БД проекта (project_data.db).
         output_path (Union[str, Path]): Путь к выходному .xlsx файлу.
+        progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса (значение 0-100, сообщение). # <-- ОПИСАНИЕ ДОБАВЛЕНО
 
     Returns:
         bool: True, если экспорт успешен, иначе False.
@@ -104,16 +105,22 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
         return False
 
     success = False
+    total_sheets = 0 # <-- НОВАЯ ПЕРЕМЕННАЯ
+    processed_sheets = 0 # <-- НОВАЯ ПЕРЕМЕННАЯ
     try:
         # 3. Получение списка листов из БД
         logger.debug("Получение списка листов из БД...")
         # ИСПРАВЛЕНО: Вызов метода storage.load_all_sheets_metadata теперь с префиксом backend.storage
         sheets_data = storage.load_all_sheets_metadata() # <-- ИСПРАВЛЕНО: Предполагаем, что в storage есть такой метод
+        total_sheets = len(sheets_data) # <-- УСТАНАВЛИВАЕМ total_sheets
         if not sheets_data:
             logger.warning("В проекте не найдено листов. Создается пустой файл.")
             workbook.add_worksheet("EmptySheet")
+            # Обновляем прогресс, если callback предоставлен
+            if progress_callback:
+                progress_callback(100, "Экспорт завершён (пустой файл).") # <-- ВЫЗОВ CALLBACK
         else:
-            logger.info(f"Найдено {len(sheets_data)} листов для экспорта.")
+            logger.info(f"Найдено {total_sheets} листов для экспорта.")
             # 4. Итерация по листам и их экспорт
             for sheet_info in sheets_data:
                 sheet_id = sheet_info['sheet_id']
@@ -157,6 +164,13 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
                 # ИСПРАВЛЕНО: Вызов _export_charts_for_sheet теперь с префиксом backend.exporter.excel
                 _export_charts_for_sheet(workbook, worksheet, sheet_id, project_db_path) # <-- ИСПРАВЛЕНО
 
+                processed_sheets += 1 # <-- УВЕЛИЧИВАЕМ СЧЁТЧИК
+                # --- НОВОЕ: Обновление прогресса ---
+                if progress_callback and total_sheets > 0: # <-- ПРОВЕРЯЕМ CALLBACK И total_sheets
+                    progress_percent = int((processed_sheets / total_sheets) * 100)
+                    progress_callback(progress_percent, f"Обработан лист {processed_sheets} из {total_sheets}...") # <-- ВЫЗОВ CALLBACK
+                # --- КОНЕЦ НОВОГО ---
+
                 # 4h. (Опционально) Обработка других элементов (диаграмм, изображений и т.д.)
                 # ...
 
@@ -165,6 +179,16 @@ def export_project_xlsxwriter(project_db_path: Union[str, Path], output_path: Un
         workbook.close()
         logger.info(f"Файл успешно сохранен: {output_path}")
         success = True
+        # --- НОВОЕ: Обновление прогресса при завершении ---
+        if progress_callback and total_sheets > 0: # <-- ПРОВЕРЯЕМ CALLBACK И total_sheets, хотя это может быть избыточно, если total_sheets == 0, то мы уже вызвали progress_callback выше для пустого файла
+             # Убедимся, что прогресс 100%, если он не достигнут
+             if processed_sheets == 0: # Для случая, если не было листов, но файл создан
+                 progress_callback(100, "Экспорт завершён.")
+             # В остальных случаях прогресс уже должен быть 100% при последнем вызове в цикле
+        elif progress_callback: # <-- Если total_sheets == 0 и callback предоставлен, но файл был пустой, он уже вызван выше
+             # В случае ошибки, можно отправить 100% или специальное сообщение, но обычно это делается в except/finally
+             pass # Оставим это на усмотрение вызывающего кода или finally
+        # --- КОНЕЦ НОВОГО ---
 
     except Exception as e:
         logger.error(f"Критическая ошибка при экспорте проекта: {e}", exc_info=True)
