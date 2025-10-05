@@ -165,10 +165,10 @@ class ProjectDBStorage:
             logger.error(f"Ошибка при загрузке списка листов для проекта ID {project_id}: {e}", exc_info=True)
             return []
 
-    # --- НОВОЕ: Метод для переименования листа ---
+    # --- ОБНОВЛЕНО: Метод для переименования листа ---
     def rename_sheet(self, project_id: int, old_name: str, new_name: str) -> bool:
         """
-        Переименовывает лист в таблице 'sheets'.
+        Переименовывает лист в таблице 'sheets' и обновляет связанные таблицы.
 
         Args:
             project_id (int): ID проекта.
@@ -188,7 +188,7 @@ class ProjectDBStorage:
         except Exception as e:
             logger.error(f"Ошибка при переименовании листа '{old_name}' в '{new_name}': {e}", exc_info=True)
             return False
-    # --- КОНЕЦ НОВОГО ---
+    # --- КОНЕЦ ОБНОВЛЕНИЯ ---
 
     # --- Методы для работы с дополнительными метаданными листов (таблица project_metadata) ---
 
@@ -515,8 +515,12 @@ class ProjectDBStorage:
                     return True
                 else:
                     return False
-        except json.JSONEncodeError as je:
-            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка сериализации списка объединенных ячеек для sheet_id={sheet_id}: {je}")
+        # ИСПРАВЛЕНО: Заменено json.JSONEncodeError на ValueError и TypeError
+        except ValueError as je: # json.dumps может выбросить ValueError для недопустимых типов
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка сериализации (ValueError) списка объединенных ячеек для sheet_id={sheet_id}: {je}")
+        except TypeError as te: # или TypeError
+            logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка сериализации (TypeError) списка объединенных ячеек для sheet_id={sheet_id}: {te}")
+        # ИСПРАВЛЕНО: Заменено json.JSONEncodeError на ValueError
         except sqlite3.Error as e:
             logger.error(f"[ОБЪЕДИНЕНИЕ] Ошибка SQLite при сохранении merged_cells для sheet_id={sheet_id}: {e}")
         except Exception as e:
