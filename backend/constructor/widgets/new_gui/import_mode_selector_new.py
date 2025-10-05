@@ -213,7 +213,6 @@ class ImportModeSelector(QGroupBox):
     # -----------------------------
 
     # --- Логика обновления UI ---
-     # --- Логика обновления UI ---
     def _update_ui_for_mode(self, selected_mode: str):
         """
         Обновляет макет (добавляет/удаляет опции) и видимость комментария
@@ -236,8 +235,8 @@ class ImportModeSelector(QGroupBox):
         # 1. Управление виджетом опций
         if selected_mode == 'selective':
             # Найти индекс comment_label для вставки перед ним
-            comment_index = self.main_layout.indexOf(self.comment_label) # <-- Pylance теперь знает, что self.comment_label - QWidget
-            current_options_index = self.main_layout.indexOf(self.options_group_widget) # <-- Pylance теперь знает, что self.options_group_widget - QWidget
+            comment_index = self.main_layout.indexOf(self.comment_label)
+            current_options_index = self.main_layout.indexOf(self.options_group_widget)
 
             # Если опции еще не добавлены или добавлены не перед comment_label
             if current_options_index == -1 or current_options_index >= comment_index:
@@ -247,12 +246,13 @@ class ImportModeSelector(QGroupBox):
 
                 # Вставляем перед comment_label
                 if comment_index != -1:
-                self.main_layout.insertWidget(comment_index, self.options_group_widget)
+                    self.main_layout.insertWidget(comment_index, self.options_group_widget)
                 else:
-                # Если comment_label не найден (неожиданно), добавим в конец
-                self.main_layout.addWidget(self.options_group_widget)
-                self.options_group_widget.setVisible(True)  # Показываем виджет
-            logger.debug("Виджет опций добавлен в макет.")
+                    # Если comment_label не найден (неожиданно), добавим в конец
+                    self.main_layout.addWidget(self.options_group_widget)
+                # Показываем виджет НЕЗАВИСИМО от способа добавления
+                self.options_group_widget.setVisible(True)
+                logger.debug("Виджет опций добавлен в макет.")
         else:
             # Удалить опции из макета, если они там есть
             current_options_index = self.main_layout.indexOf(self.options_group_widget)
@@ -263,10 +263,10 @@ class ImportModeSelector(QGroupBox):
         # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
         # 2. Управление комментарием
-        self.comment_label.setVisible(False) # <-- Уже проверили, что не None
+        self.comment_label.setVisible(False)
         if selected_mode in self.MODE_COMMENTS:
-            self.comment_label.setText(self.MODE_COMMENTS[selected_mode]) # <-- Уже проверили, что не None
-            self.comment_label.setVisible(True) # <-- Уже проверили, что не None
+            self.comment_label.setText(self.MODE_COMMENTS[selected_mode])
+            self.comment_label.setVisible(True)
             logger.debug(f"Показан комментарий для режима '{selected_mode}'.")
 
     # ------------------------------------
