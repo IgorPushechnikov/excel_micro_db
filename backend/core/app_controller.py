@@ -820,18 +820,66 @@ class AppController:
     def import_all_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует все типы данных (сырые, стили, диаграммы, формулы) из Excel-файла.
-        Пока не реализовано.
+        Вызывает соответствующие методы импорта для каждого типа с использованием openpyxl.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта (передаются в каждый под-метод).
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
-            bool: False, так как функция не реализована.
+            bool: True, если все этапы импорта прошли успешно, иначе False.
         """
-        logger.warning("Метод 'import_all_data_from_excel' не реализован.")
-        return False
+        logger.info(f"Начало импорта ВСЕХ данных (openpyxl) из Excel-файла: {file_path}")
+
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
+            return False
+
+        success = True
+        # 1. Импорт "сырых" данных (openpyxl)
+        if success:
+            logger.info("Импорт всех данных: Начало импорта 'сырых' данных (openpyxl)...")
+            success = self.import_raw_data_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Импорт всех данных: 'Сырые' данные (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Импорт всех данных: Ошибка при импорте 'сырых' данных (openpyxl).")
+
+        # 2. Импорт стилей (openpyxl)
+        if success:
+            logger.info("Импорт всех данных: Начало импорта стилей (openpyxl)...")
+            success = self.import_styles_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Импорт всех данных: Стили (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Импорт всех данных: Ошибка при импорте стилей (openpyxl).")
+
+        # 3. Импорт диаграмм (openpyxl)
+        if success:
+            logger.info("Импорт всех данных: Начало импорта диаграмм (openpyxl)...")
+            success = self.import_charts_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Импорт всех данных: Диаграммы (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Импорт всех данных: Ошибка при импорта диаграмм (openpyxl).")
+
+        # 4. Импорт формул (openpyxl)
+        if success:
+            logger.info("Импорт всех данных: Начало импорта формул (openpyxl)...")
+            success = self.import_formulas_from_excel(file_path, options, db_path)
+            if success:
+                logger.info("Импорт всех данных: Формулы (openpyxl) успешно импортированы.")
+            else:
+                logger.error("Импорт всех данных: Ошибка при импорте формул (openpyxl).")
+
+        if success:
+            logger.info(f"Импорт ВСЕХ данных (openpyxl) из '{file_path}' завершён успешно.")
+        else:
+            logger.error(f"Импорт ВСЕХ данных (openpyxl) из '{file_path}' завершён с ошибками.")
+
+        return success
 
     def import_raw_data_pandas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
