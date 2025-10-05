@@ -372,7 +372,7 @@ class AppController:
             # Используем db_path, если он предоставлен, иначе self.project_db_path
             actual_db_path = db_path or self.project_db_path
             # Передаём progress_callback
-            return self.export_project_with_xlsxwriter(actual_db_path, progress_callback=progress_callback)
+            return self.export_project_with_xlsxwriter(output_path, actual_db_path, progress_callback=progress_callback)
         else:
             logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
             return False
@@ -486,7 +486,7 @@ class AppController:
 
     # --- НОВОЕ: Методы для импорта по типам и режимам (обновлены) ---
 
-    def import_raw_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+    def import_raw_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует только "сырые" данные (значения ячеек) из Excel-файла.
 
@@ -494,6 +494,7 @@ class AppController:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
@@ -504,9 +505,10 @@ class AppController:
             return False
 
         from .app_controller_data_import import import_raw_data_from_excel as import_func
+        # Убираем progress_callback из вызова, так как функция его не принимает
         return import_func(storage_to_use, file_path, options)
 
-    def import_styles_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+    def import_styles_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует только стили из Excel-файла.
 
@@ -514,6 +516,7 @@ class AppController:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
@@ -524,9 +527,10 @@ class AppController:
             return False
 
         from .app_controller_data_import import import_styles_from_excel as import_func
+        # Убираем progress_callback из вызова, так как функция его не принимает
         return import_func(storage_to_use, file_path, options)
 
-    def import_charts_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+    def import_charts_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует только диаграммы из Excel-файла.
 
@@ -534,6 +538,7 @@ class AppController:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
@@ -544,9 +549,10 @@ class AppController:
             return False
 
         from .app_controller_data_import import import_charts_from_excel as import_func
+        # Убираем progress_callback из вызова, так как функция его не принимает
         return import_func(storage_to_use, file_path, options)
 
-    def import_formulas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+    def import_formulas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует только формулы из Excel-файла.
 
@@ -554,6 +560,7 @@ class AppController:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
@@ -564,9 +571,10 @@ class AppController:
             return False
 
         from .app_controller_data_import import import_formulas_from_excel as import_func
+        # Убираем progress_callback из вызова, так как функция его не принимает
         return import_func(storage_to_use, file_path, options)
 
-    def import_raw_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+    def import_raw_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует только "сырые" данные выборочно из Excel-файла.
 
@@ -574,6 +582,7 @@ class AppController:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
@@ -584,9 +593,10 @@ class AppController:
             return False
 
         from .app_controller_data_import import import_raw_data_from_excel_selective as import_func
+        # Убираем progress_callback из вызова, так как функция его не принимает
         return import_func(storage_to_use, file_path, options)
 
-    def import_styles_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+    def import_styles_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует только стили выборочно из Excel-файла.
 
@@ -594,6 +604,7 @@ class AppController:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
@@ -604,6 +615,7 @@ class AppController:
             return False
 
         from .app_controller_data_import import import_styles_from_excel_selective as import_func
+        # Убираем progress_callback из вызова, так как функция его не принимает
         return import_func(storage_to_use, file_path, options)
 
     def import_charts_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
