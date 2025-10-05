@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 
 # Импортируем QApplication и MainWindow
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication as QtApp
 from backend.constructor.widgets.new_gui.main_window import MainWindow
 
 # Импортируем логгер
@@ -32,7 +32,7 @@ def main():
     logger.info("Запуск GUI приложения Excel Micro DB...")
 
     # Инициализация QApplication
-    app = QApplication(sys.argv)
+    app = QtApp(sys.argv)
     app.setApplicationName("Excel Micro DB GUI")
     app.setApplicationVersion("0.1.0")
 
