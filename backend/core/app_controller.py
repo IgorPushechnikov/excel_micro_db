@@ -480,254 +480,332 @@ class AppController:
         return is_logging_enabled()
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Методы для импорта по типам и режимам ---
+    # --- НОВОЕ: Методы для импорта по типам и режимам (обновлены) ---
 
-    def import_raw_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_raw_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только "сырые" данные (значения ячеек) из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_raw_data_from_excel as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_styles_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_styles_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только стили из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_styles_from_excel as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_charts_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_charts_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только диаграммы из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_charts_from_excel as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_formulas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_formulas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только формулы из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_formulas_from_excel as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_raw_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_raw_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только "сырые" данные выборочно из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_raw_data_from_excel_selective as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_styles_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_styles_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только стили выборочно из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_styles_from_excel_selective as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_charts_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_charts_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только диаграммы выборочно из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_charts_from_excel_selective as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_formulas_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_formulas_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Импортирует только формулы выборочно из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_formulas_from_excel_selective as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
 
-    def import_raw_data_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+    def import_raw_data_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
         """
         Импортирует только "сырые" данные частями из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             chunk_options (Dict[str, Any]): Опции для разбиения на части.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_raw_data_from_excel_in_chunks as import_func
-        return import_func(self, file_path, chunk_options)
+        return import_func(storage_to_use, file_path, chunk_options)
 
-    def import_styles_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+    def import_styles_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
         """
         Импортирует только стили частями из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             chunk_options (Dict[str, Any]): Опции для разбиения на части.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_styles_from_excel_in_chunks as import_func
-        return import_func(self, file_path, chunk_options)
+        return import_func(storage_to_use, file_path, chunk_options)
 
-    def import_charts_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+    def import_charts_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
         """
         Импортирует только диаграммы частями из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             chunk_options (Dict[str, Any]): Опции для разбиения на части.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_charts_from_excel_in_chunks as import_func
-        return import_func(self, file_path, chunk_options)
+        return import_func(storage_to_use, file_path, chunk_options)
 
-    def import_formulas_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any]) -> bool:
+    def import_formulas_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
         """
         Импортирует только формулы частями из Excel-файла.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             chunk_options (Dict[str, Any]): Опции для разбиения на части.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_formulas_from_excel_in_chunks as import_func
-        return import_func(self, file_path, chunk_options)
+        return import_func(storage_to_use, file_path, chunk_options)
 
-    def import_raw_data_fast_with_pandas(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def import_raw_data_fast_with_pandas(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
         """
         Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
             options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
 
         Returns:
             bool: True, если импорт успешен, иначе False.
         """
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
+        if not storage_to_use:
+            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        # Импортируем функцию из нового модуля
         from .app_controller_data_import import import_raw_data_fast_with_pandas as import_func
-        return import_func(self, file_path, options)
+        return import_func(storage_to_use, file_path, options)
+
+    # --- НОВОЕ: Заглушки для недостающих методов ---
+    def import_all_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+        """
+        Импортирует все типы данных (сырые, стили, диаграммы, формулы) из Excel-файла.
+        Пока не реализовано.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+
+        Returns:
+            bool: False, так как функция не реализована.
+        """
+        logger.warning("Метод 'import_all_data_from_excel' не реализован.")
+        return False
+
+    def import_raw_data_pandas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+        """
+        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
+        Это дублирует 'import_raw_data_fast_with_pandas'.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+
+        Returns:
+            bool: Результат вызова 'import_raw_data_fast_with_pandas'.
+        """
+        logger.info("Вызов 'import_raw_data_pandas_from_excel' перенаправлен на 'import_raw_data_fast_with_pandas'.")
+        return self.import_raw_data_fast_with_pandas(file_path, options, db_path)
+
+    def import_all_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
+        """
+        Импортирует все типы данных выборочно из Excel-файла.
+        Пока не реализовано.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            options (Optional[Dict[str, Any]]): Опции импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+
+        Returns:
+            bool: False, так как функция не реализована.
+        """
+        logger.warning("Метод 'import_all_data_from_excel_selective' не реализован.")
+        return False
+
+    def import_all_data_from_excel_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
+        """
+        Импортирует все типы данных частями из Excel-файла.
+        Пока не реализовано.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            chunk_options (Dict[str, Any]): Опции для разбиения на части.
+            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+
+        Returns:
+            bool: False, так как функция не реализована.
+        """
+        logger.warning("Метод 'import_all_data_from_excel_chunks' не реализован.")
+        return False
 
     # --- КОНЕЦ НОВОГО ---
 
