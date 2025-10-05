@@ -35,6 +35,9 @@ class ImportWorker(QThread):
         self.file_path = file_path
         self.import_type = import_type
         self.import_mode = import_mode
+        # --- НОВОЕ: Получаем путь к БД из app_controller ---
+        self.db_path = app_controller.project_db_path
+        # --- КОНЕЦ НОВОГО ---
 
     def run(self):
         """
@@ -52,8 +55,10 @@ class ImportWorker(QThread):
             if method is None:
                 raise AttributeError(f"AppController не имеет метода {method_name}")
 
-            # Вызываем метод
-            success = method(self.file_path)
+            # --- ИЗМЕНЕНО: Передаем db_path вместо app_controller ---
+            # success = method(self.file_path)
+            success = method(self.file_path, db_path=self.db_path)
+            # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
             logger.info(f"Импорт (тип: {self.import_type}, режим: {self.import_mode}) для файла {self.file_path} завершён в потоке {id(QThread.currentThread())}.")
 
