@@ -33,7 +33,8 @@ class ImportModeSelector(QGroupBox):
         'charts_openpyxl',
         'formulas_openpyxl',
         'raw_fast_pandas',
-        'chunks_openpyxl'
+        'chunks_openpyxl',
+        'auto'  # <-- НОВЫЙ РЕЖИМ
     ]
 
     # Метки для отображения
@@ -44,7 +45,8 @@ class ImportModeSelector(QGroupBox):
         "Диаграммы - openpyxl",
         "Формулы - openpyxl",
         "Быстрый только данные - pandas",
-        "Частями - openpyxl (Экспериментальный)"
+        "Частями - openpyxl (Экспериментальный)",
+        "Авто (Данные-Pandas, Стили/OpenPyxl, Диаграммы/OpenPyxl, Формулы/OpenPyxl)" # <-- НОВАЯ МЕТКА
     ]
 
     # Словарь для удобства получения метки по ключу (если понадобится)
