@@ -167,7 +167,9 @@ class AppController:
         logger.info(f"AppController: Запуск анализа файла {file_path} через AnalysisManager.")
         # Делегирование AnalysisManager, передаём db_path
         # Используем self.project_db_path, так как анализ идёт в основном потоке, но AnalysisManager теперь создаёт соединение внутри себя
-        return self.analysis_manager.perform_analysis(file_path, self.project_db_path, options)
+        # --- ИСПРАВЛЕНО: Явно указаны db_path и options ---
+        return self.analysis_manager.perform_analysis(file_path, db_path=self.project_db_path, options=options)
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     # --- КОНЕЦ НОВОГО ---
 
     # --- НОВОЕ: Метод для импорта "всё" через AnalysisManager (теперь использует db_path) ---
@@ -197,7 +199,9 @@ class AppController:
 
         logger.info(f"AppController: Запуск импорта всех данных из {file_path} через AnalysisManager (БД: {target_db_path}).")
         # Делегирование AnalysisManager, передаём file_path, db_path и progress_callback
-        return self.analysis_manager.perform_analysis(file_path, target_db_path, progress_callback=progress_callback)
+        # --- ИСПРАВЛЕНО: Явно указаны db_path и progress_callback ---
+        return self.analysis_manager.perform_analysis(file_path, db_path=target_db_path, progress_callback=progress_callback)
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     # --- КОНЕЦ НОВОГО ---
 
     # --- НОВОЕ: Метод для экспорта проекта (теперь использует db_path и progress_callback) ---
