@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
 
         # --- НОВОЕ: Чекбокс для управления логированием ---
         self.logging_checkbox = QCheckBox("Логирование", self)
-        self.logging_checkbox.setChecked(True)  # По умолчанию включено
+        self.logging_checkbox.setChecked(False)  # По умолчанию отключено
         tool_bar.addWidget(self.logging_checkbox)
         # --- КОНЕЦ НОВОГО ---
 
@@ -337,6 +337,10 @@ class MainWindow(QMainWindow):
         )
         if ok and output_path_str:
             output_path = Path(output_path_str)
+            # --- НОВОЕ: Автоматическое добавление расширения .xlsx ---
+            if output_path.suffix == '':
+                output_path = output_path.with_suffix('.xlsx')
+            # --- КОНЕЦ НОВОГО ---
             try:
                 # Создаем рабочий поток для вызова AppController метода
                 self.export_worker = ExportWorker(self.app_controller, str(output_path))
