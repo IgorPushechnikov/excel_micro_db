@@ -67,15 +67,15 @@ class ImportWorker(QThread):
                 ('styles', 'openpyxl'): 'import_styles_from_excel',
                 ('charts', 'openpyxl'): 'import_charts_from_excel',
                 ('formulas', 'openpyxl'): 'import_formulas_from_excel',
-                ('raw', 'fast_pandas'): 'import_raw_data_fast_with_pandas',
+                # ('raw', 'fast_pandas'): 'import_raw_data_fast_with_pandas', # <-- УДАЛЁН: Режим больше не поддерживается
                 ('raw', 'selective'): 'import_raw_data_from_excel_selective',
                 ('styles', 'selective'): 'import_styles_from_excel_selective',
                 ('charts', 'selective'): 'import_charts_from_excel_selective',
                 ('formulas', 'selective'): 'import_formulas_from_excel_selective',
                 ('raw', 'in_chunks'): 'import_raw_data_from_excel_in_chunks',
                 ('all', 'selective'): 'import_all_data_from_excel_selective',
-                ('all', 'fast_pandas'): 'import_all_data_from_excel_fast',
-                ('all', 'fast'): 'import_all_data_from_excel_fast',
+                # ('all', 'fast_pandas'): 'import_all_data_from_excel_fast', # <-- УДАЛЁН: Режим больше не поддерживается
+                # ('all', 'fast'): 'import_all_data_from_excel_fast', # <-- УДАЛЁН: Режим больше не поддерживается
                 ('all', 'in_chunks'): 'import_all_data_from_excel_chunks',
                 # --- НОВОЕ: Добавлено сопоставление для 'auto' ---
                 ('auto', ''): 'import_auto_data_from_excel', # <-- Режим 'auto' не требует дополнительного режима
@@ -91,11 +91,12 @@ class ImportWorker(QThread):
                  # Режим 'auto' не требует дополнительного режима
                  method_name = 'import_auto_data_from_excel'
             # --- КОНЕЦ НОВОГО ---
-            elif self.import_mode == 'fast_pandas' and self.import_type != 'raw':
-                 # Обработка других типов с fast_pandas (если понадобится, сейчас не поддерживается)
-                 method_name = method_mapping.get((self.import_type, self.import_mode))
-                 if not method_name:
-                     raise AttributeError(f"AppController не поддерживает комбинацию import_type={self.import_type} и import_mode={self.import_mode}")
+            # elif self.import_mode == 'fast_pandas' and self.import_type != 'raw': # <-- УДАЛЕНА: Ветка для несуществующего режима
+            #      # Обработка других типов с fast_pandas (если понадобится, сейчас не поддерживается)
+            #      method_name = method_mapping.get((self.import_type, self.import_mode))
+            #      if not method_name:
+            #          raise AttributeError(f"AppController не поддерживает комбинацию import_type={self.import_type} и import_mode={self.import_mode}")
+            #      # --- КОНЕЦ ИЗМЕНЕНИЯ ---
             else:
                  # Используем сопоставление
                  method_name = method_mapping.get((self.import_type, self.import_mode))
