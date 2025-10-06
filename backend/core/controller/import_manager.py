@@ -231,7 +231,8 @@ class ImportManager:
                 progress_callback(0, f"Импорт 'сырых' данных частями из {file_path}...")
 
             # chunk_options можно передать сюда из AppController, если нужно
-            success = import_raw_data_from_excel_in_chunks(storage, file_path, chunk_options=None)
+            # Используем пустой словарь, если chunk_options не предоставлены
+            success = import_raw_data_from_excel_in_chunks(storage, file_path, chunk_options={})
 
             if progress_callback:
                 progress_callback(100 if success else 0, f"Импорт 'сырых' данных частями {'завершён' if success else 'не удался'}.")
