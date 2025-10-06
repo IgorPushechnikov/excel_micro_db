@@ -239,6 +239,10 @@ class AppController:
             progress_callback(0, f"Быстрый импорт данных из {file_path}...")
         # --- КОНЕЦ НОВОГО ---
 
+        # --- ИСПРАВЛЕНИЕ Pylance: Инициализируем storage как None ---
+        storage = None
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
         try:
             # Создаём ProjectDBStorage с указанным db_path ВНУТРИ текущего потока
             storage = ProjectDBStorage(target_db_path)
@@ -268,9 +272,11 @@ class AppController:
             return False
         finally:
             # Закрываем соединение с БД в текущем потоке
-            if 'storage' in locals() and storage:
+            # --- ИСПРАВЛЕНИЕ Pylance: Проверяем, что storage не None ---
+            if storage is not None:
                 storage.disconnect()
                 logger.debug(f"AppController: Соединение с БД {target_db_path} закрыто после быстрого импорта.")
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     # --- КОНЕЦ НОВОГО ---
 
     # --- НОВОЕ: Метод для экспорта проекта (теперь использует db_path и progress_callback) ---
