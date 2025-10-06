@@ -27,12 +27,15 @@ from backend.exceptions.app_exceptions import ProjectError, AnalysisError, Expor
 from .project_manager import ProjectManager # Был перемещен в корень core
 # from .controller.format_manager import FormatManager # Пока не реализован
 # from .controller.chart_manager import ChartManager # Пока не реализован
-# from .controller.analysis_manager import AnalysisManager # Пока не реализован
+from .controller.analysis_manager import AnalysisManager # <-- НОВОЕ: Импорт AnalysisManager
 # from .controller.export_manager import ExportManager # Пока не реализован
 # from .controller.node_manager import NodeManager # Пока не реализован
 
-logger = get_logger(__name__)
+# --- НОВОЕ: Импорт функции для импорта "только данных" ---
+from backend.core.app_controller_data_import import import_raw_data_from_excel_data_only_openpyxl
+# --- КОНЕЦ НОВОГО ---
 
+logger = get_logger(__name__)
 
 class AppController:
     """
@@ -67,7 +70,7 @@ class AppController:
         self.project_manager = ProjectManager(self)
         # self.format_manager = FormatManager(self) # Пока не реализован
         # self.chart_manager = ChartManager(self) # Пока не реализован
-        # self.analysis_manager = AnalysisManager(self) # Пока не реализован
+        self.analysis_manager = AnalysisManager(self) # <-- НОВОЕ: Инициализация AnalysisManager
         # self.export_manager = ExportManager(self) # Пока не реализован
         # self.node_manager = NodeManager(self) # Пока не реализован
 
@@ -146,6 +149,27 @@ class AppController:
         """Полное завершение работы контроллера."""
         self.close_project()
         logger.info("AppController завершил работу.")
+
+    # --- НОВОЕ: Метод для анализа Excel файла ---
+    def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Анализирует Excel-файл и сохраняет результаты в БД проекта через AnalysisManager.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для анализа.
+            options (Optional[Dict[str, Any]]): Опции анализа.
+
+        Returns:
+            bool: True, если анализ успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить анализ.")
+            return False
+
+        logger.info(f"AppController: Запуск анализа файла {file_path} через AnalysisManager.")
+        # Делегирование AnalysisManager
+        return self.analysis_manager.perform_analysis(file_path, options)
+    # --- КОНЕЦ НОВОГО ---
 
     # --- Работа с данными листа (делегировано DataManager) ---
     def get_sheet_data(self, sheet_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -233,237 +257,6 @@ class AppController:
         return success
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Метод для обновления last_imported_file_path ---
-    def _update_last_imported_file_path(self, file_path: str):
-        """
-        Обновляет атрибут last_imported_file_path.
-
-        Args:
-            file_path (str): Путь к импортированному файлу.
-        """
-        self.last_imported_file_path = file_path
-        logger.debug(f"Путь к последнему импортированному файлу обновлён: {file_path}")
-
-    # --- Анализ Excel-файлов (делегировано AnalysisManager - заглушка) ---
-    def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
-        """Анализирует Excel-файл и сохраняет результаты в БД проекта."""
-        # Пока вызываем напрямую, но в будущем будет через AnalysisManager
-        from backend.analyzer.logic_documentation import analyze_excel_file # <-- ИСПРАВЛЕНО: Импорт теперь из backend.analyzer
-        if not self.storage:
-            logger.error("Проект не загружен. Невозможно выполнить анализ.")
-            return False
-
-        if not os.path.exists(file_path):
-            logger.error(f"Excel-файл для анализа не найден: {file_path}")
-            return False
-
-        logger.info(f"Начало анализа Excel-файла: {file_path}")
-        try:
-            analysis_results = analyze_excel_file(file_path)
-            logger.debug("Анализ Excel-файла завершен.")
-
-            # 2. Сохранение результатов в БД
-            # Предполагаем, что analyze_excel_file возвращает данные в формате,
-            # который storage может принять
-            # Для каждого листа в результатах анализа
-            for sheet_data in analysis_results.get("sheets", []):
-                sheet_name = sheet_data["name"] # <-- ВОЗВРАЩЕНО: присваивание sheet_name внутри цикла
-                logger.info(f"Сохранение данных для листа: {sheet_name}")
-
-                # --- Получаем или создаем запись листа в БД ---
-                # Это может потребовать отдельного метода в storage
-                # Пока делаем это напрямую
-                # TODO: Реализовать метод в storage для создания/получения sheet_id
-
-                sheet_id = self._get_or_create_sheet_id(analysis_results.get("project_name", "Unknown"), sheet_name)
-                if sheet_id is None:
-                    logger.error(f"Не удалось получить/создать ID для листа '{sheet_name}'. Пропущен.")
-                    continue
-
-                # --- Сохраняем метаданные листа ---
-                metadata_to_save = {
-                    "max_row": sheet_data.get("max_row"),
-                    "max_row": sheet_data.get("max_row"),
-                    "max_column": sheet_data.get("max_column"),
-                    "merged_cells": sheet_data.get("merged_cells", [])
-                }
-                if not self.storage.save_sheet_metadata(sheet_name, metadata_to_save):
-                    logger.warning(f"Не удалось сохранить метаданные для листа '{sheet_name}'.")
-
-                # --- Сохраняем объединенные ячейки в отдельную таблицу ---
-                merged_cells_list = sheet_data.get("merged_cells", [])
-                if merged_cells_list: # Сохраняем только если список не пуст
-                    if not self.storage.save_sheet_merged_cells(sheet_id, merged_cells_list):
-                        logger.error(f"Не удалось сохранить объединенные ячейки для листа '{sheet_name}' (ID: {sheet_id}).")
-
-                # --- Сохраняем "сырые данные" ---
-                if not self.storage.save_sheet_raw_data(sheet_name, sheet_data.get("raw_data", [])):
-                    logger.error(f"Не удалось сохранить 'сырые данные' для листа '{sheet_name}'.")
-
-                # --- Сохраняем формулы ---
-                if not self.storage.save_sheet_formulas(sheet_id, sheet_data.get("formulas", [])):
-                    logger.error(f"Не удалось сохранить формулы для листа '{sheet_name}' (ID: {sheet_id}).")
-
-                # --- Сохраняем стили ---
-                if not self.storage.save_sheet_styles(sheet_id, sheet_data.get("styles", [])):
-                    logger.error(f"Не удалось сохранить стили для листа '{sheet_name}' (ID: {sheet_id}).")
-
-                # --- Сохраняем диаграммы ---
-                if not self.storage.save_sheet_charts(sheet_id, sheet_data.get("charts", [])):
-                    logger.error(f"Не удалось сохранить диаграммы для листа '{sheet_name}' (ID: {sheet_id}).")
-
-            # --- НОВОЕ: Обновляем last_imported_file_path после успешного анализа ---
-            self._update_last_imported_file_path(file_path)
-            # -------------------------------------------------------------------------
-
-            logger.info(f"Анализ и сохранение данных из '{file_path}' завершены.")
-            return True
-        except Exception as e:
-            logger.error(f"Ошибка при анализе/сохранении файла '{file_path}': {e}", exc_info=True)
-            return False
-
-    def _get_or_create_sheet_id(self, project_name: str, sheet_name: str) -> Optional[int]:
-        """
-        Получает ID листа из БД или создает новую запись, если лист не существует.
-
-        Это вспомогательный метод, который может быть перенесен в storage в будущем.
-        """
-        if not self.storage or not self.storage.connection:
-            logger.error("Нет подключения к БД для получения/создания sheet_id.")
-            return None
-
-        try:
-            cursor = self.storage.connection.cursor()
-
-            # Получаем project_id (для MVP предполагаем 1)
-            # TODO: Реализовать правильное получение project_id
-            project_id = 1
-
-            # Проверяем, существует ли лист
-            cursor.execute("SELECT sheet_id FROM sheets WHERE project_id = ? AND name = ?", (project_id, sheet_name))
-            result = cursor.fetchone()
-            if result:
-                logger.debug(f"Лист '{sheet_name}' найден с ID {result[0]}.")
-                return result[0]
-            else:
-                # Создаем новый лист
-                logger.debug(f"Лист '{sheet_name}' не найден. Создаем новый.")
-                cursor.execute(
-                    "INSERT INTO sheets (project_id, name) VALUES (?, ?)",
-                    (project_id, sheet_name)
-                )
-                self.storage.connection.commit()
-                new_sheet_id = cursor.lastrowid
-                logger.info(f"Создан новый лист '{sheet_name}' с ID {new_sheet_id}.")
-                return new_sheet_id
-        except sqlite3.Error as e:
-            logger.error(f"Ошибка SQLite при получении/создании sheet_id для '{sheet_name}': {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Неожиданная ошибка при получении/создании sheet_id для '{sheet_name}': {e}", exc_info=True)
-            return None
-
-    # --- Экспорт (делегировано ExportManager - заглушка) ---
-    def export_results(self, export_type: str, output_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлены db_path и progress_callback
-        """Универсальный метод для экспорта результатов проекта."""
-        # Пока вызываем напрямую, но в будущем будет через ExportManager
-        if export_type.lower() == 'excel':
-            # Новый питоновский экспорт через xlsxwriter
-            # Используем db_path, если он предоставлен, иначе self.project_db_path
-            actual_db_path = db_path or self.project_db_path
-            # Передаём progress_callback
-            return self.export_project_with_xlsxwriter(output_path, actual_db_path, progress_callback=progress_callback)
-        else:
-            logger.error(f"Неподдерживаемый тип экспорта: {export_type}")
-            return False
-
-    def export_project(self, output_path: str, use_xlsxwriter: bool = True) -> bool:
-        """Экспортирует проект в Excel-файл (старый метод)."""
-        logger.info(f"Начало экспорта проекта в '{output_path}'. Используется {'xlsxwriter' if use_xlsxwriter else 'openpyxl (отключен)'} .")
-        try:
-            from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter as export_with_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
-            success = export_with_xlsxwriter(self.project_db_path, output_path)
-            if success:
-                logger.info(f"Проект успешно экспортирован в '{output_path}'.")
-            else:
-                logger.error(f"Ошибка при экспорте проекта в '{output_path}'.")
-            return success
-        except Exception as e:
-            logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}': {e}", exc_info=True)
-            return False
-
-    def export_project_with_xlsxwriter(self, output_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлены db_path и progress_callback
-        """Экспортирует проект в Excel-файл с использованием Python-экспортера (xlsxwriter)."""
-        # --- НОВОЕ: Проверка и добавление расширения .xlsx ---
-        output_path_obj = Path(output_path)
-        if output_path_obj.suffix.lower() != '.xlsx':
-            output_path_obj = output_path_obj.with_suffix('.xlsx')
-            output_path = str(output_path_obj)
-            logger.info(f"К пути экспорта добавлено расширение '.xlsx'. Новый путь: {output_path}")
-        # ----------------------------------------------------
-
-        # Используем db_path, если он предоставлен, иначе self.project_db_path
-        actual_db_path = db_path or self.project_db_path
-        logger.info(f"Начало экспорта проекта в '{output_path}' с использованием Python-экспортера (xlsxwriter). Используется БД: {actual_db_path}")
-        try:
-            # Импортируем xlsxwriter_exporter
-            from backend.exporter.excel.xlsxwriter_exporter import export_project_xlsxwriter # <-- ИСПРАВЛЕНО: Импорт теперь из backend.exporter
-            
-            # Выполняем экспорт, передаём actual_db_path и progress_callback
-            success = export_project_xlsxwriter(actual_db_path, output_path, progress_callback=progress_callback)
-
-            if success:
-                logger.info(f"Проект успешно экспортирован в '{output_path}' с помощью Python-экспортера (xlsxwriter).")
-            else:
-                logger.error(f"Ошибка при экспорте проекта в '{output_path}' с помощью Python-экспортера (xlsxwriter).")
-            return success
-        except Exception as e:
-            logger.error(f"Неожиданная ошибка при экспорте проекта в '{output_path}' с помощью Python-экспортера (xlsxwriter): {e}", exc_info=True)
-            return False
-
-    # --- НОВОЕ: Методы для настройки и удаления логирования проекта ---
-    def _setup_project_logging(self, project_path: str):
-        """
-        Настраивает дублирующий лог-файл в папке проекта.
-        """
-        try:
-            log_dir = Path(project_path) / "logs"
-            log_dir.mkdir(exist_ok=True)  # Создаем папку logs, если её нет
-            log_file = log_dir / "project_gui.log"
-
-            # Создаем обработчик
-            self._project_log_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-            # Создаем форматтер, скопированный из utils.logger
-            # LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            self._project_log_handler.setFormatter(formatter)
-
-            # Добавляем обработчик к логгеру приложения 'excel_micro_db', а не к корневому
-            app_logger = logging.getLogger("excel_micro_db")
-            app_logger.addHandler(self._project_log_handler)
-
-            logger.info(f"Логирование в файл проекта '{log_file}' настроено.")
-        except Exception as e:
-            logger.error(f"Ошибка при настройке логирования в файл проекта: {e}", exc_info=True)
-
-    def _remove_project_logging(self):
-        """
-        Удаляет обработчик логов проекта при закрытии проекта.
-        """
-        if self._project_log_handler:
-            try:
-                app_logger = logging.getLogger("excel_micro_db")  # Обращаемся к правильному логгеру
-                app_logger.removeHandler(self._project_log_handler)
-                self._project_log_handler.close()  # Закрываем файловый дескриптор
-                logger.info(f"Логирование в файл проекта '{self._project_log_handler.baseFilename}' удалено.")
-            except Exception as e:
-                logger.error(f"Ошибка при удалении обработчика логов проекта: {e}", exc_info=True)
-            finally:
-                self._project_log_handler = None
-        else:
-            logger.debug("Обработчик логов проекта не был установлен.")
-    # ================================================================
-
     # --- НОВОЕ: Методы для управления глобальным логированием ---
     def set_logging_enabled(self, enabled: bool):
         """
@@ -484,15 +277,14 @@ class AppController:
         return is_logging_enabled()
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Методы для импорта по типам и режимам (обновлены) ---
-
-    def import_raw_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+    # --- НОВОЕ: Метод для импорта "только данных" ---
+    def import_raw_data_from_excel_data_only_openpyxl(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
-        Импортирует только "сырые" данные (значения ячеек) из Excel-файла.
+        Импортирует только "сырые" данные (значения ячеек), исключая настоящие формулы, из Excel-файла.
+        Использует функцию import_raw_data_from_excel_data_only_openpyxl из app_controller_data_import.py.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
             db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
             progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
 
@@ -504,461 +296,22 @@ class AppController:
             logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
             return False
 
-        from .app_controller_data_import import import_raw_data_from_excel as import_func
-        # Убираем progress_callback из вызова, так как функция его не принимает
-        return import_func(storage_to_use, file_path, options)
-
-    def import_styles_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
-        """
-        Импортирует только стили из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_styles_from_excel as import_func
-        # Убираем progress_callback из вызова, так как функция его не принимает
-        return import_func(storage_to_use, file_path, options)
-
-    def import_charts_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
-        """
-        Импортирует только диаграммы из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_charts_from_excel as import_func
-        # Убираем progress_callback из вызова, так как функция его не принимает
-        return import_func(storage_to_use, file_path, options)
-
-    def import_formulas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
-        """
-        Импортирует только формулы из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_formulas_from_excel as import_func
-        # Убираем progress_callback из вызова, так как функция его не принимает
-        return import_func(storage_to_use, file_path, options)
-
-    def import_raw_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
-        """
-        Импортирует только "сырые" данные выборочно из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_raw_data_from_excel_selective as import_func
-        # Убираем progress_callback из вызова, так как функция его не принимает
-        return import_func(storage_to_use, file_path, options)
-
-    def import_styles_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
-        """
-        Импортирует только стили выборочно из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_styles_from_excel_selective as import_func
-        # Убираем progress_callback из вызова, так как функция его не принимает
-        return import_func(storage_to_use, file_path, options)
-
-    def import_charts_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует только диаграммы выборочно из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_charts_from_excel_selective as import_func
-        return import_func(storage_to_use, file_path, options)
-
-    def import_formulas_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует только формулы выборочно из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_formulas_from_excel_selective as import_func
-        return import_func(storage_to_use, file_path, options)
-
-    def import_raw_data_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует только "сырые" данные частями из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            chunk_options (Dict[str, Any]): Опции для разбиения на части.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_raw_data_from_excel_in_chunks as import_func
-        return import_func(storage_to_use, file_path, chunk_options)
-
-    def import_styles_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует только стили частями из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            chunk_options (Dict[str, Any]): Опции для разбиения на части.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_styles_from_excel_in_chunks as import_func
-        return import_func(storage_to_use, file_path, chunk_options)
-
-    def import_charts_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует только диаграммы частями из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            chunk_options (Dict[str, Any]): Опции для разбиения на части.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_charts_from_excel_in_chunks as import_func
-        return import_func(storage_to_use, file_path, chunk_options)
-
-    def import_formulas_from_excel_in_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует только формулы частями из Excel-файла.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            chunk_options (Dict[str, Any]): Опции для разбиения на части.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_formulas_from_excel_in_chunks as import_func
-        return import_func(storage_to_use, file_path, chunk_options)
-
-    def import_raw_data_fast_with_pandas(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
-        """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
-
-        from .app_controller_data_import import import_raw_data_fast_with_pandas as import_func
-        return import_func(storage_to_use, file_path, options)
-
-    # --- НОВОЕ: Метод для импорта по режиму 'Авто' ---
-    def import_auto_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует данные, стили, диаграммы и формулы из Excel-файла
-        с использованием оптимальных методов для каждого типа (Авто-режим).
-        1. Данные - Pandas
-        2. Стили - Openpyxl
-        3. Диаграммы - Openpyxl
-        4. Формулы - Openpyxl
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта (передаются в каждый под-метод).
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: True, если все этапы импорта прошли успешно, иначе False.
-        """
-        logger.info(f"Начало авто-импорта из Excel-файла: {file_path}")
-
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить авто-импорт.")
-            return False
-
-        success = True
-        # 1. Импорт "сырых" данных с помощью pandas (быстро)
-        if success:
-            logger.info("Авто-импорт: Начало импорта 'сырых' данных (pandas)...")
-            success = self.import_raw_data_fast_with_pandas(file_path, options, db_path)
-            if success:
-                logger.info("Авто-импорт: 'Сырые' данные (pandas) успешно импортированы.")
-            else:
-                logger.error("Авто-импорт: Ошибка при импорте 'сырых' данных (pandas).")
-
-        # 2. Импорт стилей с помощью openpyxl
-        if success:
-            logger.info("Авто-импорт: Начало импорта стилей (openpyxl)...")
-            success = self.import_styles_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Авто-импорт: Стили (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Авто-импорт: Ошибка при импорте стилей (openpyxl).")
-
-        # 3. Импорт диаграмм с помощью openpyxl
-        if success:
-            logger.info("Авто-импорт: Начало импорта диаграмм (openpyxl)...")
-            success = self.import_charts_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Авто-импорт: Диаграммы (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Авто-импорт: Ошибка при импорте диаграмм (openpyxl).")
-
-        # 4. Импорт формул с помощью openpyxl
-        if success:
-            logger.info("Авто-импорт: Начало импорта формул (openpyxl)...")
-            success = self.import_formulas_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Авто-импорт: Формулы (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Авто-импорт: Ошибка при импорте формул (openpyxl).")
-
-        if success:
-            logger.info(f"Авто-импорт из '{file_path}' завершён успешно.")
-        else:
-            logger.error(f"Авто-импорт из '{file_path}' завершён с ошибками.")
-
-        return success
+        # Вызываем функцию из app_controller_data_import.py
+        return import_raw_data_from_excel_data_only_openpyxl(storage_to_use, file_path, progress_callback=progress_callback)
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Заглушки для недостающих методов ---
-    def import_all_data_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует все типы данных (сырые, стили, диаграммы, формулы) из Excel-файла.
-        Вызывает соответствующие методы импорта для каждого типа с использованием openpyxl.
+    # --- Существующие методы импорта (заглушки или делегирование) ---
 
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта (передаются в каждый под-метод).
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
+    # --- Существующие методы экспорта (заглушки или делегирование) ---
 
-        Returns:
-            bool: True, если все этапы импорта прошли успешно, иначе False.
-        """
-        logger.info(f"Начало импорта ВСЕХ данных (openpyxl) из Excel-файла: {file_path}")
+    # --- Внутренние методы для управления логированием проекта ---
 
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
+    # --- Внутренние методы для управления менеджерами ---
 
-        success = True
-        # 1. Импорт "сырых" данных (openpyxl)
-        if success:
-            logger.info("Импорт всех данных: Начало импорта 'сырых' данных (openpyxl)...")
-            success = self.import_raw_data_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Импорт всех данных: 'Сырые' данные (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Импорт всех данных: Ошибка при импорте 'сырых' данных (openpyxl).")
+    # --- Вспомогательные методы ---
 
-        # 2. Импорт стилей (openpyxl)
-        if success:
-            logger.info("Импорт всех данных: Начало импорта стилей (openpyxl)...")
-            success = self.import_styles_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Импорт всех данных: Стили (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Импорт всех данных: Ошибка при импорте стилей (openpyxl).")
 
-        # 3. Импорт диаграмм (openpyxl)
-        if success:
-            logger.info("Импорт всех данных: Начало импорта диаграмм (openpyxl)...")
-            success = self.import_charts_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Импорт всех данных: Диаграммы (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Импорт всех данных: Ошибка при импорта диаграмм (openpyxl).")
-
-        # 4. Импорт формул (openpyxl)
-        if success:
-            logger.info("Импорт всех данных: Начало импорта формул (openpyxl)...")
-            success = self.import_formulas_from_excel(file_path, options, db_path)
-            if success:
-                logger.info("Импорт всех данных: Формулы (openpyxl) успешно импортированы.")
-            else:
-                logger.error("Импорт всех данных: Ошибка при импорте формул (openpyxl).")
-
-        if success:
-            logger.info(f"Импорт ВСЕХ данных (openpyxl) из '{file_path}' завершён успешно.")
-        else:
-            logger.error(f"Импорт ВСЕХ данных (openpyxl) из '{file_path}' завершён с ошибками.")
-
-        return success
-
-    def import_raw_data_pandas_from_excel(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
-        Это дублирует 'import_raw_data_fast_with_pandas'.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: Результат вызова 'import_raw_data_fast_with_pandas'.
-        """
-        logger.info("Вызов 'import_raw_data_pandas_from_excel' перенаправлен на 'import_raw_data_fast_with_pandas'.")
-        return self.import_raw_data_fast_with_pandas(file_path, options, db_path)
-
-    def import_all_data_from_excel_selective(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует все типы данных выборочно из Excel-файла.
-        Пока не реализовано.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: False, так как функция не реализована.
-        """
-        logger.warning("Метод 'import_all_data_from_excel_selective' не реализован.")
-        return False
-
-    def import_all_data_from_excel_chunks(self, file_path: str, chunk_options: Dict[str, Any], db_path: Optional[str] = None) -> bool:
-        """
-        Импортирует все типы данных частями из Excel-файла.
-        Пока не реализовано.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            chunk_options (Dict[str, Any]): Опции для разбиения на части.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: False, так как функция не реализована.
-        """
-        logger.warning("Метод 'import_all_data_from_excel_chunks' не реализован.")
-        return False
-
-    def import_raw_data_pandas_from_excel_fast(self, file_path: str, options: Optional[Dict[str, Any]] = None, db_path: Optional[str] = None) -> bool:
-        """
-        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
-        Это дублирует 'import_raw_data_fast_with_pandas'.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            options (Optional[Dict[str, Any]]): Опции импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-
-        Returns:
-            bool: Результат вызова 'import_raw_data_fast_with_pandas'.
-        """
-        logger.info("Вызов 'import_raw_data_pandas_from_excel_fast' перенаправлен на 'import_raw_data_fast_with_pandas'.")
-        return self.import_raw_data_fast_with_pandas(file_path, options, db_path)
-
-    # --- КОНЕЦ НОВОГО ---
-
+# --- Фабричная функция ---
 def create_app_controller(project_path: Optional[str] = None) -> AppController:
     """
     Фабричная функция для создания и инициализации экземпляра AppController.
