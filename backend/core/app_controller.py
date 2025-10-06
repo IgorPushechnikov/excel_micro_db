@@ -204,6 +204,75 @@ class AppController:
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     # --- КОНЕЦ НОВОГО ---
 
+    # --- НОВОЕ: Метод для БЫСТРОГО импорта "сырых" данных с помощью pandas ---
+    def import_raw_data_fast_with_pandas(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Быстро импортирует только "сырые" данные (значения ячеек) из Excel-файла с помощью pandas.
+        Использует функцию из app_controller_data_import.py.
+        Создаёт собственное соединение с БД в текущем потоке для потокобезопасности.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
+            options (Optional[Dict[str, Any]]): Опции импорта для pandas.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        # Импортируем функцию локально во избежание циклических зависимостей на верхнем уровне
+        from .app_controller_data_import import import_raw_data_fast_with_pandas as import_fast_raw
+
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        # Используем переданный db_path или текущий проект
+        target_db_path = db_path or self.project_db_path
+        if db_path and db_path != self.project_db_path:
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
+
+        logger.info(f"AppController: Запуск БЫСТРОГО импорта 'сырых' данных из {file_path} (БД: {target_db_path}).")
+
+        # --- НОВОЕ: Обновление прогресса в начале ---
+        if progress_callback:
+            progress_callback(0, f"Быстрый импорт данных из {file_path}...")
+        # --- КОНЕЦ НОВОГО ---
+
+        try:
+            # Создаём ProjectDBStorage с указанным db_path ВНУТРИ текущего потока
+            storage = ProjectDBStorage(target_db_path)
+            if not storage.connect():
+                logger.error(f"AppController: Не удалось подключиться к БД проекта {target_db_path} для быстрого импорта.")
+                return False
+
+            # Вызываем функцию импорта
+            success = import_fast_raw(storage, file_path, options=options)
+
+            # --- НОВОЕ: Обновление прогресса в конце ---
+            if progress_callback:
+                if success:
+                    progress_callback(100, "Быстрый импорт завершён.")
+                else:
+                    progress_callback(0, "Быстрый импорт не удался.")
+            # --- КОНЕЦ НОВОГО ---
+
+            return success
+
+        except Exception as e:
+            logger.error(f"AppController: Ошибка при БЫСТРОМ импорте 'сырых' данных из файла '{file_path}': {e}", exc_info=True)
+            # --- НОВОЕ: Обновление прогресса при ошибке ---
+            if progress_callback:
+                progress_callback(0, f"Ошибка быстрого импорта: {e}")
+            # --- КОНЕЦ НОВОГО ---
+            return False
+        finally:
+            # Закрываем соединение с БД в текущем потоке
+            if 'storage' in locals() and storage:
+                storage.disconnect()
+                logger.debug(f"AppController: Соединение с БД {target_db_path} закрыто после быстрого импорта.")
+    # --- КОНЕЦ НОВОГО ---
+
     # --- НОВОЕ: Метод для экспорта проекта (теперь использует db_path и progress_callback) ---
     def export_results(self, export_type: str, output_path: str, options: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлен progress_callback
         """
