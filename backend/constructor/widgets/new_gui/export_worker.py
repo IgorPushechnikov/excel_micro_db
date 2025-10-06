@@ -62,8 +62,8 @@ class ExportWorker(QThread):
                 raise AttributeError(f"AppController не имеет метода {method_name}")
 
             # Вызываем метод экспорта
-            # --- ИЗМЕНЕНО: Передаем export_type, output_path и db_path, а также progress_callback ---
-            success = method(export_type="excel", output_path=self.output_path, db_path=self.db_path, progress_callback=internal_progress_callback)
+            # --- ИЗМЕНЕНО: Передаем export_type, output_path и progress_callback. db_path берётся из AppController внутри. ---
+            success = method(export_type="excel", output_path=self.output_path, progress_callback=internal_progress_callback)
             # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
             logger.info(f"Экспорт в файл {self.output_path} завершён в потоке {id(QThread.currentThread())}.")
