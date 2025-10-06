@@ -1,7 +1,7 @@
 # backend/core/controller/analysis_manager.py
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable # <-- Добавлен Callable
 from backend.analyzer.logic_documentation import analyze_excel_file as run_analysis
 from backend.storage.base import ProjectDBStorage
 from backend.utils.logger import get_logger
@@ -19,13 +19,14 @@ class AnalysisManager:
         self.app_controller = app_controller
         logger.debug("AnalysisManager инициализирован.")
 
-    def perform_analysis(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    def perform_analysis(self, file_path: str, options: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлен progress_callback
         """
         Выполняет анализ Excel-файла и сохраняет результаты в БД проекта.
 
         Args:
             file_path (str): Путь к Excel-файлу для анализа.
             options (Optional[Dict[str, Any]]): Опции анализа (например, max_rows, include_formulas).
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса (значение 0-100, сообщение). # <-- НОВОЕ
 
         Returns:
             bool: True, если анализ и сохранение прошли успешно, иначе False.
@@ -38,11 +39,20 @@ class AnalysisManager:
         try:
             logger.info(f"Начало анализа Excel-файла: {file_path}")
 
+            # --- НОВОЕ: Обновление прогресса в начале ---
+            if progress_callback:
+                progress_callback(0, f"Анализ файла {file_path}...")
+            # --- КОНЕЦ НОВОГО ---
+
             # 1. Вызов анализатора
             analysis_results = run_analysis(file_path)
 
             # 2. Обработка и сохранение результатов
-            for sheet_info in analysis_results.get("sheets", []):
+            sheets_data = analysis_results.get("sheets", [])
+            total_sheets = len(sheets_data)
+            processed_sheets = 0
+
+            for sheet_info in sheets_data:
                 sheet_name = sheet_info["name"]
                 raw_data = sheet_info["raw_data"]
                 formulas = sheet_info["formulas"]
@@ -77,9 +87,25 @@ class AnalysisManager:
                     logger.error(f"Ошибка сохранения объединенных ячеек для {sheet_name}")
                     return False
 
+                processed_sheets += 1
+                # --- НОВОЕ: Обновление прогресса при обработке листа ---
+                if progress_callback and total_sheets > 0:
+                    progress_percent = int((processed_sheets / total_sheets) * 100)
+                    progress_callback(progress_percent, f"Обработан лист {processed_sheets} из {total_sheets}...")
+                # --- КОНЕЦ НОВОГО ---
+
+            # --- НОВОЕ: Обновление прогресса в конце ---
+            if progress_callback:
+                progress_callback(100, "Анализ завершён.")
+            # --- КОНЕЦ НОВОГО ---
+
             logger.info(f"Анализ файла {file_path} завершен успешно.")
             return True
 
         except Exception as e:
             logger.error(f"Ошибка при анализе файла {file_path}: {e}", exc_info=True)
+            # --- НОВОЕ: Обновление прогресса при ошибке ---
+            if progress_callback:
+                progress_callback(0, f"Ошибка анализа: {e}")
+            # --- КОНЕЦ НОВОГО ---
             return False
