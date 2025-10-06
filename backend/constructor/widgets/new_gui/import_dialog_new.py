@@ -81,7 +81,7 @@ class ImportDialog(QDialog):
 
         # Чекбокс логирования
         self.logging_checkbox = QCheckBox("Включить логирование во время импорта", self)
-        self.logging_checkbox.setChecked(True)
+        self.logging_checkbox.setChecked(False)
         options_layout.addWidget(self.logging_checkbox)
 
         # Селектор режима импорта (обновлённый)
