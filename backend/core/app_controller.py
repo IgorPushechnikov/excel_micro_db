@@ -2,7 +2,6 @@
 
 import os
 import logging
-import sqlite3
 from typing import Dict, Any, List, Optional, Tuple, Union, Callable # <-- ДОБАВЛЕНО: Callable
 from pathlib import Path # <-- ДОБАВЛЕНО: Импорт Path из pathlib
 
@@ -30,10 +29,6 @@ from .project_manager import ProjectManager # Был перемещен в ко�
 from .controller.analysis_manager import AnalysisManager # <-- НОВОЕ: Импорт AnalysisManager
 # from .controller.export_manager import ExportManager # Пока не реализован
 # from .controller.node_manager import NodeManager # Пока не реализован
-
-# --- НОВОЕ: Импорт функции для импорта "только данных" ---
-from backend.core.app_controller_data_import import import_raw_data_from_excel_data_only_openpyxl
-# --- КОНЕЦ НОВОГО ---
 
 logger = get_logger(__name__)
 
@@ -277,34 +272,40 @@ class AppController:
         return is_logging_enabled()
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Метод для импорта "только данных" ---
-    def import_raw_data_from_excel_data_only_openpyxl(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+    # --- ВНУТРЕННИЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ЛОГИРОВАНИЕМ ПРОЕКТА ---
+    def _setup_project_logging(self, project_path: str):
         """
-        Импортирует только "сырые" данные (значения ячеек), исключая настоящие формулы, из Excel-файла.
-        Использует функцию import_raw_data_from_excel_data_only_openpyxl из app_controller_data_import.py.
-
-        Args:
-            file_path (str): Путь к Excel-файлу для импорта.
-            db_path (Optional[str]): Путь к БД проекта. Если None, использует self.storage.
-            progress_callback (Optional[Callable[[int, str], None]]): Функция обратного вызова для прогресса.
-
-        Returns:
-            bool: True, если импорт успешен, иначе False.
+        Настраивает FileHandler для логирования в файл проекта.
         """
-        storage_to_use = ProjectDBStorage(db_path) if db_path else self.storage
-        if not storage_to_use:
-            logger.error("Экземпляр ProjectDBStorage не предоставлен и не загружен проект. Невозможно выполнить импорт.")
-            return False
+        # Путь к файлу лога проекта
+        log_file_path = os.path.join(project_path, "logs", f"app_controller_{os.path.basename(project_path)}.log")
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
-        # Вызываем функцию из app_controller_data_import.py
-        return import_raw_data_from_excel_data_only_openpyxl(storage_to_use, file_path, progress_callback=progress_callback)
-    # --- КОНЕЦ НОВОГО ---
+        # Создаём FileHandler
+        self._project_log_handler = logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
+        # Создаём форматтер
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self._project_log_handler.setFormatter(formatter)
+        # Добавляем FileHandler к логгеру AppController
+        logger.addHandler(self._project_log_handler)
+        logger.info(f"Логирование проекта настроено: {log_file_path}")
+
+    def _remove_project_logging(self):
+        """
+        Удаляет FileHandler логирования проекта.
+        """
+        if self._project_log_handler:
+            logger.info(f"Удаление обработчика логов проекта: {self._project_log_handler.baseFilename}")
+            logger.removeHandler(self._project_log_handler)
+            self._project_log_handler.close()
+            self._project_log_handler = None
+        else:
+            logger.debug("Обработчик логов проекта не был установлен.")
+    # --- КОНЕЦ ВНУТРЕННИХ МЕТОДОВ ЛОГИРОВАНИЯ ---
 
     # --- Существующие методы импорта (заглушки или делегирование) ---
 
     # --- Существующие методы экспорта (заглушки или делегирование) ---
-
-    # --- Внутренние методы для управления логированием проекта ---
 
     # --- Внутренние методы для управления менеджерами ---
 
