@@ -656,12 +656,17 @@ def import_raw_data_fast_with_pandas(storage: ProjectDBStorage, file_path: str, 
                         excel_col_letter = get_column_letter(col_index_pandas + 1 + (start_col_pandas or 0)) # +1 для перехода к 1-based, + start_col_pandas
                         cell_address = f"{excel_col_letter}{excel_row_index}"
 
-                        # Обработка значений NaN/null
+                        # Обработка значений NaN/null и преобразование типов для SQLite
                         if pd.isna(value):
-                            # В БД можно сохранить как None или специальную строку
                             processed_value = None
-                        else:
+                        elif isinstance(value, (str, int, float, bool)):
+                            # Стандартные типы Python - оставляем как есть
                             processed_value = value
+                        else:
+                            # Для всех остальных типов (pandas.Timestamp, numpy.int64 и т.д.)
+                            # Преобразуем в строку. Это гарантирует совместимость с SQLite
+                            # и сохраняет "видимое" значение ячейки.
+                            processed_value = str(value)
 
                         raw_data_list.append({
                             "cell_address": cell_address,
