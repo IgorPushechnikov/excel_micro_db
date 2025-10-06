@@ -84,6 +84,7 @@ class AppController:
         """
         return self.project_manager.initialize()
 
+
     @property
     def is_project_loaded(self) -> bool:
         """Проверяет, загружен ли проект."""
@@ -146,10 +147,11 @@ class AppController:
         self.close_project()
         logger.info("AppController завершил работу.")
 
-    # --- НОВОЕ: Метод для анализа Excel файла ---
+    # --- НОВОЕ: Метод для анализа Excel файла (теперь использует db_path) ---
     def analyze_excel_file(self, file_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
         """
         Анализирует Excel-файл и сохраняет результаты в БД проекта через AnalysisManager.
+        Использует self.project_db_path.
 
         Args:
             file_path (str): Путь к Excel-файлу для анализа.
@@ -163,19 +165,21 @@ class AppController:
             return False
 
         logger.info(f"AppController: Запуск анализа файла {file_path} через AnalysisManager.")
-        # Делегирование AnalysisManager
-        return self.analysis_manager.perform_analysis(file_path, options)
+        # Делегирование AnalysisManager, передаём db_path
+        # Используем self.project_db_path, так как анализ идёт в основном потоке, но AnalysisManager теперь создаёт соединение внутри себя
+        return self.analysis_manager.perform_analysis(file_path, self.project_db_path, options)
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Метод для импорта "всё" через AnalysisManager ---
+    # --- НОВОЕ: Метод для импорта "всё" через AnalysisManager (теперь использует db_path) ---
     def import_all_data_from_excel(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
         """
         Импортирует все данные (сырые, формулы, стили, диаграммы и т.д.) из Excel-файла.
-        Использует AnalysisManager, который теперь поддерживает прогресс-бар.
+        Использует AnalysisManager, который теперь поддерживает прогресс-бар и создаёт соединение в потоке.
+        Если db_path не указан, используется self.project_db_path.
 
         Args:
             file_path (str): Путь к Excel-файлу для импорта.
-            db_path (Optional[str]): Путь к БД проекта (игнорируется, используется self.storage).
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
             progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
 
         Returns:
@@ -185,24 +189,28 @@ class AppController:
             logger.error("Проект не загружен. Невозможно выполнить импорт.")
             return False
 
+        # Используем переданный db_path или текущий проект
+        target_db_path = db_path or self.project_db_path
         # Проверяем, совпадает ли db_path с текущим проектом, если передан
         if db_path and db_path != self.project_db_path:
-            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется текущий проект.")
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
 
-        logger.info(f"AppController: Запуск импорта всех данных из {file_path} через AnalysisManager.")
-        # Делегирование AnalysisManager, передаём progress_callback
-        return self.analysis_manager.perform_analysis(file_path, progress_callback=progress_callback)
+        logger.info(f"AppController: Запуск импорта всех данных из {file_path} через AnalysisManager (БД: {target_db_path}).")
+        # Делегирование AnalysisManager, передаём file_path, db_path и progress_callback
+        return self.analysis_manager.perform_analysis(file_path, target_db_path, progress_callback=progress_callback)
     # --- КОНЕЦ НОВОГО ---
 
-    # --- НОВОЕ: Метод для экспорта проекта ---
-    def export_results(self, export_type: str, output_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+    # --- НОВОЕ: Метод для экспорта проекта (теперь использует db_path и progress_callback) ---
+    def export_results(self, export_type: str, output_path: str, options: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлен progress_callback
         """
         Экспортирует результаты проекта через ExportManager.
+        Использует self.project_db_path.
 
         Args:
             export_type (str): Тип экспорта (например, 'excel').
             output_path (str): Путь к выходному файлу.
             options (Optional[Dict[str, Any]]): Опции экспорта.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
 
         Returns:
             bool: True, если экспорт успешен, иначе False.
@@ -211,9 +219,10 @@ class AppController:
             logger.error("Проект не загружен. Невозможно выполнить экспорт.")
             return False
 
-        logger.info(f"AppController: Запуск экспорта в {output_path} (тип: {export_type}) через ExportManager.")
-        # Делегирование ExportManager
-        return self.export_manager.perform_export(export_type, output_path, options)
+        logger.info(f"AppController: Запуск экспорта в {output_path} (тип: {export_type}) через ExportManager (БД: {self.project_db_path}).")
+        # Делегирование ExportManager, передаём export_type, output_path, db_path, options, progress_callback
+        # Используем self.project_db_path, ExportManager должен создавать соединение внутри себя
+        return self.export_manager.perform_export(export_type, output_path, db_path=self.project_db_path, options=options, progress_callback=progress_callback) # <-- ИЗМЕНЕНО: Добавлен progress_callback
     # --- КОНЕЦ НОВОГО ---
 
     # --- Работа с данными листа (делегировано DataManager) ---
