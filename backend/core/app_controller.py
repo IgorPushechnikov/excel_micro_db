@@ -59,9 +59,11 @@ class AppController:
         # ================================================
 
         # --- Инициализация менеджеров ---
-        # Импортируем DataManager локально, чтобы избежать циклического импорта
-        from .controller.data_manager import DataManager # <-- ДОБАВЛЯЕМ СЮДА
+        # Импортируем DataManager и ImportManager локально, чтобы избежать циклических импорта
+        from .controller.data_manager import DataManager
+        from .controller.import_manager import ImportManager # <-- НОВОЕ: Импорт ImportManager
         self.data_manager = DataManager(self)
+        self.import_manager = ImportManager(self) # <-- НОВОЕ: Инициализация ImportManager
 
         self.project_manager = ProjectManager(self)
         # self.format_manager = FormatManager(self) # Пока не реализован
@@ -202,6 +204,128 @@ class AppController:
         # --- ИСПРАВЛЕНО: Явно указаны db_path и progress_callback ---
         return self.analysis_manager.perform_analysis(file_path, db_path=target_db_path, progress_callback=progress_callback)
         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+    # --- КОНЕЦ НОВОГО ---
+
+    # --- НОВОЕ: Методы для импорта "только" по типам, делегирующие ImportManager ---
+    def import_raw_data_from_excel(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+        """
+        Импортирует только "сырые" данные (значения ячеек, формулы как строки) из Excel-файла.
+        Делегирует ImportManager.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        target_db_path = db_path or self.project_db_path
+        if db_path and db_path != self.project_db_path:
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
+
+        logger.info(f"AppController: Делегирование импорта 'сырых' данных из {file_path} (БД: {target_db_path}) ImportManager.")
+        return self.import_manager.perform_import_raw_data(file_path, target_db_path, progress_callback)
+
+    def import_styles_from_excel(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+        """
+        Импортирует только стили из Excel-файла.
+        Делегирует ImportManager.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        target_db_path = db_path or self.project_db_path
+        if db_path and db_path != self.project_db_path:
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
+
+        logger.info(f"AppController: Делегирование импорта стилей из {file_path} (БД: {target_db_path}) ImportManager.")
+        return self.import_manager.perform_import_styles(file_path, target_db_path, progress_callback)
+
+    def import_charts_from_excel(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+        """
+        Импортирует только диаграммы из Excel-файла.
+        Делегирует ImportManager.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        target_db_path = db_path or self.project_db_path
+        if db_path and db_path != self.project_db_path:
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
+
+        logger.info(f"AppController: Делегирование импорта диаграмм из {file_path} (БД: {target_db_path}) ImportManager.")
+        return self.import_manager.perform_import_charts(file_path, target_db_path, progress_callback)
+
+    def import_formulas_from_excel(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+        """
+        Импортирует только формулы из Excel-файла.
+        Делегирует ImportManager.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        target_db_path = db_path or self.project_db_path
+        if db_path and db_path != self.project_db_path:
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
+
+        logger.info(f"AppController: Делегирование импорта формул из {file_path} (БД: {target_db_path}) ImportManager.")
+        return self.import_manager.perform_import_formulas(file_path, target_db_path, progress_callback)
+
+    def import_raw_data_from_excel_in_chunks(self, file_path: str, db_path: Optional[str] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool:
+        """
+        Импортирует "сырые" данные (значения ячеек) из Excel-файла частями.
+        Делегирует ImportManager.
+
+        Args:
+            file_path (str): Путь к Excel-файлу для импорта.
+            db_path (Optional[str]): Путь к БД проекта. Если None, используется self.project_db_path.
+            progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса.
+
+        Returns:
+            bool: True, если импорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить импорт.")
+            return False
+
+        target_db_path = db_path or self.project_db_path
+        if db_path and db_path != self.project_db_path:
+            logger.warning(f"Переданный db_path '{db_path}' не совпадает с текущим проектом '{self.project_db_path}'. Используется '{target_db_path}'.")
+
+        logger.info(f"AppController: Делегирование импорта 'сырых' данных частями из {file_path} (БД: {target_db_path}) ImportManager.")
+        return self.import_manager.perform_import_raw_data_in_chunks(file_path, target_db_path, progress_callback)
     # --- КОНЕЦ НОВОГО ---
 
     # --- НОВОЕ: Метод для экспорта проекта (теперь использует db_path и progress_callback) ---
