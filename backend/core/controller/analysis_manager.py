@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, Any, Optional, Callable # <-- Добавлен Callable
 from backend.analyzer.logic_documentation import analyze_excel_file as run_analysis
-from backend.storage.base import ProjectDBStorage
+from backend.storage.base import ProjectDBStorage # <-- Импортируем ProjectDBStorage
 from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -12,32 +12,36 @@ class AnalysisManager:
     def __init__(self, app_controller):
         """
         Инициализирует AnalysisManager.
+        Теперь не хранит ссылку на storage, так как будет создавать его в потоке.
 
         Args:
-            app_controller: Экземпляр AppController, откуда будет получен storage.
+            app_controller: Экземпляр AppController (может понадобиться для других целей, но не для storage).
         """
         self.app_controller = app_controller
         logger.debug("AnalysisManager инициализирован.")
 
-    def perform_analysis(self, file_path: str, options: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлен progress_callback
+    def perform_analysis(self, file_path: str, db_path: str, options: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable[[int, str], None]] = None) -> bool: # <-- ИЗМЕНЕНО: Добавлен db_path
         """
         Выполняет анализ Excel-файла и сохраняет результаты в БД проекта.
+        Создаёт собственное соединение с БД в текущем потоке.
 
         Args:
             file_path (str): Путь к Excel-файлу для анализа.
+            db_path (str): Путь к файлу БД проекта (.db).
             options (Optional[Dict[str, Any]]): Опции анализа (например, max_rows, include_formulas).
             progress_callback (Optional[Callable[[int, str], None]]): Функция для обновления прогресса (значение 0-100, сообщение). # <-- НОВОЕ
 
         Returns:
             bool: True, если анализ и сохранение прошли успешно, иначе False.
         """
-        storage = self.app_controller.storage
-        if not storage:
-            logger.error("Storage не загружен в AppController. Невозможно выполнить анализ.")
+        # Создаём ProjectDBStorage с указанным db_path ВНУТРИ текущего потока
+        storage = ProjectDBStorage(db_path)
+        if not storage.connect():
+            logger.error(f"AnalysisManager: Не удалось подключиться к БД проекта {db_path} в потоке {id(__import__('threading').current_thread())}.")
             return False
 
         try:
-            logger.info(f"Начало анализа Excel-файла: {file_path}")
+            logger.info(f"AnalysisManager: Начало анализа Excel-файла: {file_path}")
 
             # --- НОВОЕ: Обновление прогресса в начале ---
             if progress_callback:
@@ -99,13 +103,17 @@ class AnalysisManager:
                 progress_callback(100, "Анализ завершён.")
             # --- КОНЕЦ НОВОГО ---
 
-            logger.info(f"Анализ файла {file_path} завершен успешно.")
+            logger.info(f"AnalysisManager: Анализ файла {file_path} завершен успешно.")
             return True
 
         except Exception as e:
-            logger.error(f"Ошибка при анализе файла {file_path}: {e}", exc_info=True)
+            logger.error(f"AnalysisManager: Ошибка при анализе файла {file_path}: {e}", exc_info=True)
             # --- НОВОЕ: Обновление прогресса при ошибке ---
             if progress_callback:
                 progress_callback(0, f"Ошибка анализа: {e}")
             # --- КОНЕЦ НОВОГО ---
             return False
+        finally:
+            # 3. Закрытие соединения с БД в текущем потоке
+            storage.disconnect()
+            logger.debug(f"AnalysisManager: Соединение с БД {db_path} закрыто в потоке {id(__import__('threading').current_thread())}.")
