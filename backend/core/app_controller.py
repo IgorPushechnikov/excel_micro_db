@@ -2,6 +2,7 @@
 
 import os
 import logging
+import sqlite3
 from typing import Dict, Any, List, Optional, Tuple, Union, Callable # <-- ДОБАВЛЕНО: Callable
 from pathlib import Path # <-- ДОБАВЛЕНО: Импорт Path из pathlib
 
@@ -27,7 +28,7 @@ from .project_manager import ProjectManager # Был перемещен в ко�
 # from .controller.format_manager import FormatManager # Пока не реализован
 # from .controller.chart_manager import ChartManager # Пока не реализован
 from .controller.analysis_manager import AnalysisManager # <-- НОВОЕ: Импорт AnalysisManager
-# from .controller.export_manager import ExportManager # Пока не реализован
+from .controller.export_manager import ExportManager # <-- НОВОЕ: Импорт ExportManager
 # from .controller.node_manager import NodeManager # Пока не реализован
 
 logger = get_logger(__name__)
@@ -66,7 +67,7 @@ class AppController:
         # self.format_manager = FormatManager(self) # Пока не реализован
         # self.chart_manager = ChartManager(self) # Пока не реализован
         self.analysis_manager = AnalysisManager(self) # <-- НОВОЕ: Инициализация AnalysisManager
-        # self.export_manager = ExportManager(self) # Пока не реализован
+        self.export_manager = ExportManager(self) # <-- НОВОЕ: Инициализация ExportManager
         # self.node_manager = NodeManager(self) # Пока не реализован
 
         logger.debug(f"AppController инициализирован для проекта: {project_path}")
@@ -164,6 +165,28 @@ class AppController:
         logger.info(f"AppController: Запуск анализа файла {file_path} через AnalysisManager.")
         # Делегирование AnalysisManager
         return self.analysis_manager.perform_analysis(file_path, options)
+    # --- КОНЕЦ НОВОГО ---
+
+    # --- НОВОЕ: Метод для экспорта проекта ---
+    def export_results(self, export_type: str, output_path: str, options: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Экспортирует результаты проекта через ExportManager.
+
+        Args:
+            export_type (str): Тип экспорта (например, 'excel').
+            output_path (str): Путь к выходному файлу.
+            options (Optional[Dict[str, Any]]): Опции экспорта.
+
+        Returns:
+            bool: True, если экспорт успешен, иначе False.
+        """
+        if not self.storage:
+            logger.error("Проект не загружен. Невозможно выполнить экспорт.")
+            return False
+
+        logger.info(f"AppController: Запуск экспорта в {output_path} (тип: {export_type}) через ExportManager.")
+        # Делегирование ExportManager
+        return self.export_manager.perform_export(export_type, output_path, options)
     # --- КОНЕЦ НОВОГО ---
 
     # --- Работа с данными листа (делегировано DataManager) ---
