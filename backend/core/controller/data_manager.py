@@ -4,6 +4,7 @@
 Отвечает за загрузку, обновление и историю редактирования данных листа.
 """
 import logging
+import sys # <-- Добавлен импорт sys
 from typing import Dict, Any, List, Optional, Tuple
 import sqlite3  # Для аннотаций типов, если нужно
 
@@ -247,7 +248,15 @@ class DataManager:
             if not storage.save_edit_history_record(sheet_id, cell_address, old_value, new_value):
                 logger.warning(f"Не удалось записать изменение ячейки {cell_address} в историю.")
 
-            logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена.")
+            # --- ИСПРАВЛЕНО: Проверка уровня лога перед форматированием ---
+            # ВРЕМЕННО: Печатаем уровень и результат isEnabledFor
+            current_logger_level = logger.level
+            is_enabled = logger.isEnabledFor(logging.INFO)
+            print(f"[LOG_DEBUG] DataManager.update_cell_value: logger.level={current_logger_level}, isEnabledFor(INFO)={is_enabled}, cell={cell_address}", file=sys.stderr)
+            # КОНЕЦ ВРЕМЕННО
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(f"Ячейка {cell_address} на листе '{sheet_name}' успешно обновлена.")
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             return True
         except Exception as e:
             logger.error(f"Ошибка при обновлении ячейки {cell_address} на листе '{sheet_name}': {e}", exc_info=True)

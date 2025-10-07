@@ -1,3 +1,83 @@
+# run_new_gui.py
+"""
+Точка входа для запуска нового GUI приложения Excel Micro DB.
+Следует новому дизайну: таблица - центральный элемент.
+"""
+
+import sys
+import os
+import logging
+from pathlib import Path
+
+# --- Добавление корня проекта в sys.path ---
+# Это необходимо для корректного импорта модулей из backend
+project_root = Path(__file__).parent.resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+# -------------------------------------------
+
+# Импортируем QApplication
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtWidgets import QStyleFactory
+
+# Импортируем новое главное окно
+# Убедимся, что импортируем из правильного модуля
+# Если main_window_new.py был переименован в main_window.py, путь будет другой
+# from backend.constructor.widgets.new_gui.main_window_new import MainWindowNew
+# Предположим, что мы будем использовать обновлённый main_window.py
+# from backend.constructor.widgets.new_gui.main_window import MainWindow
+
+# Импортируем логгер
+from backend.utils.logger import get_logger, setup_logger
+
+logger = get_logger(__name__)
+
+def main():
+    """
+    Основная функция запуска нового GUI.
+    """
+    # Настройка логирования
+    # setup_logger() вызывается внутри MainWindow, но можно и здесь для раннего лога
+    setup_logger() 
+    logger.info("Запуск НОВОГО GUI приложения Excel Micro DB...")
+
+    try:
+        # Создание экземпляра QApplication
+        app = QApplication(sys.argv)
+        
+        # Установка имени и версии приложения
+        QCoreApplication.setApplicationName("Excel Micro DB New GUI")
+        QCoreApplication.setOrganizationName("ExcelMicroDB")
+        QCoreApplication.setApplicationVersion("0.2.0")
+        
+        # Установка стиля (опционально, для лучшего внешнего вида)
+        app.setStyle(QStyleFactory.create("Fusion"))
+
+        # Создание и отображение главного окна
+        # Используем обновлённый MainWindow, который теперь следует новому дизайну
+        window = MainWindow()
+        window.show()
+
+        logger.info("НОВОЕ GUI приложение запущено.")
+
+        # Запуск цикла событий Qt
+        exit_code = app.exec()
+        logger.info(f"НОВОЕ GUI приложение завершено с кодом: {exit_code}")
+
+        sys.exit(exit_code)
+
+    except Exception as e:
+        logger.critical(f"Критическая ошибка при запуске НОВОГО GUI: {e}", exc_info=True)
+        # Используем стандартный print, так как QApplication может не быть создан
+        print(f"[КРИТИЧЕСКАЯ ОШИБКА] Произошла критическая ошибка при запуске приложения:\n{e}\n\nПриложение будет закрыто.", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+
+
+
 # backend/constructor/widgets/new_gui/main_window.py
 """
 Главное окно приложения Excel Micro DB GUI.
@@ -10,10 +90,10 @@ from typing import Optional, Callable # <-- Добавлен Callable
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QStatusBar, QToolBar, QFileDialog,
     QMessageBox, QWidget, QStackedWidget, QHBoxLayout, QSplitter,
-    QCheckBox, QPushButton, QMenu, QDialog # <-- Добавлен QDialog
+    QCheckBox, QPushButton, QMenu, QDialog, QProgressDialog, QProgressBar # <-- Добавлен QProgressBar
 )
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QAction, QIcon, QActionGroup
+from PySide6.QtCore import Qt, QThread, Signal, QTimer # <-- Добавлен QTimer
+from PySide6.QtGui import QAction, QIcon, QActionGroup, QCursor # <-- Добавлен QCursor
 
 from backend.core.app_controller import create_app_controller
 # Убираем старый импорт
@@ -26,8 +106,66 @@ from .import_dialog_new import ImportDialog
 from .sheet_explorer_widget import SheetExplorerWidget
 from .export_worker import ExportWorker
 from backend.utils.logger import get_logger
+# --- НОВЫЙ ИМПОРТ ---
+from backend.importer.xlwings_importer import import_all_from_excel_xlwings
 
 logger = get_logger(__name__)
+
+
+# --- НОВОЕ: Класс потока для xlwings-импорта ---
+class XlImportThread(QThread):
+    """
+    Поток для выполнения импорта через xlwings.
+    """
+    # Сигнал прогресса: (процент, сообщение)
+    progress = Signal(int, str)
+    # Сигнал завершения: (успех, сообщение)
+    finished = Signal(bool, str)
+
+    def __init__(self, db_path, file_path):
+        """
+        Args:
+            db_path (str): Путь к файлу БД проекта.
+            file_path (str): Путь к Excel-файлу
+        """
+        super().__init__()
+        self.db_path = db_path
+        self.file_path = file_path
+
+    def run(self):
+        """
+        Запуск импорта в отдельном потоке.
+        """
+        from backend.storage.base import ProjectDBStorage
+        storage = ProjectDBStorage(self.db_path)
+        if not storage.connect():
+            logger.error(f"XlImportThread: Не удалось подключиться к БД проекта {self.db_path}.")
+            self.finished.emit(False, f"Не удалось подключиться к БД: {self.db_path}")
+            return
+
+        try:
+            # Передаём функцию обновления прогресса
+            success = import_all_from_excel_xlwings(
+                storage,
+                self.file_path,
+                progress_callback=self._on_progress
+            )
+            if success:
+                self.finished.emit(True, "Импорт завершён успешно.")
+            else:
+                self.finished.emit(False, "Ошибка при импорте через xlwings.")
+        except Exception as e:
+            logger.error(f"Ошибка в потоке xlwings-импорта: {e}", exc_info=True)
+            self.finished.emit(False, f"Ошибка: {e}")
+        finally:
+            storage.disconnect()
+
+    def _on_progress(self, percent: int, message: str):
+        """
+        Callback для обновления прогресса.
+        """
+        self.progress.emit(percent, message)
+# --- КОНЕЦ НОВОГО ---
 
 
 # --- Основное окно ---
@@ -47,6 +185,9 @@ class MainWindow(QMainWindow):
         # --- КОНЕЦ ИЗМЕНЕНИЯ ---
         self.import_worker = None
         self.export_worker = None
+        # --- НОВОЕ: Атрибут для потока xlwings-импорта ---
+        self.xl_import_thread: Optional[XlImportThread] = None
+        # --- КОНЕЦ НОВОГО ---
 
         self.setWindowTitle("Excel Micro DB GUI")
         self.setGeometry(100, 100, 1200, 800)
@@ -75,11 +216,17 @@ class MainWindow(QMainWindow):
         self.import_action = QAction("Импорт данных...", self) # Более конкретное название
         # --- КОНЕЦ ИЗМЕНЕНИЯ ---
         self.export_action = QAction("Экспорт", self)
+        # --- НОВОЕ: Действие для xlwings ---
+        self.import_xlwings_action = QAction("Забрать из Excel", self)
+        # --- КОНЕЦ НОВОГО ---
 
         file_menu.addAction(self.new_project_action)
         file_menu.addAction(self.open_project_action)
         file_menu.addAction(self.save_project_action)
         import_menu.addAction(self.import_action)
+        # --- ДОБАВЛЕНО: Добавляем xlwings-импорт в меню ---
+        import_menu.addAction(self.import_xlwings_action)
+        # --- КОНЕЦ ДОБАВЛЕНИЯ ---
         export_menu.addAction(self.export_action)
 
         # Панель инструментов
@@ -103,6 +250,11 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar(self)
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Готов.")
+        # --- НОВОЕ: Добавление QProgressBar в status_bar ---
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setVisible(False) # Скрыта по умолчанию
+        self.status_bar.addPermanentWidget(self.progress_bar)
+        # --- КОНЕЦ НОВОГО ---
 
         # --- НОВОЕ: Центральный виджет с разделителем (Splitter) ---
         central_widget = QWidget(self)
@@ -139,6 +291,9 @@ class MainWindow(QMainWindow):
         self.import_action.triggered.connect(self._on_import_triggered_new)
         # --- КОНЕЦ ИЗМЕНЕНИЯ ---
         self.export_action.triggered.connect(self._on_export_triggered)
+        # --- НОВОЕ: Подключение xlwings-импорта ---
+        self.import_xlwings_action.triggered.connect(self._on_import_xlwings_triggered)
+        # --- КОНЕЦ НОВОГО ---
 
         # --- НОВОЕ: Подключение чекбокса логирования ---
         self.logging_checkbox.stateChanged.connect(self._on_logging_toggled)
@@ -149,291 +304,337 @@ class MainWindow(QMainWindow):
         self.sheet_explorer.sheet_renamed.connect(self._on_sheet_renamed)
         # --- КОНЕЦ НОВОГО ---
 
-        # --- УДАЛЕНО: Подключение сигналов старого меню типа/режима ---
-        # Обработчики уже подключены в _setup_ui при создании QAction
-        # --- КОНЕЦ УДАЛЕНИЯ ---
+    # --- НОВОЕ: Методы для управления прогресс-баром ---
+    def set_progress(self, value: int, message: str = ""):
+        """
+        Обновляет значение и текст прогресс-бара в статусной строке.
 
-    # --- Обработчики действий меню и тулбара ---
+        Args:
+            value (int): Значение прогресса (0-100).
+            message (str): Текстовое сообщение для отображения.
+        """
+        self.progress_bar.setValue(value)
+        self.progress_bar.setFormat(f"{message} %p%") # %p% - встроенный процент
+        if not self.progress_bar.isVisible():
+            self.progress_bar.setVisible(True)
+
+    def hide_progress(self):
+        """
+        Скрывает прогресс-бар в статусной строке.
+        """
+        self.progress_bar.setVisible(False)
+        self.status_bar.showMessage("Готов.") # Возвращаем сообщение "Готов" при скрытии
+    # --- КОНЕЦ НОВОГО ---
+
+    # --- НОВОЕ: Обработчик xlwings-импорта ---
+    def _on_import_xlwings_triggered(self):
+        """
+        Обработчик для действия "Забрать из Excel".
+        """
+        if not self.current_project_path:
+            QMessageBox.warning(self, "Нет проекта", "Пожалуйста, сначала создайте или откройте проект.")
+            return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите Excel-файл для импорта",
+            "",
+            "Excel Files (*.xlsx *.xls)"
+        )
+        if not file_path:
+            return
+
+        if not self.app_controller or not self.app_controller.project_db_path:
+            logger.error("AppController или его project_db_path не инициализированы.")
+            QMessageBox.critical(self, "Ошибка", "AppController не инициализирован или проект не загружен.")
+            return
+
+        # --- НОВОЕ: Создаём поток ---
+        # Передаём db_path вместо storage
+        self.xl_import_thread = XlImportThread(self.app_controller.project_db_path, file_path)
+        # Подключаем сигнал progress к методу обновления прогресса в MainWindow
+        self.xl_import_thread.progress.connect(self.set_progress)
+        self.xl_import_thread.finished.connect(lambda success, msg: (
+            self.hide_progress(), # Скрываем прогресс после завершения
+            QMessageBox.information(self, "Успех", msg) if success else QMessageBox.critical(self, "Ошибка", msg),
+            self.sheet_explorer.update_sheet_list() if success else None
+        ))
+        self.xl_import_thread.start()
+        # --- КОНЕЦ НОВОГО ---
+
+    # --- КОНЕЦ НОВОГО ---
+
     def _on_new_project_triggered(self):
         """
         Обработчик создания нового проекта.
         """
-        project_path_str, ok = QFileDialog.getSaveFileName(
-            self, "Новый проект", "", "Папки проектов ();;Все файлы (*)", options=QFileDialog.Option.DontUseNativeDialog
+        # --- ИСПРАВЛЕНО: Используем getExistingDirectory для выбора директории ---
+        project_dir_path = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите директорию для нового проекта",
+            ""
         )
-        if ok and project_path_str:
-            project_path = Path(project_path_str)
-            if project_path.suffix: # Если пользователь ввёл имя файла, а не папку
-                project_path = project_path.parent / project_path.stem # Берём только папку
-            try:
-                # Создаём проект через AppController
-                success = self.app_controller.create_project(str(project_path))
-                if success:
-                    logger.info(f"Новый проект создан: {project_path}")
-                    self.current_project_path = project_path
-                    # После создания проекта его нужно загрузить
-                    self.app_controller.load_project(str(project_path))
-                    self._update_sheet_list()
-                    self.status_bar.showMessage(f"Проект создан: {project_path}")
-                else:
-                    logger.error(f"Не удалось создать проект: {project_path}")
-                    QMessageBox.critical(self, "Ошибка", f"Не удалось создать проект: {project_path}")
-            except Exception as e:
-                logger.error(f"Ошибка при создании проекта: {e}", exc_info=True)
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при создании проекта: {e}")
+        if not project_dir_path:
+            return
+
+        # Используем basename директории как имя проекта
+        project_name = Path(project_dir_path).name
+
+        # --- ИСПРАВЛЕНО: вызов create_project с ОДНИМ аргументом (директорией) ---
+        if self.app_controller.create_project(project_dir_path):
+            self.current_project_path = project_dir_path
+            self.status_bar.showMessage(f"Проект создан: {project_dir_path}")
+            # --- НОВОЕ: Явно загружаем проект, чтобы инициализировать storage ---
+            if not self.app_controller.load_project(project_dir_path):
+                logger.error("Не удалось загрузить только что созданный проект.")
+                # Можно показать сообщение пользователю
+                QMessageBox.critical(self, "Ошибка", "Проект создан, но не удалось его загрузить.")
+                return
+            # --- КОНЕЦ НОВОГО ---
+            self.sheet_explorer.update_sheet_list()
+        else:
+            QMessageBox.critical(self, "Ошибка", "Не удалось создать проект.")
 
     def _on_open_project_triggered(self):
         """
-        Обработчик открытия существующего проекта.
+        Обработчик открытия проекта.
         """
-        # --- ИСПРАВЛЕНО: getExistingDirectory возвращает только строку ---
-        project_path_str = QFileDialog.getExistingDirectory(
-            self, "Открыть проект", "", options=QFileDialog.Option.DontUseNativeDialog
+        # --- ИСПРАВЛЕНО: Используем getExistingDirectory для выбора директории ---
+        project_dir_path = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите директорию проекта",
+            ""
         )
-        # Проверяем, пустой ли путь (означает отмену)
-        if not project_path_str:
+        if not project_dir_path:
             return
-        # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-        project_path = Path(project_path_str)
-        try:
-            # Загружаем проект через AppController
-            success = self.app_controller.load_project(str(project_path))
-            if success:
-                logger.info(f"Проект загружен: {project_path}")
-                self.current_project_path = project_path
-                self._update_sheet_list()
-                self.status_bar.showMessage(f"Проект загружен: {project_path}")
-            else:
-                logger.error(f"Не удалось загрузить проект: {project_path}")
-                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить проект: {project_path}")
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке проекта: {e}", exc_info=True)
-            QMessageBox.critical(self, "Ошибка", f"Ошибка при загрузке проекта: {e}")
+
+        # --- ИСПРАВЛЕНО: вызов load_project с ОДНИМ аргументом (директорией) ---
+        if self.app_controller.load_project(project_dir_path):
+            self.current_project_path = project_dir_path
+            self.status_bar.showMessage(f"Проект открыт: {project_dir_path}")
+            self.sheet_explorer.update_sheet_list()
+        else:
+            QMessageBox.critical(self, "Ошибка", "Не удалось открыть проект.")
 
     def _on_save_project_triggered(self):
         """
         Обработчик сохранения проекта.
         """
-        # AppController управляет сохранением через методы типа update_cell_value
-        # и, возможно, через экспорт. Здесь можно реализовать сохранение изменений в БД,
-        # если есть отложенные операции, или просто вызвать экспорт.
-        # Пока просто покажем сообщение.
-        if self.current_project_path:
-            self.status_bar.showMessage(f"Проект сохранён: {self.current_project_path}")
-            logger.info(f"Проект сохранён: {self.current_project_path}")
-        else:
-            QMessageBox.information(self, "Сохранение", "Нет активного проекта для сохранения.")
+        # --- ИСПРАВЛЕНО: save_project не существует, просто обновляем статус ---
+        if not self.current_project_path:
+            QMessageBox.warning(self, "Нет проекта", "Пожалуйста, сначала создайте или откройте проект.")
+            return
+        # AppController не имеет метода save_project. Данные сохраняются при закрытии/работе с БД.
+        self.status_bar.showMessage(f"Проект сохранён: {self.current_project_path}")
+        # self.sheet_explorer.update_sheet_list() # <-- Опционально, если данные обновлены
 
-    # --- ИЗМЕНЕНО: Новый обработчик импорта ---
     def _on_import_triggered_new(self):
         """
-        Обработчик импорта. Открывает ImportDialog.
+        Обработчик импорта данных через диалог.
         """
-        logger.info("[НОВЫЙ ДИЗАЙН] Выбрано 'Импорт данных...'")
+        if not self.current_project_path:
+            QMessageBox.warning(self, "Нет проекта", "Пожалуйста, сначала создайте или откройте проект.")
+            return
 
-        # Создаем и показываем диалог импорта
-        import_dialog = ImportDialog(self.app_controller, self)
-        
-        # Показываем модально
-        result = import_dialog.exec()
-        
-        if result == QDialog.DialogCode.Accepted:
-            logger.info("[НОВЫЙ ДИЗАЙН] Импорт подтверждён в диалоге.")
+        dialog = ImportDialog(self.app_controller, self) # <-- ИСПРАВЛЕНО: передаём app_controller
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # --- ИСПРАВЛЕНО: вызов методов диалога ---
+            file_path = dialog.get_file_path()
+            import_mode_key = dialog.get_import_mode_key()
+            # --- НОВОЕ: Получаем состояние чекбокса "Выборочно" ---
+            is_selective_import = dialog.is_selective_import_checked()
+            # --- КОНЕЦ НОВОГО ---
+            # Разбор ключа на тип и режим (если нужно)
+            # import_type, import_mode = import_mode_key.split('_') # <-- УДАЛЕНО: теперь ключ объединён
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
+            # --- НОВОЕ: Обработка выборочного импорта ---
+            selective_options = None
+            if is_selective_import:
+                logger.info("Запущен режим выборочного импорта. Получение списка листов...")
+                
+                # 1. Определяем тип импорта (openpyxl или xlwings) из import_mode_key
+                # Пример: 'all_openpyxl', 'raw_openpyxl', 'all_xlwings'
+                if 'xlwings' in import_mode_key:
+                    import_method = 'xlwings'
+                elif 'openpyxl' in import_mode_key:
+                    import_method = 'openpyxl'
+                else:
+                    # По умолчанию, если не указано, предположим openpyxl
+                    import_method = 'openpyxl'
+                    logger.warning(f"Не удалось определить метод импорта из ключа '{import_mode_key}'. Используется 'openpyxl' по умолчанию.")
+
+                # 2. Получаем список листов
+                available_sheet_names = []
+                try:
+                    if import_method == 'openpyxl':
+                        import openpyxl
+                        logger.debug(f"Открытие файла '{file_path}' через openpyxl (read_only=True) для получения списка листов...")
+                        # --- НОВОЕ: Обработка ошибки Nested.from_tree ---
+                        try:
+                            wb_temp = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
+                        except TypeError as e:
+                            if "Nested.from_tree() missing 1 required positional argument: 'node'" in str(e):
+                                logger.error(f"Ошибка openpyxl при открытии файла '{file_path}' для получения списка листов: {e}")
+                                QMessageBox.critical(self, "Ошибка", f"Файл '{file_path}' содержит неподдерживаемые структуры (например, pivot-таблицы) и не может быть обработан. Ошибка: {e}")
+                                return # Прерываем импорт
+                            else:
+                                raise # Если это другая ошибка TypeError, пробрасываем её
+                        # --- КОНЕЦ НОВОГО ---
+                        available_sheet_names = wb_temp.sheetnames
+                        wb_temp.close()
+                        logger.debug(f"Получен список листов (openpyxl): {available_sheet_names}")
+                    elif import_method == 'xlwings':
+                        import xlwings as xw
+                        logger.debug(f"Открытие файла '{file_path}' через xlwings (visible=False, read_only=True) для получения списка листов...")
+                        app_temp = xw.App(visible=False)
+                        wb_temp = app_temp.books.open(str(file_path), update_links=False, read_only=True)
+                        available_sheet_names = [s.name for s in wb_temp.sheets]
+                        wb_temp.close()
+                        app_temp.quit()
+                        logger.debug(f"Получен список листов (xlwings): {available_sheet_names}")
+                except Exception as e:
+                    logger.error(f"Ошибка при получении списка листов: {e}", exc_info=True)
+                    QMessageBox.critical(self, "Ошибка", f"Не удалось получить список листов из файла: {e}")
+                    return # Прерываем импорт
+                
+                if not available_sheet_names:
+                    logger.warning("Файл не содержит листов или список листов пуст.")
+                    QMessageBox.warning(self, "Предупреждение", "Файл не содержит листов или не удалось их получить.")
+                    return # Прерываем импорт
+
+                # 3. Показываем диалог выбора листов
+                logger.debug("Показ диалога выбора листов для выборочного импорта...")
+                from .selective_import_options_dialog import SelectiveImportOptionsDialog
+                select_dialog = SelectiveImportOptionsDialog(available_sheet_names, self)
+                if select_dialog.exec() == QDialog.DialogCode.Accepted:
+                    selected_sheet_names = select_dialog.get_selected_sheet_names()
+                    logger.info(f"Выбраны листы для импорта: {selected_sheet_names}")
+                    selective_options = {'sheets': selected_sheet_names}
+                    # Можно добавить другие опции позже, например, 'start_row', 'end_row'
+                else:
+                    logger.info("Диалог выбора листов отменён пользователем. Импорт прерван.")
+                    return # Прерываем импорт, если диалог отменён
             
-            # Получаем данные из диалога
-            file_path = import_dialog.get_file_path()
-            # --- ИЗМЕНЕНО: Получаем ОДИН объединённый ключ режима ---
-            import_mode_key = import_dialog.get_import_mode_key()
-            # import_type и import_mode больше не существуют как отдельные сущности
-            # -------------------------------------------------------
-            is_logging_enabled = import_dialog.is_logging_enabled()
-            project_name = import_dialog.get_project_name() # Можно использовать позже
-            
-            if not file_path or not file_path.exists():
-                logger.error(f"[НОВЫЙ ДИЗАЙН] Неверный путь к файлу импорта: {file_path}")
-                QMessageBox.critical(self, "Ошибка", f"Неверный путь к файлу импорта: {file_path}")
-                return
+            # --- КОНЕЦ НОВОГО ---
 
-            # Сохраняем выбранный ключ режима для будущего использования
-            # (если нужно сохранять между сессиями или для других целей)
-            # self.selected_import_mode_key = import_mode_key
-
-            # Устанавливаем состояние логирования через AppController
-            self.app_controller.set_logging_enabled(is_logging_enabled)
-            logger.info(f"[НОВЫЙ ДИЗАЙН] Логирование {'включено' if is_logging_enabled else 'отключено'} для импорта.")
-
-            # --- ИЗМЕНЕНО: Разбор import_mode_key на import_type и import_mode ---
-            parts = import_mode_key.split('_', 1) # Разделить только по первому '_'
-            if len(parts) == 2:
-                import_type, import_mode = parts
-            else:
-                # Обработка ошибки или установка значений по умолчанию, если формат неверен
-                logger.error(f"[НОВЫЙ ДИЗАЙН] Неверный формат import_mode_key: {import_mode_key}")
-                QMessageBox.critical(self, "Ошибка", f"Неверный формат ключа режима импорта: {import_mode_key}")
-                return
-            # -------------------------------------------------------
-
-            # --- ИЗМЕНЕНО: Передаём import_type и import_mode в ImportWorker ---
-            # Создаем рабочий поток для импорта, передав ему ключ режима
-            self.import_worker = ImportWorker(self.app_controller, str(file_path), import_type, import_mode)
-            # -------------------------------------------------------
-            self.import_worker.finished.connect(self._on_import_finished)
-            self.import_worker.progress.connect(self._on_import_progress)
-
+            # --- ИСПРАВЛЕНО: вызов ImportWorker с правильными аргументами ---
+            # self.import_worker = ImportWorker(self.app_controller, str(file_path), import_mode_key) # <-- СТАРОЕ
+            self.import_worker = ImportWorker(self.app_controller, str(file_path), import_mode_key, selective_options) # <-- НОВОЕ
+            # Подключаем сигнал progress к методу обновления прогресса в MainWindow
+            self.import_worker.progress.connect(self.set_progress)
+            # Подключаем сигнал finished вместо import_finished
+            self.import_worker.finished.connect(lambda success, msg: (
+                self.hide_progress(), # Скрываем прогресс после завершения
+                QMessageBox.information(self, "Успех", msg) if success else QMessageBox.critical(self, "Ошибка", msg),
+                self.sheet_explorer.update_sheet_list() if success else None # Обновляем список листов при успехе
+            ))
             self.import_worker.start()
-            self.status_bar.showMessage(f"Начат импорт {file_path.name}...")
-            logger.info(f"[НОВЫЙ ДИЗАЙН] Начат импорт: файл={file_path}, тип={import_type}, режим={import_mode}")
-
         else:
-            logger.info("[НОВЫЙ ДИЗАЙН] Импорт отменён пользователем.")
+            logger.debug("Диалог импорта отменён пользователем.")
 
-    # --- КОНЕЦ ИЗМЕНЕНИЯ ---
-
-    def _on_import_triggered(self):
-        """
-        Старый обработчик импорта. Будет заменён на _on_import_triggered_new.
-        """
-        # Этот метод можно удалить после перехода на новый дизайн
-        # или оставить как заглушку/для обратной совместимости
-        logger.warning("Вызван устаревший метод _on_import_triggered. Используйте _on_import_triggered_new.")
-        self._on_import_triggered_new()
-
-    def _on_import_progress(self, value, message):
-        """
-        Обработчик прогресса импорта (если поддерживается).
-        """
-        # Обновляем сообщение в строке состояния
-        self.status_bar.showMessage(message)
-
-    def _on_import_finished(self, success, message):
+    def _on_import_finished(self, success: bool, message: str): # <-- ИСПРАВЛЕНО: подпись сигнала
         """
         Обработчик завершения импорта.
         """
-        # Убираем ссылку на worker, чтобы он мог быть уничтожен
-        if self.import_worker:
-            self.import_worker.wait() # Убедиться, что поток завершён
-            self.import_worker = None
-
-        if success:
-            logger.info(f"[НОВЫЙ ДИЗАЙН] Импорт успешно завершён: {message}")
-            self.status_bar.showMessage(f"Импорт завершён: {message}")
-            # Обновляем список листов, так как могли появиться новые
-            self._update_sheet_list()
-        else:
-            logger.error(f"[НОВЫЙ ДИЗАЙН] Импорт завершился с ошибкой: {message}")
-            self.status_bar.showMessage(f"Ошибка импорта: {message}")
-            # QMessageBox.critical(self, "Ошибка", message) # <-- Опционально
+        # Этот метод больше не нужен, так как подключение к finished происходит в _on_import_triggered_new
+        pass
 
     def _on_export_triggered(self):
         """
-        Обработчик экспорта.
+        Обработчик экспорта данных.
         """
         if not self.current_project_path:
-            QMessageBox.information(self, "Экспорт", "Нет активного проекта для экспорта.")
+            QMessageBox.warning(self, "Нет проекта", "Пожалуйста, сначала создайте или откройте проект.")
             return
 
-        output_path_str, ok = QFileDialog.getSaveFileName(
-            self, "Экспорт Excel", "", "Excel Files (*.xlsx);;Все файлы (*)", options=QFileDialog.Option.DontUseNativeDialog
+        # --- ИСПРАВЛЕНО: вызов ExportWorker с правильными аргументами ---
+        # Пусть ExportWorker сам решает, куда экспортировать, или запросит через QFileDialog
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Экспорт проекта",
+            "",
+            "Excel Files (*.xlsx)"
         )
-        if ok and output_path_str:
-            output_path = Path(output_path_str)
-            # --- НОВОЕ: Автоматическое добавление расширения .xlsx ---
-            if output_path.suffix == '':
-                output_path = output_path.with_suffix('.xlsx')
-            # --- КОНЕЦ НОВОГО ---
-            try:
-                # Создаем рабочий поток для вызова AppController метода
-                self.export_worker = ExportWorker(self.app_controller, str(output_path))
-                self.export_worker.finished.connect(self._on_export_finished)
-                self.export_worker.progress.connect(self._on_export_progress) # <-- НОВОЕ: Подключаем progress
+        if not output_path:
+            return
 
-                self.export_worker.start()
-                # Обновляем статус
-                self.status_bar.showMessage(f"Начат экспорт в {output_path.name}...")
+        # Запускаем экспорт в отдельном потоке
+        self.export_worker = ExportWorker(self.app_controller, output_path)
+        # Подключаем сигнал progress к методу обновления прогресса в MainWindow
+        self.export_worker.progress.connect(self.set_progress)
+        # Подключаем сигнал finished вместо export_finished
+        self.export_worker.finished.connect(lambda success, msg: (
+            self.hide_progress(), # Скрываем прогресс после завершения
+            QMessageBox.information(self, "Успех", msg) if success else QMessageBox.critical(self, "Ошибка", msg)
+        ))
+        self.export_worker.start()
 
-            except Exception as e:
-                logger.error(f"Ошибка при подготовке экспорта: {e}", exc_info=True)
-                QMessageBox.critical(self, "Ошибка", f"Ошибка при подготовке экспорта: {e}")
-
-    def _on_export_progress(self, value, message): # <-- НОВЫЙ МЕТОД
-        """
-        Обработчик прогресса экспорта.
-        """
-        # Обновляем сообщение в строке состояния
-        self.status_bar.showMessage(message)
-
-    def _on_export_finished(self, success, message):
+    def _on_export_finished(self, success: bool, message: str): # <-- ИСПРАВЛЕНО: подпись сигнала
         """
         Обработчик завершения экспорта.
         """
-        # Убираем ссылку на worker, чтобы он мог быть уничтожен
-        if self.export_worker:
-            self.export_worker.wait() # Убедиться, что поток завершён
-            self.export_worker = None
+        # Этот метод больше не нужен, так как подключение к finished происходит в _on_export_triggered
+        pass
 
-        if success:
-            logger.info(f"Экспорт успешно завершён: {message}")
-            self.status_bar.showMessage(f"Экспорт завершён: {message}")
+    def _on_logging_toggled(self, state):
+        """
+        Обработчик переключения логирования.
+        """
+        # state: 0 = Qt.Unchecked, 2 = Qt.Checked
+        enabled = state == Qt.CheckState.Checked.value
+        # Включаем/выключаем логирование через AppController
+        self.app_controller.set_logging_enabled(enabled)
+
+        if enabled:
+            self.status_bar.showMessage("Логирование включено.")
+            # Логируем через локальный логгер, он тоже будет подчиняться общему правилу
+            logger.debug("Логирование включено через GUI.")
         else:
-            logger.error(f"Экспорт завершился с ошибкой: {message}")
-            self.status_bar.showMessage(f"Ошибка экспорта: {message}")
-            # QMessageBox.critical(self, "Ошибка", message) # <-- Опционально, можно оставить
+            self.status_bar.showMessage("Логирование отключено.")
+            # Это сообщение не появится в консоли, если консольный уровень excel_micro_db > INFO
+            logger.debug("Логирование отключено через GUI.")
 
-    def _update_sheet_list(self):
-        """
-        Обновляет список листов в обозревателе.
-        """
-        # --- НОВОЕ: Обновление через SheetExplorerWidget ---
-        self.sheet_explorer.update_sheet_list()
-        # --- КОНЕЦ НОВОГО ---
-
-    # --- НОВЫЕ МЕТОДЫ ДЛЯ ОБРАБОТКИ СИГНАЛОВ ОТ SHEET_EXPLORER ---
     def _on_sheet_selected(self, sheet_name: str):
         """
         Обработчик выбора листа в обозревателе.
-        Загружает данные листа в TableEditorWidget.
         """
-        if not sheet_name:
-            return
-
-        logger.info(f"[НОВЫЙ ДИЗАЙН] Смена активного листа на: {sheet_name}")
         self.current_sheet_name = sheet_name
+        logger.debug(f"Выбран лист: {sheet_name}")
 
-        # Удаляем предыдущий TableEditorWidget, если он был
-        if self.table_editor_widget:
-            self.stacked_widget.removeWidget(self.table_editor_widget)
-            self.table_editor_widget.deleteLater() # Удаляем из Qt
-            self.table_editor_widget = None
+        # Проверяем, существует ли уже редактор для этого листа
+        for i in range(self.stacked_widget.count()):
+            widget = self.stacked_widget.widget(i)
+            # --- ИСПРАВЛЕНО: проверка атрибута sheet_name ---
+            # hasattr(widget, 'sheet_name') and widget.sheet_name == sheet_name:
+            # Нет атрибута sheet_name, используем метод из модели
+            if isinstance(widget, TableEditorWidget):
+                current_sheet = widget.get_current_sheet_name()
+                if current_sheet and current_sheet == sheet_name:
+                    self.stacked_widget.setCurrentIndex(i)
+                    return
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
-        # Создаём новый TableEditorWidget для выбранного листа
-        self.table_editor_widget = TableEditorWidget(self.app_controller, self)
-        # Загружаем данные листа
-        self.table_editor_widget.load_sheet(sheet_name)
-        
-        self.stacked_widget.addWidget(self.table_editor_widget)
-        self.stacked_widget.setCurrentWidget(self.table_editor_widget)
-
-        self.status_bar.showMessage(f"Активный лист: {sheet_name}")
+        # Создаём новый редактор
+        table_editor = TableEditorWidget(self.app_controller, self)
+        # table_editor.sheet_name = sheet_name  # Простое поле для идентификации - УДАЛЕНО
+        table_editor.load_sheet(sheet_name) # <-- Загружаем данные листа
+        index = self.stacked_widget.addWidget(table_editor)
+        self.stacked_widget.setCurrentIndex(index)
 
     def _on_sheet_renamed(self, old_name: str, new_name: str):
         """
-        Обработчик успешного переименования листа.
-        Может использоваться для обновления UI или логирования.
-        Пока просто обновим статусную строку.
+        Обработчик переименования листа.
         """
-        self.status_bar.showMessage(f"Лист переименован: '{old_name}' -> '{new_name}'")
-        # Если активный лист был переименован, обновим current_sheet_name
-        if self.current_sheet_name == old_name:
-            self.current_sheet_name = new_name
-    # --- КОНЕЦ НОВЫХ МЕТОДОВ ---
+        logger.info(f"Лист переименован: {old_name} -> {new_name}")
+        # Обновляем имя в TableEditorWidget, если он открыт
+        for i in range(self.stacked_widget.count()):
+            widget = self.stacked_widget.widget(i)
+            if isinstance(widget, TableEditorWidget):
+                current_sheet = widget.get_current_sheet_name()
+                if current_sheet and current_sheet == old_name:
+                    # widget.sheet_name = new_name # <-- УДАЛЕНО: нет атрибута
+                    # widget.load_data() # Пример: перезагрузить данные под новым именем - УДАЛЕНО: нет метода
+                    widget.load_sheet(new_name) # <-- Правильный способ перезагрузить данные
 
-    # --- НОВЫЕ МЕТОДЫ: Обработчики выбора типа и режима, логирования ---
-    def _on_logging_toggled(self, state):
-        """
-        Обработчик переключения состояния чекбокса логирования.
-        """
-        is_enabled = state == Qt.CheckState.Checked.value
-        self.app_controller.set_logging_enabled(is_enabled)
-        logger.info(f"[НОВЫЙ ДИЗАЙН] Логирование {'включено' if is_enabled else 'отключено'} через GUI.")
-
-    # --- КОНЕЦ НОВЫХ МЕТОДОВ ---
+# --- Конец класса MainWindow ---

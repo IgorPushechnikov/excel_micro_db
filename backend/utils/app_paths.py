@@ -1,4 +1,4 @@
-# src/utils/app_paths.py
+# backend/utils/app_paths.py
 """
 Модуль для определения путей к системным каталогам приложения, таким как AppData.
 Используется для хранения глобальных ресурсов (шаблонов, настроек, библиотек).
@@ -10,17 +10,10 @@ import logging
 import os
 
 # Получаем логгер для этого модуля
-# Предполагается, что logger уже настроен в src/utils/logger.py
-# Если импорт не удался, можно использовать базовый logger
-try:
-    from src.utils.logger import get_logger
-    logger = get_logger(__name__)
-except ImportError:
-    # Запасной вариант, если logger ещё не настроен
-    # Импортируем logging здесь тоже, на случай проблем с импортом выше
-    import logging 
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
+from backend.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def get_app_data_directory(app_name: str = "ExcelMicroDB") -> Path:
     """
@@ -50,7 +43,6 @@ def get_app_data_directory(app_name: str = "ExcelMicroDB") -> Path:
     elif system == "Linux":
         # На Linux следуем стандарту XDG Base Directory Specification
         # XDG_DATA_HOME для пользовательских данных
-        # --- ИСПРАВЛЕНО: os.environ используется корректно благодаря импорту ---
         xdg_data_home = os.environ.get("XDG_DATA_HOME")
         if xdg_data_home:
             base_path = Path(xdg_data_home)

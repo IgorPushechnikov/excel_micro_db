@@ -46,6 +46,9 @@ class ImportDialog(QDialog):
         self.file_path_line_edit: Optional[QLineEdit] = None
         self.browse_button: Optional[QPushButton] = None
         self.logging_checkbox: Optional[QCheckBox] = None
+        # --- НОВОЕ: Атрибут чекбокса "Выборочно" ---
+        self.selective_import_checkbox: Optional[QCheckBox] = None
+        # --- КОНЕЦ НОВОГО ---
         self.mode_selector: Optional[ImportModeSelector] = None
         self.project_name_line_edit: Optional[QLineEdit] = None
         self.button_box: Optional[QDialogButtonBox] = None
@@ -83,6 +86,12 @@ class ImportDialog(QDialog):
         self.logging_checkbox = QCheckBox("Включить логирование во время импорта", self)
         self.logging_checkbox.setChecked(False)
         options_layout.addWidget(self.logging_checkbox)
+
+        # --- НОВОЕ: Чекбокс "Выборочно" ---
+        self.selective_import_checkbox = QCheckBox("Выборочно (указать листы и диапазоны)", self)
+        self.selective_import_checkbox.setChecked(False)
+        options_layout.addWidget(self.selective_import_checkbox)
+        # --- КОНЕЦ НОВОГО ---
 
         # Селектор режима импорта (обновлённый)
         self.mode_selector = ImportModeSelector(self)
@@ -134,8 +143,8 @@ class ImportDialog(QDialog):
 
         file_path_str, ok = QFileDialog.getOpenFileName(
             self, "Выберите Excel файл", "",
-            "Excel Files (*.xlsx *.xls);;Все файлы (*)",
-            options=QFileDialog.Option.DontUseNativeDialog
+            "Excel Files (*.xlsx *.xls);;Все файлы (*)"
+            # options=QFileDialog.Option.DontUseNativeDialog # <-- УДАЛЕНО: Используем нативный диалог
         )
         if ok and file_path_str:
             self.file_path_line_edit.setText(file_path_str)
@@ -162,6 +171,11 @@ class ImportDialog(QDialog):
         assert self.logging_checkbox is not None
         is_logging_enabled = self.logging_checkbox.isChecked()
         
+        # --- НОВОЕ: Получаем состояние чекбокса "Выборочно" ---
+        assert self.selective_import_checkbox is not None
+        is_selective_import = self.selective_import_checkbox.isChecked()
+        # --- КОНЕЦ НОВОГО ---
+        
         # Получаем имя проекта
         assert self.project_name_line_edit is not None
         project_name = self.project_name_line_edit.text().strip()
@@ -169,7 +183,9 @@ class ImportDialog(QDialog):
         logger.info(
             f"Начало импорта: файл={file_path}, "
             f"режим={import_mode_key}, " # <-- Изменено: теперь один ключ
-            f"логирование={is_logging_enabled}, проект={project_name}"
+            f"логирование={is_logging_enabled}, "
+            f"выборочно={is_selective_import}, " # <-- НОВОЕ
+            f"проект={project_name}"
         )
 
         # TODO: Вызвать AppController для выполнения импорта, используя import_mode_key
@@ -191,6 +207,7 @@ class ImportDialog(QDialog):
             f"Файл: {file_path.name}\n"
             f"Режим: {import_mode_key}\n"
             f"Логирование: {'Вкл' if is_logging_enabled else 'Выкл'}\n"
+            f"Выборочно: {'Да' if is_selective_import else 'Нет'}\n" # <-- НОВОЕ
             f"Проект: {project_name or 'Текущий'}"
         )
         self.accept() # Закрываем диалог как успешно завершённый
@@ -232,6 +249,18 @@ class ImportDialog(QDialog):
         # Добавим assert
         assert self.logging_checkbox is not None
         return self.logging_checkbox.isChecked()
+
+    # --- НОВОЕ: Метод для проверки чекбокса "Выборочно" ---
+    def is_selective_import_checked(self) -> bool:
+        """
+        Проверяет, установлен ли чекбокс "Выборочно".
+
+        Returns:
+            bool: True, если чекбокс установлен, иначе False.
+        """
+        assert self.selective_import_checkbox is not None
+        return self.selective_import_checkbox.isChecked()
+    # --- КОНЕЦ НОВОГО ---
 
     def get_project_name(self) -> str:
         """Возвращает имя проекта.'"""

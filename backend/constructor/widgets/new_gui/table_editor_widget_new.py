@@ -5,23 +5,37 @@
 """
 
 import logging
+import re
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView, QLineEdit, 
-    QMessageBox, QHeaderView, QAbstractItemView
+    QMessageBox, QHeaderView, QAbstractItemView, QToolBar, QPushButton,
+    QInputDialog, QStatusBar, QApplication
 )
+
 from PySide6.QtCore import Qt, QModelIndex, QItemSelection, QItemSelectionModel
-from PySide6.QtGui import QKeySequence
+from PySide6.QtGui import QKeySequence, QCursor
 
 # Импортируем модель
 from .table_model import TableModel
 # Импортируем AppController
 from backend.core.app_controller import create_app_controller
 from backend.utils.logger import get_logger
+# Импортируем калькулятор формул
+from backend.core.formula_calculators import apply_age_formula_to_column
 
 logger = get_logger(__name__)
+
+# --- НОВОЕ: Перечисление для состояния выбора формулы возраста ---
+class AgeFormulaSelectionStep(Enum):
+    WAITING_START_DATE = 0
+    WAITING_END_DATE = 1
+    WAITING_RESULT_COLUMN = 2
+    NOT_ACTIVE = -1
+# --- КОНЕЦ НОВОГО ---
 
 class TableEditorWidget(QWidget):
     """
@@ -43,6 +57,18 @@ class TableEditorWidget(QWidget):
         self.model: Optional[TableModel] = None
         self.table_view: Optional[QTableView] = None
         self.formula_line_edit: Optional[QLineEdit] = None
+        # --- НОВОЕ: Атрибуты для тулбара ---
+        self.toolbar: Optional[QToolBar] = None
+        self.apply_age_formula_button: Optional[QPushButton] = None
+        # --- КОНЕЦ НОВОГО ---
+        
+        # --- НОВОЕ: Атрибуты для режима выбора формулы возраста ---
+        self._waiting_for_age_formula_input = False
+        self._age_formula_step = AgeFormulaSelectionStep.NOT_ACTIVE
+        self._age_formula_start_addr: Optional[str] = None
+        self._age_formula_end_addr: Optional[str] = None
+        self._age_formula_result_col: Optional[str] = None
+        # --- КОНЕЦ НОВОГО ---
         
         # Текущий индекс для отслеживания изменений
         self._current_index: Optional[QModelIndex] = None
@@ -55,6 +81,15 @@ class TableEditorWidget(QWidget):
         """Создаёт элементы интерфейса."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # --- НОВОЕ: Создание тулбара ---
+        self.toolbar = QToolBar(self)
+        self.toolbar.setMovable(False) # Закрепляем тулбар
+        # Создаём кнопку
+        self.apply_age_formula_button = QPushButton("Применить формулу возраста", self)
+        self.toolbar.addWidget(self.apply_age_formula_button)
+        main_layout.addWidget(self.toolbar)
+        # --- КОНЕЦ НОВОГО ---
 
         # --- Создание строки формул ---
         formula_layout = QHBoxLayout()
@@ -88,6 +123,11 @@ class TableEditorWidget(QWidget):
 
     def _setup_connections(self):
         """Подключает сигналы к слотам."""
+        # --- НОВОЕ: Подключение сигнала кнопки ---
+        if self.apply_age_formula_button:
+            self.apply_age_formula_button.clicked.connect(self._on_apply_age_formula_clicked)
+        # --- КОНЕЦ НОВОГО ---
+
         # --- Подключение сигналов таблицы ---
         if self.table_view:
             self.table_view.clicked.connect(self._on_cell_clicked)
@@ -102,6 +142,145 @@ class TableEditorWidget(QWidget):
             self.formula_line_edit.returnPressed.connect(self._on_formula_return_pressed)
             self.formula_line_edit.editingFinished.connect(self._on_formula_editing_finished)
         # -----------------------------------------
+
+    # --- НОВОЕ: Обработчик нажатия кнопки ---
+    def _on_apply_age_formula_clicked(self):
+        """
+        Обработчик нажатия кнопки "Применить формулу возраста".
+        Переходит в режим выбора ячеек.
+        """
+        if not self.app_controller or not self.app_controller.is_project_loaded:
+            QMessageBox.critical(self, "Ошибка", "Проект не загружен. Невозможно применить формулу.")
+            return
+
+        sheet_name = self.get_current_sheet_name()
+        if not sheet_name:
+            QMessageBox.critical(self, "Ошибка", "Нет загруженного листа. Невозможно применить формулу.")
+            return
+
+        # Начинаем режим выбора
+        self._start_age_formula_selection()
+
+    def _start_age_formula_selection(self):
+        """Инициирует режим выбора ячеек для формулы возраста."""
+        self._waiting_for_age_formula_input = True
+        self._age_formula_step = AgeFormulaSelectionStep.WAITING_START_DATE
+        self._age_formula_start_addr = None
+        self._age_formula_end_addr = None
+        self._age_formula_result_col = None
+        
+        # Изменяем курсор и подсказку (если есть статусная строка, можно туда)
+        assert self.table_view is not None
+        self.table_view.setCursor(QCursor(Qt.CursorShape.CrossCursor))
+        assert self.formula_line_edit is not None
+        self.formula_line_edit.setPlaceholderText("Выберите ячейку с начальной датой...")
+        logger.info("Режим выбора формулы возраста активирован. Ожидание выбора начальной даты.")
+
+    def _on_cell_clicked_for_age_formula(self, index: QModelIndex):
+        """
+        Обработка клика по ячейке в режиме выбора формулы возраста.
+        """
+        if not index.isValid() or not self.model:
+            return
+
+        cell_addr = self.model.get_cell_address(index.row(), index.column())
+        if not cell_addr:
+            return
+
+        if self._age_formula_step == AgeFormulaSelectionStep.WAITING_START_DATE:
+            self._age_formula_start_addr = cell_addr
+            # Визуально выделяем ячейку (можно сбросить предыдущие выделения)
+            if self.table_view and self.table_view.selectionModel():
+                selection_model = self.table_view.selectionModel()
+                selection_model.clearSelection()
+                selection_model.select(
+                    QItemSelection(index, index),
+                    QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+                )
+            assert self.formula_line_edit is not None
+            self.formula_line_edit.setPlaceholderText(f"Нач. дата: {cell_addr}. Выберите ячейку с конечной датой...")
+            self._age_formula_step = AgeFormulaSelectionStep.WAITING_END_DATE
+            logger.debug(f"Выбрана ячейка начальной даты: {cell_addr}")
+
+        elif self._age_formula_step == AgeFormulaSelectionStep.WAITING_END_DATE:
+            self._age_formula_end_addr = cell_addr
+            # Визуально выделяем ячейку
+            if self.table_view and self.table_view.selectionModel():
+                selection_model = self.table_view.selectionModel()
+                # Не очищаем, чтобы видеть обе ячейки
+                selection_model.select(
+                    QItemSelection(index, index),
+                    QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+                )
+            # Извлекаем букву столбца из адреса
+            result_col = "".join(filter(str.isalpha, cell_addr))
+            assert self.formula_line_edit is not None
+            self.formula_line_edit.setPlaceholderText(f"Кон. дата: {cell_addr}. Выберите столбец результата (например, кликните на заголовок или ячейку в столбце {result_col})...")
+            self._age_formula_step = AgeFormulaSelectionStep.WAITING_RESULT_COLUMN
+            logger.debug(f"Выбрана ячейка конечной даты: {cell_addr}")
+
+        elif self._age_formula_step == AgeFormulaSelectionStep.WAITING_RESULT_COLUMN:
+            # Извлекаем букву столбца из адреса
+            result_col = "".join(filter(str.isalpha, cell_addr)).upper()
+            self._age_formula_result_col = result_col
+            # Визуально выделяем ячейку (опционально, можно не выделять столбец, а только сообщить)
+            # selection_model = self.table_view.selectionModel()
+            # selection_model.select(QItemSelection(index, index), QItemSelectionModel.Select)
+            assert self.formula_line_edit is not None
+            self.formula_line_edit.setPlaceholderText(f"Столбец результата: {result_col}. Применяем формулу...")
+            logger.debug(f"Выбран результирующий столбец: {result_col}")
+            # Завершаем режим и вызываем калькулятор
+            self._finish_age_formula_selection()
+
+    def _finish_age_formula_selection(self):
+        """
+        Завершает режим выбора и вызывает калькулятор.
+        """
+        # Проверяем, все ли адреса собраны
+        if self._age_formula_start_addr and self._age_formula_end_addr and self._age_formula_result_col:
+            sheet_name = self.get_current_sheet_name()
+            if sheet_name:
+                # Вызываем функцию из formula_calculators
+                success = apply_age_formula_to_column(
+                    self.app_controller.data_manager,
+                    sheet_name,
+                    self._age_formula_start_addr,
+                    self._age_formula_end_addr,
+                    self._age_formula_result_col
+                )
+                if success:
+                    QMessageBox.information(self, "Успех", f"Формула возраста успешно применена к столбцу {self._age_formula_result_col}.")
+                    # Перезагружаем данные, чтобы отобразить изменения
+                    self.load_sheet(sheet_name)
+                else:
+                    QMessageBox.critical(self, "Ошибка", f"Не удалось применить формулу возраста к столбцу {self._age_formula_result_col}.")
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось определить имя текущего листа.")
+        else:
+            logger.warning("Не все адреса были выбраны для формулы возраста.")
+            QMessageBox.warning(self, "Предупреждение", "Не все адреса были выбраны. Операция отменена.")
+        # Сбрасываем режим *после* проверки и выполнения
+        self._cancel_age_formula_selection()
+
+    def _cancel_age_formula_selection(self):
+        """
+        Сбрасывает режим выбора формулы возраста.
+        """
+        self._waiting_for_age_formula_input = False
+        self._age_formula_step = AgeFormulaSelectionStep.NOT_ACTIVE
+        self._age_formula_start_addr = None
+        self._age_formula_end_addr = None
+        self._age_formula_result_col = None
+        
+        assert self.table_view is not None
+        self.table_view.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+        assert self.formula_line_edit is not None
+        self.formula_line_edit.setPlaceholderText("Формула или значение...")
+        # Очищаем выделение, если нужно
+        if self.table_view and self.table_view.selectionModel():
+            self.table_view.selectionModel().clearSelection()
+        logger.info("Режим выбора формулы возраста отменён.")
+    # --- КОНЕЦ НОВОГО ---
 
     def load_sheet(self, sheet_name: str):
         """
@@ -147,6 +326,12 @@ class TableEditorWidget(QWidget):
         Обработчик клика по ячейке в QTableView.
         Обновляет строку формул значением из ячейки.
         """
+        # --- НОВОЕ: Проверка режима выбора формулы возраста ---
+        if self._waiting_for_age_formula_input:
+            self._on_cell_clicked_for_age_formula(index)
+            return # Не выполняем стандартную логику
+        # --- КОНЕЦ НОВОГО ---
+        
         if index.isValid():
             self._current_index = index
             value = None
@@ -161,6 +346,10 @@ class TableEditorWidget(QWidget):
         Обработчик двойного клика по ячейке.
         Переводит ячейку в режим редактирования и фокусируется на строке формул.
         """
+        # --- НОВОЕ: Игнорировать двойной клик в режиме выбора ---
+        if self._waiting_for_age_formula_input:
+            return
+        # --- КОНЕЦ НОВОГО ---
         if index.isValid():
             self._current_index = index
             # Фокус на строку формул
@@ -175,11 +364,16 @@ class TableEditorWidget(QWidget):
         Обработчик изменения выделения в таблице.
         Если выделена одна ячейка, обновляет строку формул.
         """
+        # --- НОВОЕ: Игнорировать изменение выделения в режиме выбора ---
+        if self._waiting_for_age_formula_input:
+            return
+        # --- КОНЕЦ НОВОГО ---
+        
         selected_indexes = selected.indexes()
         if len(selected_indexes) == 1:
             self._on_cell_clicked(selected_indexes[0])
         elif len(selected_indexes) > 1:
-            # Если выдело несколько ячеек, можно очистить строку формул или показать что-то другое
+            # Если выдело нескольких ячеек, можно очистить строку формул или показать что-то другое
             self._current_index = None
             if self.formula_line_edit: # <-- Добавляем assert и здесь тоже для единообразия, если Pylance ругается
                 assert self.formula_line_edit is not None
@@ -228,6 +422,21 @@ class TableEditorWidget(QWidget):
         else:
             logger.warning("Нет активной ячейки для сохранения значения из строки формул.")
             
+    # --- НОВОЕ: Обработка нажатия клавиш ---
+    def keyPressEvent(self, event):
+        """
+        Обработка нажатия клавиш.
+        Используется для отмены режима выбора по клавише Esc.
+        """
+        # Если активен режим выбора и нажата клавиша Esc (и строка формул не в фокусе, чтобы не мешать её очистке)
+        if self._waiting_for_age_formula_input and event.key() == Qt.Key.Key_Escape and self.focusWidget() != self.formula_line_edit:
+            self._cancel_age_formula_selection()
+            event.accept() # Помечаем событие как обработанное
+            return
+        # Вызываем стандартную обработку
+        super().keyPressEvent(event)
+    # --- КОНЕЦ НОВОГО ---
+
     # --- Вспомогательные функции ---
     def get_current_cell_address(self) -> Optional[str]:
         """

@@ -33,6 +33,7 @@ class ImportModeSelector(QGroupBox):
         'charts_openpyxl',
         'formulas_openpyxl',
         # 'raw_fast_pandas', # <-- УДАЛЁН: Режим больше не поддерживается
+        'raw_values_only_openpyxl', # <-- НОВЫЙ РЕЖИМ
         'chunks_openpyxl',
         'auto'  # <-- НОВЫЙ РЕЖИМ
     ]
@@ -45,6 +46,7 @@ class ImportModeSelector(QGroupBox):
         "Диаграммы - openpyxl",
         "Формулы - openpyxl",
         # "Быстрый только данные - pandas", # <-- УДАЛЕНА: Метка для удалённого режима
+        "Только значения (результаты формул) - openpyxl", # <-- НОВАЯ МЕТКА
         "Частями - openpyxl (Экспериментальный)",
         "Авто (Данные-Pandas, Стили/OpenPyxl, Диаграммы/OpenPyxl, Формулы/OpenPyxl)" # <-- НОВАЯ МЕТКА
     ]

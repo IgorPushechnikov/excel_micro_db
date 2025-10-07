@@ -138,4 +138,65 @@ def load_sheet_metadata(connection: sqlite3.Connection, sheet_name: str) -> Opti
         logger.error(f"Неожиданная ошибка при загрузке метаданных для листа '{sheet_name}': {e}", exc_info=True)
         return None
 
+# --- НОВОЕ: Функция для сохранения метаданных проекта ---
+def save_project_metadata(connection: sqlite3.Connection, project_id: int, metadata: Dict[str, Any]) -> bool:
+    """
+    Сохраняет метаданные проекта в БД.
+
+    Args:
+        connection (sqlite3.Connection): Активное соединение с БД.
+        project_id (int): ID проекта.
+        metadata (Dict[str, Any]): Словарь с метаданными проекта.
+
+    Returns:
+        bool: True, если сохранение успешно, иначе False.
+    """
+    if not connection:
+        logger.error("Нет активного соединения с БД для сохранения метаданных проекта.")
+        return False
+
+    if not isinstance(metadata, dict):
+        logger.error(f"Неверный тип данных для metadata. Ожидался dict, получен {type(metadata)}.")
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        # Подготавливаем данные для вставки/обновления
+        metadata_to_save = []
+        for key, value in metadata.items():
+            # Сериализуем значение в JSON, если оно не является простым типом
+            if isinstance(value, (dict, list)):
+                try:
+                    meta_value = json.dumps(value, ensure_ascii=False)
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Ошибка сериализации метаданных проекта '{key}': {e}")
+                    meta_value = str(value)  # fallback
+            else:
+                meta_value = str(value) if value is not None else None
+
+            metadata_to_save.append((project_id, key, meta_value))
+
+        if metadata_to_save:
+            logger.debug(f"Подготовлено {len(metadata_to_save)} записей метаданных проекта.")
+            # Используем INSERT OR REPLACE для обновления существующих или вставки новых
+            cursor.executemany(
+                f"INSERT OR REPLACE INTO {METADATA_TABLE_NAME} (project_id, key, value) VALUES (?, ?, ?)",
+                metadata_to_save
+            )
+            connection.commit()
+            logger.info(f"Сохранено {len(metadata_to_save)} записей метаданных проекта (ID: {project_id}) в таблицу '{METADATA_TABLE_NAME}'.")
+        else:
+            logger.info(f"Нет метаданных проекта для сохранения.")
+
+        return True
+
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка SQLite при сохранении метаданных проекта (ID: {project_id}): {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при сохранении метаданных проекта (ID: {project_id}): {e}", exc_info=True)
+        return False
+# --- КОНЕЦ НОВОГО ---
+
 # Дополнительные функции для работы с метаданными проекта (не только листа) могут быть добавлены здесь

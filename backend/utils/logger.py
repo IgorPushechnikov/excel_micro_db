@@ -188,6 +188,9 @@ def set_logging_enabled(enabled: bool):
         for handler in logger_instance.handlers:
             handler.setLevel(level_to_set)
         logger_instance.setLevel(level_to_set)
+        # --- ВРЕМЕННО: Логируем ---
+        print(f"[LOG_DEBUG] set_logging_enabled: excel_micro_db logger level set to {logger_instance.level}, handler levels set to {level_to_set}", file=sys.stderr)
+        # --- КОНЕЦ ВРЕМЕННО ---
 
     # --- НОВОЕ: Устанавливаем уровень для корневого логгера ---
     # Это влияет на всё логирование, которое не переопределяет уровень и использует корневой логгер
@@ -197,11 +200,16 @@ def set_logging_enabled(enabled: bool):
     # Это может быть важно, если basicConfig был вызван где-то ещё
     for handler in root_logger.handlers:
         handler.setLevel(root_level_to_set)
+    # --- ВРЕМЕННО: Логируем ---
+    print(f"[LOG_DEBUG] set_logging_enabled: Root logger level set to {root_logger.level}, handler levels set to {root_level_to_set}", file=sys.stderr)
+    # --- КОНЕЦ ВРЕМЕННО ---
     # --- КОНЕЦ НОВОГО ---
 
     # Проверим, что _logger_instance существует, прежде чем логировать
     if _logger_instance:
-        _logger_instance.info(f"Логирование {'включено' if enabled else 'отключено'}.")
+        print(f"[LOG_DEBUG] set_logging_enabled: Calling _logger_instance.info with enabled={enabled}.", file=sys.stderr)
+        # _logger_instance.info(f"Логирование {'включено' if enabled else 'отключено'}.") # Закомментировано, чтобы не вызывать рекурсию
+
 
 def is_logging_enabled() -> bool:
     """

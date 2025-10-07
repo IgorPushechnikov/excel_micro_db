@@ -1,13 +1,6 @@
-# requirements.txt
-# Основные зависимости для Excel Micro DB
-
-# GUI Framework
-PySide6>=6.9.2
-
-# Работа с данными и Excel
-numpy>=1.24.0
-pandas>=2.0.3
+# Core dependencies
 openpyxl>=3.1.2
+xlwings==0.33.15
 xlsxwriter>=3.0.0  # Добавь эту строку
 pydantic>=2.0.0
 

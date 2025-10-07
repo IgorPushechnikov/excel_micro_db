@@ -235,6 +235,30 @@ class ProjectDBStorage:
             logger.error(f"Ошибка при загрузке метаданных листа '{sheet_name}': {e}", exc_info=True)
             return None
 
+    # --- НОВОЕ: Метод для сохранения метаданных проекта ---
+    def save_project_metadata(self, project_id: int, metadata_dict: Dict[str, Any]) -> bool:
+        """
+        Сохраняет метаданные проекта в БД.
+
+        Args:
+            project_id (int): ID проекта.
+            metadata_dict (Dict[str, Any]): Словарь с метаданными проекта.
+
+        Returns:
+            bool: True, если сохранение успешно, иначе False.
+        """
+        try:
+            with self.get_connection() as conn:
+                if conn:
+                    # ИСПРАВЛЕНО: Вызов metadata.save_project_metadata теперь с префиксом backend.storage
+                    return metadata.save_project_metadata(conn, project_id, metadata_dict) # <-- ИСПРАВЛЕНО
+                else:
+                    return False
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении метаданных проекта (ID: {project_id}): {e}", exc_info=True)
+            return False
+    # --- КОНЕЦ НОВОГО ---
+
     # --- Методы для работы с "сырыми" данными ---
 
     def save_sheet_raw_data(self, sheet_name: str, raw_data_list: List[Dict[str, Any]]) -> bool:
