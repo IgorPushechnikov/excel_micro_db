@@ -3,7 +3,8 @@ import logging
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from PySide6.QtWidgets import QMenu, QAction
+from PySide6.QtWidgets import QMenu
+from PySide6.QtGui import QAction # <-- QAction перемещён сюда
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QKeySequence
 
