@@ -6,6 +6,8 @@
 
 import logging
 import re
+import csv # <-- Добавлен импорт csv
+import io # <-- Добавлен импорт io
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -13,11 +15,11 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView, QLineEdit, 
     QMessageBox, QHeaderView, QAbstractItemView, QToolBar, QPushButton,
-    QInputDialog, QStatusBar, QApplication
+    QInputDialog, QStatusBar, QApplication, QMenu # <-- Добавлен QMenu
 )
 
 from PySide6.QtCore import Qt, QModelIndex, QItemSelection, QItemSelectionModel
-from PySide6.QtGui import QKeySequence, QCursor
+from PySide6.QtGui import QKeySequence, QCursor, QGuiApplication # <-- Добавлен QGuiApplication
 
 # Импортируем модель
 from .table_model import TableModel
@@ -26,6 +28,9 @@ from backend.core.app_controller import create_app_controller
 from backend.utils.logger import get_logger
 # Импортируем калькулятор формул
 from backend.core.formula_calculators import apply_age_formula_to_column
+# --- ИМПОРТ НОВОЙ УТИЛИТЫ ---
+from backend.utils.ui_loader import load_context_menu_from_yaml, UICommandHandler # <-- Добавлен импорт
+# --- КОНЕЦ ИМПОРТА ---
 
 logger = get_logger(__name__)
 
@@ -69,6 +74,10 @@ class TableEditorWidget(QWidget):
         self._age_formula_end_addr: Optional[str] = None
         self._age_formula_result_col: Optional[str] = None
         # --- КОНЕЦ НОВОГО ---
+
+        # --- НОВОЕ: Атрибут command_handler ---
+        self.command_handler: Optional[UICommandHandler] = None
+        # --- КОНЕЦ НОВОГО ---
         
         # Текущий индекс для отслеживания изменений
         self._current_index: Optional[QModelIndex] = None
@@ -76,6 +85,11 @@ class TableEditorWidget(QWidget):
 
         self._setup_ui()
         self._setup_connections()
+        # --- ИНИЦИАЛИЗАЦИЯ command_handler ---
+        self.command_handler = UICommandHandler(self)
+        self.command_handler.register_handler("_on_copy_triggered", self._on_copy_triggered)
+        self.command_handler.register_handler("_on_paste_triggered", self._on_paste_triggered)
+        # --- КОНЕЦ ИНИЦИАЛИЗАЦИИ ---
 
     def _setup_ui(self):
         """Создаёт элементы интерфейса."""
@@ -436,6 +450,188 @@ class TableEditorWidget(QWidget):
         # Вызываем стандартную обработку
         super().keyPressEvent(event)
     # --- КОНЕЦ НОВОГО ---
+
+    # --- НОВОЕ: Контекстное меню через YAML ---
+    def contextMenuEvent(self, event):
+        """
+        Обработчик события контекстного меню.
+        Загружает меню из YAML и показывает его.
+        """
+        # Путь к YAML-файлу (относительно корня проекта или можно передать как аргумент)
+        yaml_path = "config/context_menus/table_editor.yaml" # Или использовать Path и app_controller.project_root
+
+        # Загружаем меню
+        menu = load_context_menu_from_yaml(yaml_path, self, self.command_handler)
+
+        if menu:
+            # Показываем меню в позиции курсора
+            menu.exec_(event.globalPos())
+        else:
+            # Если меню не загрузилось, можно показать стандартное или просто игнорировать
+            logger.warning("Контекстное меню не было загружено из YAML.")
+            # super().contextMenuEvent(event) # Показать стандартное (если нужно)
+
+    # --- КОНЕЦ КОНТЕКСТНОГО МЕНЮ ---
+
+    # --- НОВОЕ: Метод копирования ---
+    def _on_copy_triggered(self):
+        """
+        Обработчик команды 'Копировать'.
+        Копирует выделенные ячейки (или все загруженные, если нет выделения) в буфер обмена как TSV.
+        """
+        logger.info("Команда 'Копировать' активирована.")
+        try:
+            # 1. Определить диапазон для копирования
+            selected_indexes = self.table_view.selectionModel().selectedIndexes()
+            if not selected_indexes:
+                 # Если нет выделения, копируем все загруженные данные из модели
+                 # Это зависит от того, как организована модель. Метод get_current_sheet_name() есть.
+                 # Но как получить *все* данные из модели TableModel?
+                 # TableModel хранит self._display_data. Но TableModel не предоставляет прямого метода
+                 # для получения всех данных в "сыром" виде. Нужно адаптировать.
+                 # Пока используем выделение. Если выделения нет, копируем пустую строку или выводим сообщение.
+                 logger.info("Нет выделения. Копирование отменено.")
+                 # Можно показать QMessageBox
+                 # QMessageBox.information(self, "Копирование", "Нет выделения для копирования.")
+                 return
+
+            # 2. Найти границы выделения
+            rows = [idx.row() for idx in selected_indexes]
+            cols = [idx.column() for idx in selected_indexes]
+            min_row, max_row = min(rows), max(rows)
+            min_col, max_col = min(cols), max(cols)
+
+            # 3. Получить значения из модели для этого диапазона
+            tsv_data = []
+            for r in range(min_row, max_row + 1):
+                row_data = []
+                for c in range(min_col, max_col + 1):
+                    index = self.model.index(r, c)
+                    value = self.model.data(index, Qt.ItemDataRole.DisplayRole) # Используем DisplayRole для копирования
+                    # Обработка None или других типов для TSV
+                    row_data.append(str(value) if value is not None else "")
+                tsv_data.append(row_data)
+
+            # 4. Преобразовать в TSV строку
+            # Используем StringIO для создания строки
+            output = io.StringIO()
+            writer = csv.writer(output, delimiter='\t', lineterminator='\n') # TSV
+            writer.writerows(tsv_data)
+            tsv_string = output.getvalue()
+            output.close() # Закрываем StringIO
+
+            # 5. Поместить в буфер обмена
+            clipboard = QGuiApplication.clipboard()
+            clipboard.setText(tsv_string)
+
+            logger.info(f"Скопировано {len(tsv_data)} строк в буфер обмена.")
+
+        except Exception as e:
+            logger.error(f"Ошибка при копировании в буфер обмена: {e}", exc_info=True)
+            # Показать сообщение пользователю
+            QMessageBox.critical(self, "Ошибка копирования", f"Произошла ошибка при копировании: {e}")
+
+    # --- КОНЕЦ МЕТОДА КОПИРОВАТЬ ---
+
+    # --- НОВОЕ: Метод вставки ---
+    def _on_paste_triggered(self):
+        """
+        Обработчик команды 'Вставить'.
+        Вставляет данные из буфера обмена (TSV) в БД, начиная с активной ячейки.
+        """
+        logger.info("Команда 'Вставить' активирована.")
+        try:
+            # 1. Получить строку из буфера обмена
+            clipboard = QGuiApplication.clipboard()
+            clipboard_text = clipboard.text()
+
+            if not clipboard_text.strip(): # Проверяем на пустую строку или только пробельные символы
+                logger.info("Буфер обмена пуст.")
+                # Показать сообщение пользователю
+                QMessageBox.information(self, "Вставка", "Буфер обмена пуст.")
+                return
+
+            # 2. Определить ячейку назначения (активная или A1)
+            current_index = self.table_view.currentIndex()
+            if current_index.isValid():
+                start_row = current_index.row()
+                start_col = current_index.column()
+                logger.debug(f"Вставка начнётся с ячейки ({start_row}, {start_col}) (0-based).")
+            else:
+                start_row, start_col = 0, 0 # Если нет активной ячейки, начинаем с A1 (0, 0)
+                logger.debug(f"Нет активной ячейки. Вставка начнётся с ячейки (0, 0).")
+
+            # 3. Разобрать TSV строку в матрицу
+            # Используем StringIO для чтения строки как файла
+            input_stream = io.StringIO(clipboard_text)
+            reader = csv.reader(input_stream, delimiter='\t') # TSV
+            tsv_matrix = list(reader) # Получаем список списков
+            input_stream.close() # Закрываем StringIO
+
+            if not tsv_matrix or not any(row for row in tsv_matrix): # Проверяем, есть ли хоть одна непустая строка
+                 logger.info("Буфер обмена содержит пустой TSV.")
+                 QMessageBox.information(self, "Вставка", "Буфер обмена содержит пустой TSV.")
+                 return
+
+            logger.debug(f"Разобрано {len(tsv_matrix)} строк и {max(len(row) for row in tsv_matrix) if tsv_matrix else 0} столбцов из TSV.")
+
+            # 4. Преобразовать матрицу в raw_data_list
+            raw_data_list = []
+            for r_idx, row in enumerate(tsv_matrix):
+                for c_idx, value in enumerate(row):
+                    target_row = start_row + r_idx
+                    target_col = start_col + c_idx
+                    cell_address = self.model.get_cell_address(target_row, target_col) # Используем существующий метод из модели
+                    if cell_address: # Убедимся, что адрес сформирован корректно
+                        raw_data_list.append({
+                            "cell_address": cell_address, # e.g., 'A1'
+                            "value": value # Значение из буфера
+                        })
+
+            if not raw_data_list:
+                 logger.warning("Не удалось сформировать raw_data_list из TSV.")
+                 QMessageBox.warning(self, "Вставка", "Не удалось обработать данные из буфера обмена.")
+                 return
+
+            # 5. Получить имя текущего листа
+            sheet_name = self.get_current_sheet_name()
+            if not sheet_name:
+                logger.error("Не удалось определить имя текущего листа для вставки.")
+                QMessageBox.critical(self, "Ошибка вставки", "Не удалось определить активный лист.")
+                return
+
+            # 6. Убедиться, что лист существует в БД (create или get sheet_id)
+            # AppController.project_db_path должен быть доступен через self.app_controller
+            # storage = self.app_controller.storage # <- Проверить, что storage инициализирован
+            # storage.save_sheet(project_id=1, sheet_name=sheet_name) # <- Это обновит или создаст
+            # Однако, AppController не предоставляет напрямую вызов save_sheet без sheet_id.
+            # Но save_sheet_raw_data вызывает save_sheet внутри себя, если лист не существует.
+            # Проверим, что AppController.storage подключен.
+            if not self.app_controller.storage:
+                 logger.error("AppController.storage не инициализирован.")
+                 QMessageBox.critical(self, "Ошибка вставки", "Соединение с БД проекта не установлено.")
+                 return
+
+            # 7. Сохранить raw_data_list в БД
+            success = self.app_controller.storage.save_sheet_raw_data(sheet_name, raw_data_list)
+            if not success:
+                 logger.error(f"Не удалось сохранить данные в БД для листа '{sheet_name}'.")
+                 QMessageBox.critical(self, "Ошибка вставки", f"Не удалось сохранить данные в БД.")
+                 return
+
+            logger.info(f"Успешно вставлено {len(raw_data_list)} ячеек в лист '{sheet_name}' через БД.")
+
+            # 8. Обновить GUI (перезагрузить данные модели)
+            self.load_sheet(sheet_name) # <- Это обновит TableModel и QTableView
+
+        except csv.Error as ce:
+            logger.error(f"Ошибка разбора TSV из буфера обмена: {ce}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка вставки", f"Ошибка формата данных (TSV): {ce}")
+        except Exception as e:
+            logger.error(f"Ошибка при вставке из буфера обмена: {e}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка вставки", f"Произошла ошибка при вставке: {e}")
+
+    # --- КОНЕЦ МЕТОДА ВСТАВИТЬ ---
 
     # --- Вспомогательные функции ---
     def get_current_cell_address(self) -> Optional[str]:
