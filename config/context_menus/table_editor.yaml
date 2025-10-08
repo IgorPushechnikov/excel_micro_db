@@ -1,0 +1,10 @@
+# config/context_menus/table_editor.yaml
+context_menu:
+  - id: copy_action
+    text: "Копировать\tCtrl+C"
+    shortcut: "Ctrl+C"
+    handler: "_on_copy_triggered"
+  - id: paste_action
+    text: "Вставить\tCtrl+V"
+    shortcut: "Ctrl+V"
+    handler: "_on_paste_triggered"
